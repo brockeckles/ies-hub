@@ -3476,6 +3476,25 @@ function renderCompare(el) {
 // ============================================================
 
 function renderMap(el) {
+  // 2026-06-01 mapfix7 — TEST overlay + diagnostic chip at the very top
+  // of renderMap, OUTSIDE initCogMap. If they don't appear, the issue is
+  // page-level (extension, ad-blocker, an ancestor with transform/filter
+  // creating a containing block that breaks position:fixed). If they DO
+  // appear, the issue is inside initCogMap.
+  if (!document.getElementById('cog-marker-test-overlay')) {
+    const test = document.createElement('div');
+    test.id = 'cog-marker-test-overlay';
+    test.textContent = 'TEST';
+    test.style.cssText = 'position:fixed;top:150px;right:14px;width:60px;height:60px;border-radius:50%;background:#ef4444;border:4px solid #0a1628;box-shadow:0 0 0 6px rgba(255,255,255,0.95),0 4px 14px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px;font-family:-apple-system,sans-serif;z-index:2147483647;pointer-events:none;';
+    document.body.appendChild(test);
+  }
+  if (!document.getElementById('cog-marker-status-chip')) {
+    const chip = document.createElement('div');
+    chip.id = 'cog-marker-status-chip';
+    chip.textContent = 'mapfix7 · renderMap reached';
+    chip.style.cssText = 'position:fixed;top:80px;right:12px;z-index:2147483646;font-family:monospace;font-size:11px;background:#facc15;color:#0a1628;padding:6px 10px;border-radius:6px;pointer-events:none;border:2px solid #0a1628;box-shadow:0 4px 12px rgba(0,0,0,0.3);max-width:340px;font-weight:600;line-height:1.45;';
+    document.body.appendChild(chip);
+  }
   if (!cogResult) {
     el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Run analysis first to see the map.</p></div>';
     return;
@@ -3511,8 +3530,34 @@ function renderMap(el) {
               ? `C${i+1}: ${c.lat.toFixed(3)},${c.lng.toFixed(3)} (${c.nearestCity || '?'})`
               : `<strong>C${i+1} INVALID (${c.lat}, ${c.lng})</strong>`;
           }).join(' &nbsp;·&nbsp; ');
-          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix6</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
+          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix7</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
         })()}
+        <!-- 2026-06-01 mapfix7 — Bulletproof Center Locations card. Plain
+             HTML rendered inside renderMap's innerHTML — does NOT depend
+             on Leaflet, on initCogMap completing, or on any DOM injection
+             outside the page content. If the on-map marker is invisible
+             for any reason, Brock still has the center info here. -->
+        <div style="width:100%;background:#ffffff;border:2px solid #0a1628;border-radius:8px;padding:14px 18px;margin-top:6px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+          <div style="font-size:13px;font-weight:800;color:#0a1628;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Center Locations</div>
+          ${cogResult.centers.map((c, i) => {
+            const color = clusterColor(i);
+            const valid = Number.isFinite(c.lat) && Number.isFinite(c.lng);
+            return `
+              <div style="display:flex;align-items:center;gap:14px;padding:8px 0;${i < cogResult.centers.length - 1 ? 'border-bottom:1px solid #e2e8f0;' : ''}">
+                <div style="flex:none;width:36px;height:36px;border-radius:50%;background:${color};border:3px solid #0a1628;box-shadow:0 0 0 4px rgba(255,255,255,0.95),0 2px 6px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;color:#ffffff;font-weight:800;font-size:14px;">C${i + 1}</div>
+                <div style="flex:1;">
+                  <div style="font-size:14px;font-weight:700;color:#0a1628;">${c.nearestCity || `Center ${i + 1}`}</div>
+                  <div style="font-size:11px;color:#475569;font-family:monospace;">
+                    ${valid ? `${c.lat.toFixed(4)}°, ${c.lng.toFixed(4)}°` : `<span style="color:#b91c1c;font-weight:700;">INVALID COORDS (${c.lat}, ${c.lng})</span>`}
+                    ${c.avgWeightedDistance != null ? ` · avg drive ${calc.formatMiles(c.avgWeightedDistance)}` : ''}
+                    ${c.totalWeight != null ? ` · ${Math.round(c.totalWeight).toLocaleString()} total weight` : ''}
+                  </div>
+                </div>
+                <button type="button" data-cog-action="zoom-centers" style="flex:none;font-size:11px;font-weight:700;padding:6px 12px;border:1.5px solid #0a1628;background:#fff;color:#0a1628;border-radius:5px;cursor:pointer;">Zoom to →</button>
+              </div>
+            `;
+          }).join('')}
+        </div>
         <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
             <input type="checkbox" data-cog-toggle="zones" ${mapOptions.zones ? 'checked' : ''} style="margin:0;"> Service zones
@@ -3999,17 +4044,9 @@ function initCogMap() {
   // Surface a status chip showing the latest computed viewport coords
   // so we can SEE where the marker SHOULD be even if styling fails.
   // Replaces the existing chip if any.
-  // Diagnostic chip — top-right of viewport, bright yellow so it's
-  // unmissable. Reports the latest computed marker coords on every
-  // map move/zoom; if marker is still invisible, this chip reveals
-  // whether the issue is creation, math, or rendering.
-  const chip = document.getElementById('cog-marker-status-chip') || (() => {
-    const c = document.createElement('div');
-    c.id = 'cog-marker-status-chip';
-    c.style.cssText = 'position:fixed;top:80px;right:12px;z-index:999998;font-family:monospace;font-size:11px;background:#facc15;color:#0a1628;padding:6px 10px;border-radius:6px;pointer-events:none;border:2px solid #0a1628;box-shadow:0 4px 12px rgba(0,0,0,0.3);max-width:340px;font-weight:600;line-height:1.45;';
-    document.body.appendChild(c);
-    return c;
-  })();
+  // The chip element was already created at top of renderMap.
+  const chip = document.getElementById('cog-marker-status-chip');
+  if (chip) chip.style.zIndex = '2147483646';
   const _refreshChip = () => {
     if (!mapInstance || !container || !container.isConnected) {
       chip.textContent = 'mapfix5 · no map';
@@ -4025,22 +4062,17 @@ function initCogMap() {
   };
   _refreshChip();
   mapInstance.on('move zoom moveend zoomend', _refreshChip);
-  // TEST OVERLAY — bright red circle pinned at a known viewport position.
-  // Proves position:fixed body overlays render. If Brock sees this but
-  // not the center marker, the issue is positioning math, not DOM
-  // injection.
-  if (!document.getElementById('cog-marker-test-overlay')) {
-    const test = document.createElement('div');
-    test.id = 'cog-marker-test-overlay';
-    test.textContent = 'TEST';
-    test.style.cssText = 'position:fixed;top:150px;right:14px;width:60px;height:60px;border-radius:50%;background:#ef4444;border:4px solid #0a1628;box-shadow:0 0 0 6px rgba(255,255,255,0.95),0 4px 14px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px;font-family:-apple-system,sans-serif;z-index:999999;pointer-events:none;';
-    document.body.appendChild(test);
-  }
   // Defer initial positioning until Leaflet finishes container sizing.
   requestAnimationFrame(() => {
-    _updateCenterOverlayPositions();
-    _refreshChip();
-    setTimeout(() => { _updateCenterOverlayPositions(); _refreshChip(); }, 250);
+    try { _updateCenterOverlayPositions(); _refreshChip(); } catch (e) {
+      console.error('[COG marker] update failed:', e);
+      if (chip) chip.textContent = 'mapfix7 · POSITIONING ERROR: ' + (e.message || e);
+    }
+    setTimeout(() => {
+      try { _updateCenterOverlayPositions(); _refreshChip(); } catch (e) {
+        console.error('[COG marker] delayed update failed:', e);
+      }
+    }, 250);
   });
 
   // Fit bounds
@@ -4133,7 +4165,7 @@ function renderSensitivity(el) {
         // chart area for the value labels ("$10.2M") which sit outside
         // the bar end. 8% of range fails when one driver dominates the
         // swing — the label of the biggest bar overflows the card.
-        const W = 760, H = Math.max(200, 50 + tornado.length * 50);
+        const W = 760, H = Math.max(220, 60 + tornado.length * 60);
         const labelW = 160;
         const labelPadPx = 90;
         const chartW = W - labelW - 20 - labelPadPx;
@@ -4158,7 +4190,7 @@ function renderSensitivity(el) {
 
             <!-- Bars -->
             ${tornado.map((t, i) => {
-              const y = 30 + i * 50;
+              const y = 30 + i * 60;
               // 2026-06-01 mapfix5 — clip bars at chart edges; outliers get
               // a chevron + actual-value annotation at the clipped edge.
               const chartRightEdge = labelW + labelPadPx + chartW;
@@ -4227,8 +4259,8 @@ function renderSensitivity(el) {
                   if (barPxW < 40) {
                     const midX = (xLow + xHigh) / 2;
                     return `
-                      <line x1="${midX}" y1="${y + 20}" x2="${midX}" y2="${y + 26}" stroke="#475569" stroke-width="1"/>
-                      <text x="${midX}" y="${y + 38}" text-anchor="middle" font-size="11" fill="#0a1628" font-weight="700">at ${fmtVal(t.lowVal)} → ${fmtVal(t.highVal)}</text>
+                      <line x1="${midX}" y1="${y + 20}" x2="${midX}" y2="${y + 28}" stroke="#475569" stroke-width="1.2"/>
+                      <text x="${midX}" y="${y + 40}" text-anchor="middle" font-size="11" fill="#0a1628" font-weight="700">at ${fmtVal(t.lowVal)} → ${fmtVal(t.highVal)}</text>
                     `;
                   }
                   // Wide bar — smart endpoint label placement. If the
@@ -4240,34 +4272,36 @@ function renderSensitivity(el) {
                   const chartRight = labelW + labelPadPx + chartW;
                   const chartLeft  = labelW + labelPadPx;
                   const estLabelW = 64; // rough px for 'cost $XXM'
+                  // 2026-06-01 mapfix7 — endpoint labels rendered BELOW
+                  // the bar (dark text on the card background) with a
+                  // small vertical leader tick from the bar bottom down
+                  // to the label area. Eliminates the white-on-stroke
+                  // contrast problems with inside-bar labels.
+                  // Bar height is 20px (y..y+20). Labels sit at y+34/y+47.
                   const renderEnd = (xPt, val, cost, clipped) => {
                     const wantOutsideRight = xPt >= baselineX;
-                    const outsideAnchor = wantOutsideRight ? 'start' : 'end';
-                    const outsideDx = wantOutsideRight ? 6 : -6;
-                    // Clipped bars always render the label INSIDE the bar
-                    // (white-on-stroke), because the raw endpoint is past
-                    // the chart edge and the bar fills to the edge.
-                    const willClipRight = wantOutsideRight && (xPt + estLabelW > chartRight);
-                    const willClipLeft  = !wantOutsideRight && (xPt - estLabelW < chartLeft);
-                    const flip = clipped || willClipRight || willClipLeft;
-                    const anchor = flip ? (wantOutsideRight ? 'end' : 'start') : outsideAnchor;
-                    const dx = flip ? (wantOutsideRight ? -6 : 6) : outsideDx;
-                    const stroke = flip ? 'paint-order:stroke;stroke:#0a1628;stroke-width:2px;' : '';
-                    const atFill = flip ? '#ffffff' : 'var(--ies-gray-600)';
-                    const costFill = flip ? '#ffffff' : 'var(--ies-gray-700)';
-                    // Chevron rendered AT the clipped edge pointing outward,
-                    // makes the "this bar extends further than shown" state
-                    // unmistakable.
+                    const estLabelW = 72;
+                    const wouldClipRight = wantOutsideRight && (xPt + estLabelW > chartRight);
+                    const wouldClipLeft  = !wantOutsideRight && (xPt - estLabelW < chartLeft);
+                    const flipInward = wouldClipRight || wouldClipLeft || clipped;
+                    const anchor = flipInward
+                      ? (wantOutsideRight ? 'end' : 'start')
+                      : (wantOutsideRight ? 'start' : 'end');
+                    const dx = flipInward ? (wantOutsideRight ? -4 : 4) : (wantOutsideRight ? 4 : -4);
                     const chevron = clipped
-                      ? `<polygon points="${wantOutsideRight ? `${xPt - 12},${y + 4} ${xPt - 2},${y + 10} ${xPt - 12},${y + 16}` : `${xPt + 12},${y + 4} ${xPt + 2},${y + 10} ${xPt + 12},${y + 16}`}" fill="#0a1628"/>`
+                      ? `<polygon points="${wantOutsideRight
+                          ? `${xPt - 14},${y + 3} ${xPt - 2},${y + 11} ${xPt - 14},${y + 19}`
+                          : `${xPt + 14},${y + 3} ${xPt + 2},${y + 11} ${xPt + 14},${y + 19}`}" fill="#0a1628" stroke="#fff" stroke-width="1"/>`
                       : '';
                     return `
                       ${chevron}
-                      <text x="${xPt}" y="${y + 7}" text-anchor="${anchor}" font-size="9" fill="${atFill}" dx="${dx}" style="${stroke}">at ${val}</text>
-                      <text x="${xPt}" y="${y + 19}" text-anchor="${anchor}" font-size="10" fill="${costFill}" font-weight="700" dx="${dx}" style="${stroke}">cost ${cost}</text>
+                      <line x1="${xPt}" y1="${y + 20}" x2="${xPt}" y2="${y + 28}" stroke="#475569" stroke-width="1.2"/>
+                      <text x="${xPt}" y="${y + 38}" text-anchor="${anchor}" font-size="10" fill="#475569" dx="${dx}">at ${val}</text>
+                      <text x="${xPt}" y="${y + 50}" text-anchor="${anchor}" font-size="11" fill="#0a1628" font-weight="700" dx="${dx}">${cost}</text>
                     `;
                   };
-                  return renderEnd(xLow, fmtVal(t.lowVal), fmtCost(t.lowCost), lowClipped) + renderEnd(xHigh, fmtVal(t.highVal), fmtCost(t.highCost), highClipped);
+                  return renderEnd(xLow, fmtVal(t.lowVal), fmtCost(t.lowCost), lowClipped)
+                    + renderEnd(xHigh, fmtVal(t.highVal), fmtCost(t.highCost), highClipped);
                 })()}
               `;
             }).join('')}
