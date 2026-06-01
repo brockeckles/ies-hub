@@ -3511,7 +3511,7 @@ function renderMap(el) {
               ? `C${i+1}: ${c.lat.toFixed(3)},${c.lng.toFixed(3)} (${c.nearestCity || '?'})`
               : `<strong>C${i+1} INVALID (${c.lat}, ${c.lng})</strong>`;
           }).join(' &nbsp;·&nbsp; ');
-          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix5</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
+          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix6</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
         })()}
         <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
@@ -3945,7 +3945,7 @@ function initCogMap() {
     overlay.style.cssText = `
       position: fixed; width: 44px; height: 44px;
       left: -100px; top: -100px;
-      z-index: 9999;
+      z-index: 999999;
       pointer-events: none;
     `;
     overlay.addEventListener('click', (e) => {
@@ -3999,10 +3999,14 @@ function initCogMap() {
   // Surface a status chip showing the latest computed viewport coords
   // so we can SEE where the marker SHOULD be even if styling fails.
   // Replaces the existing chip if any.
+  // Diagnostic chip — top-right of viewport, bright yellow so it's
+  // unmissable. Reports the latest computed marker coords on every
+  // map move/zoom; if marker is still invisible, this chip reveals
+  // whether the issue is creation, math, or rendering.
   const chip = document.getElementById('cog-marker-status-chip') || (() => {
     const c = document.createElement('div');
     c.id = 'cog-marker-status-chip';
-    c.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:9998;font-family:monospace;font-size:10px;background:rgba(10,22,40,0.85);color:#fff;padding:4px 8px;border-radius:4px;pointer-events:none;';
+    c.style.cssText = 'position:fixed;top:80px;right:12px;z-index:999998;font-family:monospace;font-size:11px;background:#facc15;color:#0a1628;padding:6px 10px;border-radius:6px;pointer-events:none;border:2px solid #0a1628;box-shadow:0 4px 12px rgba(0,0,0,0.3);max-width:340px;font-weight:600;line-height:1.45;';
     document.body.appendChild(c);
     return c;
   })();
@@ -4021,6 +4025,23 @@ function initCogMap() {
   };
   _refreshChip();
   mapInstance.on('move zoom moveend zoomend', _refreshChip);
+  // TEST OVERLAY — bright red circle pinned at a known viewport position.
+  // Proves position:fixed body overlays render. If Brock sees this but
+  // not the center marker, the issue is positioning math, not DOM
+  // injection.
+  if (!document.getElementById('cog-marker-test-overlay')) {
+    const test = document.createElement('div');
+    test.id = 'cog-marker-test-overlay';
+    test.textContent = 'TEST';
+    test.style.cssText = 'position:fixed;top:150px;right:14px;width:60px;height:60px;border-radius:50%;background:#ef4444;border:4px solid #0a1628;box-shadow:0 0 0 6px rgba(255,255,255,0.95),0 4px 14px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px;font-family:-apple-system,sans-serif;z-index:999999;pointer-events:none;';
+    document.body.appendChild(test);
+  }
+  // Defer initial positioning until Leaflet finishes container sizing.
+  requestAnimationFrame(() => {
+    _updateCenterOverlayPositions();
+    _refreshChip();
+    setTimeout(() => { _updateCenterOverlayPositions(); _refreshChip(); }, 250);
+  });
 
   // Fit bounds
   const allPts = [...points.map(p => [p.lat, p.lng]), ...cogResult.centers.map(c => [c.lat, c.lng])];
@@ -4112,7 +4133,7 @@ function renderSensitivity(el) {
         // chart area for the value labels ("$10.2M") which sit outside
         // the bar end. 8% of range fails when one driver dominates the
         // swing — the label of the biggest bar overflows the card.
-        const W = 760, H = Math.max(180, 40 + tornado.length * 38);
+        const W = 760, H = Math.max(200, 50 + tornado.length * 50);
         const labelW = 160;
         const labelPadPx = 90;
         const chartW = W - labelW - 20 - labelPadPx;
@@ -4133,11 +4154,11 @@ function renderSensitivity(el) {
           <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
             <!-- Baseline vertical line -->
             <line x1="${baselineX}" y1="20" x2="${baselineX}" y2="${H - 30}" stroke="#475569" stroke-dasharray="4 3" stroke-width="1.5"/>
-            <text x="${baselineX}" y="${H - 12}" text-anchor="middle" font-size="11" fill="#475569" font-weight="600">${fmtCost(baselineCost)}</text>
+            <text x="${baselineX}" y="${H - 8}" text-anchor="middle" font-size="11" fill="#475569" font-weight="600">${fmtCost(baselineCost)}</text>
 
             <!-- Bars -->
             ${tornado.map((t, i) => {
-              const y = 30 + i * 38;
+              const y = 30 + i * 50;
               // 2026-06-01 mapfix5 — clip bars at chart edges; outliers get
               // a chevron + actual-value annotation at the clipped edge.
               const chartRightEdge = labelW + labelPadPx + chartW;
@@ -4171,8 +4192,8 @@ function renderSensitivity(el) {
                      dollars. Previously the swing label sat under each
                      bar, where all of them clustered around the baseline
                      and overlapped one another. -->
-                <text x="${labelW - 10}" y="${y + 9}" text-anchor="end" font-size="12" fill="var(--ies-gray-700)" font-weight="600">${t.label}</text>
-                <text x="${labelW - 10}" y="${y + 24}" text-anchor="end" font-size="10" fill="var(--ies-gray-400)">±${t.deltaPct}% · swing ${fmtCost(t.swing)}</text>
+                <text x="${labelW - 10}" y="${y + 10}" text-anchor="end" font-size="12" fill="var(--ies-gray-700)" font-weight="700">${t.label}</text>
+                <text x="${labelW - 10}" y="${y + 24}" text-anchor="end" font-size="10" fill="var(--ies-gray-500)">±${t.deltaPct}% · swing ${fmtCost(t.swing)}</text>
                 ${(() => {
                   // 2026-05-29 — split the bar into two color segments
                   // around the baseline: blue for the cost-below-baseline
@@ -4206,7 +4227,8 @@ function renderSensitivity(el) {
                   if (barPxW < 40) {
                     const midX = (xLow + xHigh) / 2;
                     return `
-                      <text x="${midX}" y="${y - 4}" text-anchor="middle" font-size="9" fill="var(--ies-gray-600)">at ${fmtVal(t.lowVal)} → ${fmtVal(t.highVal)}</text>
+                      <line x1="${midX}" y1="${y + 20}" x2="${midX}" y2="${y + 26}" stroke="#475569" stroke-width="1"/>
+                      <text x="${midX}" y="${y + 38}" text-anchor="middle" font-size="11" fill="#0a1628" font-weight="700">at ${fmtVal(t.lowVal)} → ${fmtVal(t.highVal)}</text>
                     `;
                   }
                   // Wide bar — smart endpoint label placement. If the
