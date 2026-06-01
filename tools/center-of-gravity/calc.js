@@ -149,6 +149,11 @@ export const DEFAULT_CONFIG = {
   // 2026-05-28 — Service mix: {ground, threeDay, twoDay, overnight}
   // share %s. Default 100% ground (legacy compatible).
   parcelServiceMix: { ground: 100, threeDay: 0, twoDay: 0, overnight: 0 },
+  // 2026-05-29 — explicit packages-per-weight-unit override. When
+  // the user has data in a unit where the auto-conversion can't be
+  // determined (e.g. 'revenue' = \$ value), they can set this to the
+  // packages-per-unit ratio directly. Empty = auto from weightUnit.
+  parcelPackagesPerUnit: null,
   // 2026-05-28 37 — Dimensional weight multiplier. 1.0 = no DIM impact;
   // 1.2 = typical mixed DTC; 1.5-2.5 = light/large items (furniture).
   parcelDimMultiplier: 1.0,
@@ -1548,7 +1553,10 @@ export function estimateBlendedCost(cogResult, points, config) {
       // Parcel slice — point-specific share + weight.
       if (ptParcelShare > 0 && ptAvgWeight > 0) {
         const parcelWeight = (pt.weight || 0) * ptParcelShare;
-        const pkgCount = parcelWeight / ptAvgWeight;
+        // 2026-05-29 — unit-aware pkgCount. For count units (units,
+        // orders, cases, pallets) each weight = 1 package. For lb,
+        // divide by avg pkg weight. cwt × 100 before dividing.
+        const pkgCount = packageCountFromWeight(parcelWeight, cfg.weightUnit || 'lb', ptAvgWeight, cfg.parcelPackagesPerUnit);
         const lane = estimateParcelLane({
           pkgCount, avgWeight: ptAvgWeight, distanceMi: driveMi,
           fuelPct, residentialShare, discountPct, carrier,
@@ -1613,6 +1621,47 @@ export function estimateBlendedCost(cogResult, points, config) {
       fuelPct, residentialShare, discountPct,
     } : null,
   };
+}
+
+// ============================================================
+// UNIT-AWARE PACKAGE COUNT (2026-05-29)
+// ============================================================
+
+/**
+ * Convert a demand-weight number into a package count. The original
+ * parcel math assumed weight was always in pounds — pkgCount = weight /
+ * avgPkgWeightLb. That's wrong for non-lb weight units:
+ *   - 'units' / 'orders' / 'cases' / 'pallets' are COUNT units. Each one
+ *     IS a package (or a parent-of-packages). Dividing by avgPkgWeightLb
+ *     undercounts by a factor of ~5x at default settings.
+ *   - 'cwt' is hundredweight (100 lb), so convert × 100 before dividing.
+ *   - 'lb' is the legacy path: divide by avgPkgWeightLb.
+ *   - 'revenue' has no mass relationship — user must override via
+ *     parcelPackagesPerUnit, otherwise we assume 1:1.
+ *
+ * @param {number} weight — raw demand weight
+ * @param {string} weightUnit — 'lb' | 'cwt' | 'pallets' | 'units' | 'cases' | 'orders' | 'revenue'
+ * @param {number} avgPkgWeightLb — average package weight in lb
+ * @param {number} [overrideRatio] — explicit packages-per-weight-unit override
+ * @returns {number}
+ */
+export function packageCountFromWeight(weight, weightUnit, avgPkgWeightLb, overrideRatio) {
+  const w = +weight || 0;
+  if (w <= 0) return 0;
+  if (Number.isFinite(+overrideRatio) && +overrideRatio > 0) {
+    return w * +overrideRatio;
+  }
+  const apw = Math.max(0.1, +avgPkgWeightLb || 5);
+  switch (weightUnit) {
+    case 'lb':       return w / apw;
+    case 'cwt':      return (w * 100) / apw;
+    case 'pallets':  return w;
+    case 'units':    return w;
+    case 'cases':    return w;
+    case 'orders':   return w;
+    case 'revenue':  return w;
+    default:         return w / apw;
+  }
 }
 
 // ============================================================

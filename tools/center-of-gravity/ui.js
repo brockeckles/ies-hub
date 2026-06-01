@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260529-horizon1';
+import * as calc from './calc.js?v=20260529-pkgunit1';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
@@ -3801,16 +3801,31 @@ function initCogMap() {
   // E3/E4 — labels read at print resolution and on screenshot exports.
   // 2026-05-28 D6 — center markers now use the cluster color (matches
   // the assignment-line + demand-point coloring) instead of all-red.
+  // 2026-05-29 — Center markers get their own Leaflet pane with a
+  // high z-index so they always paint on top of heatmap / territories
+  // / parcel zones. Marker is larger (18px) + a white halo ring + a
+  // dark inner border so it pops against any basemap or overlay.
+  if (!mapInstance.getPane('cog-centers')) {
+    mapInstance.createPane('cog-centers');
+    mapInstance.getPane('cog-centers').style.zIndex = 650;
+  }
   cogResult.centers.forEach((c, i) => {
     const centerColor = clusterColor(i);
+    // Outer white halo so the marker is visible against any background.
+    L.circleMarker([c.lat, c.lng], {
+      radius: 22, fillColor: '#ffffff', color: '#ffffff',
+      weight: 0, fillOpacity: 0.9, pane: 'cog-centers',
+    }).addTo(mapInstance);
+    // Main marker — bigger, dark border, full opacity.
     const marker = L.circleMarker([c.lat, c.lng], {
-      radius: 14, fillColor: centerColor, color: '#fff', weight: 3, fillOpacity: 0.95,
+      radius: 18, fillColor: centerColor, color: '#0a1628',
+      weight: 3, fillOpacity: 1.0, pane: 'cog-centers',
     }).addTo(mapInstance);
     marker.bindPopup(`<strong>Center ${i + 1}</strong><br>${c.nearestCity}<br>Location: ${calc.formatLatLng(c.lat, c.lng)}<br>Avg Distance: ${calc.formatMiles(c.avgWeightedDistance)}`);
     if (mapOptions.labels !== false) {
       marker.bindTooltip(
         `<span style="font-weight:700;color:#0a1628;">C${i + 1}</span> <span style="color:#475569;">${c.nearestCity}</span>`,
-        { permanent: true, direction: 'top', offset: [0, -10], className: 'cog-center-label', opacity: 0.95 }
+        { permanent: true, direction: 'top', offset: [0, -14], className: 'cog-center-label', opacity: 0.95 }
       );
     }
   });
