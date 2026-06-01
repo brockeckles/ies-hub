@@ -3790,6 +3790,8 @@ function initCogMap() {
   }
 
   // Demand points colored by cluster
+  let _linesDrawn = 0;
+  let _linesSkipped = 0;
   cogResult.assignments.forEach(a => {
     const pt = points.find(p => p.id === a.pointId);
     if (!pt) return;
@@ -3811,44 +3813,69 @@ function initCogMap() {
 
     // Line to center
     const center = cogResult.centers[a.clusterId];
-    if (center) {
+    if (center && Number.isFinite(center.lat) && Number.isFinite(center.lng)) {
       L.polyline([[pt.lat, pt.lng], [center.lat, center.lng]], {
-        color, weight: 1, opacity: 0.3,
+        color, weight: 1, opacity: 0.35,
       }).addTo(mapInstance);
+      _linesDrawn++;
+    } else {
+      _linesSkipped++;
     }
   });
+  console.log('[COG map] assignment lines:', _linesDrawn, 'drawn,', _linesSkipped, 'skipped (invalid center)');
 
   // Center markers (star-like — larger with border) + permanent label
   // E3/E4 — labels read at print resolution and on screenshot exports.
   // 2026-05-28 D6 — center markers now use the cluster color (matches
   // the assignment-line + demand-point coloring) instead of all-red.
-  // 2026-05-29 — Center markers get their own Leaflet pane with a
-  // high z-index so they always paint on top of heatmap / territories
-  // / parcel zones. Marker is larger (18px) + a white halo ring + a
-  // dark inner border so it pops against any basemap or overlay.
+  // 2026-05-29 v2 — Center markers were still invisible against
+  // 3K-dot heatmap at continental zoom. Going full-prominence: dedicated
+  // pane at z-index 650 + 38px white halo + 28px colored fill + 4px
+  // dark border + crosshair lines extending outward + permanent label.
+  // Plus a console.log dump so we can diagnose NaN coords if they exist.
   if (!mapInstance.getPane('cog-centers')) {
     mapInstance.createPane('cog-centers');
     mapInstance.getPane('cog-centers').style.zIndex = 650;
   }
+  // Diagnostic — surface what's actually in the centers array.
+  console.log('[COG map] drawing', cogResult.centers.length, 'center(s):',
+    cogResult.centers.map((c, i) => ({
+      i, lat: c.lat, lng: c.lng, valid: Number.isFinite(c.lat) && Number.isFinite(c.lng),
+      city: c.nearestCity, weight: c.totalWeight,
+    })));
   cogResult.centers.forEach((c, i) => {
     const centerColor = clusterColor(i);
-    // Outer white halo so the marker is visible against any background.
-    L.circleMarker([c.lat, c.lng], {
-      radius: 22, fillColor: '#ffffff', color: '#ffffff',
-      weight: 0, fillOpacity: 0.9, pane: 'cog-centers',
+    if (!Number.isFinite(c.lat) || !Number.isFinite(c.lng)) {
+      console.warn('[COG map] center', i, 'has invalid coordinates — skipping render', c);
+      return;
+    }
+    // Crosshair extension lines — 4 short black bars sticking out of the
+    // marker so the center is visible even at low zoom + busy heatmap.
+    const crossArm = 0.6; // degrees
+    const armColor = '#0a1628';
+    L.polyline([[c.lat - crossArm, c.lng], [c.lat + crossArm, c.lng]], {
+      color: armColor, weight: 3, opacity: 0.9, pane: 'cog-centers',
     }).addTo(mapInstance);
-    // Main marker — bigger, dark border, full opacity.
+    L.polyline([[c.lat, c.lng - crossArm], [c.lat, c.lng + crossArm]], {
+      color: armColor, weight: 3, opacity: 0.9, pane: 'cog-centers',
+    }).addTo(mapInstance);
+    // Big white halo behind the colored marker for max contrast.
+    L.circleMarker([c.lat, c.lng], {
+      radius: 38, fillColor: '#ffffff', color: '#ffffff',
+      weight: 0, fillOpacity: 0.95, pane: 'cog-centers',
+    }).addTo(mapInstance);
+    // Main marker — much larger + thicker dark border.
     const marker = L.circleMarker([c.lat, c.lng], {
-      radius: 18, fillColor: centerColor, color: '#0a1628',
-      weight: 3, fillOpacity: 1.0, pane: 'cog-centers',
+      radius: 28, fillColor: centerColor, color: '#0a1628',
+      weight: 4, fillOpacity: 1.0, pane: 'cog-centers',
     }).addTo(mapInstance);
     marker.bindPopup(`<strong>Center ${i + 1}</strong><br>${c.nearestCity}<br>Location: ${calc.formatLatLng(c.lat, c.lng)}<br>Avg Distance: ${calc.formatMiles(c.avgWeightedDistance)}`);
-    if (mapOptions.labels !== false) {
-      marker.bindTooltip(
-        `<span style="font-weight:700;color:#0a1628;">C${i + 1}</span> <span style="color:#475569;">${c.nearestCity}</span>`,
-        { permanent: true, direction: 'top', offset: [0, -14], className: 'cog-center-label', opacity: 0.95 }
-      );
-    }
+    // Always-on permanent label regardless of toggle — needed so user
+    // can locate the center at first glance.
+    marker.bindTooltip(
+      `<span style="font-weight:800;color:#0a1628;font-size:13px;">★ C${i + 1}</span> <span style="color:#475569;">${c.nearestCity || ''}</span>`,
+      { permanent: true, direction: 'top', offset: [0, -24], className: 'cog-center-label', opacity: 1.0 }
+    );
   });
 
   // Fit bounds
