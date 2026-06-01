@@ -2804,6 +2804,58 @@ function renderAnalysis(el) {
         </div>
       </div>
 
+      <!-- 2026-05-29 — Data sanity check. When trans cost / point / year
+           falls below industry typical (~\$5K for parcel, ~\$2K for TL),
+           the data is almost certainly off (wrong weight unit, partial-
+           year sample, etc.). Surfaces the diagnosis with the actual
+           numbers driving the result. -->
+      ${(() => {
+        const solvePts = _pointsForSolve();
+        if (solvePts.length === 0) return '';
+        const totalWt = solvePts.reduce((sum, p) => sum + (p.weight || 0), 0);
+        const total = costEst.totalCost || 0;
+        const costPerPoint = total / Math.max(1, solvePts.length);
+        const costPerUnit = total / Math.max(1, totalWt);
+        const wtUnit = (calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'units');
+        const isParcel = !!cogResult.parcelDetails;
+        const TYPICAL_LOW = isParcel ? 5000 : 2000;  // \$/point/yr lower bound
+        const lowFlag = costPerPoint < TYPICAL_LOW;
+        const pkgsPerPoint = isParcel && cogResult.parcelDetails ? (cogResult.parcelDetails.totalPackages / Math.max(1, solvePts.length)) : null;
+        return `
+          <div class="hub-card" style="padding:14px 18px;margin-bottom:20px;background:${lowFlag ? '#fef3c7' : '#f0fdf4'};border-left:4px solid ${lowFlag ? '#f59e0b' : '#22c55e'};">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+              <span style="font-size:14px;">${lowFlag ? '⚠' : '✓'}</span>
+              <strong style="font-size:13px;color:${lowFlag ? '#78350f' : '#15803d'};">Data sanity check</strong>
+              ${lowFlag ? '<span style="font-size:11px;color:#78350f;">Cost-per-point is below industry typical — likely a data-setup issue.</span>' : ''}
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:8px 14px;font-size:11px;font-variant-numeric:tabular-nums;">
+              <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Demand points</div><div style="font-weight:700;font-size:13px;">${solvePts.length.toLocaleString()}</div></div>
+              <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Total demand</div><div style="font-weight:700;font-size:13px;">${totalWt.toLocaleString(undefined, {maximumFractionDigits:0})} ${wtUnit}</div></div>
+              <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Avg / point</div><div style="font-weight:700;font-size:13px;">${(totalWt/Math.max(1,solvePts.length)).toLocaleString(undefined, {maximumFractionDigits:0})} ${wtUnit}</div></div>
+              <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Cost / point / yr</div><div style="font-weight:700;font-size:13px;color:${lowFlag ? '#b91c1c' : '#0a1628'};">${calc.formatCurrency(costPerPoint)}</div></div>
+              <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Cost / ${wtUnit}</div><div style="font-weight:700;font-size:13px;">$${costPerUnit.toFixed(4)}</div></div>
+              ${pkgsPerPoint != null ? `
+                <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Pkgs / point / yr</div><div style="font-weight:700;font-size:13px;">${Math.round(pkgsPerPoint).toLocaleString()}</div></div>
+                <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Total packages / yr</div><div style="font-weight:700;font-size:13px;">${Math.round(cogResult.parcelDetails.totalPackages || 0).toLocaleString()}</div></div>
+                <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Avg \$ / pkg</div><div style="font-weight:700;font-size:13px;">${(cogResult.parcelDetails.totalPackages > 0 ? (cogResult.parcelCost / cogResult.parcelDetails.totalPackages) : 0).toFixed(2)}</div></div>
+                <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Avg pkg weight</div><div style="font-weight:700;font-size:13px;">${(config.parcelAvgPackageWeightLb || 5)} lb</div></div>
+              ` : ''}
+            </div>
+            ${lowFlag ? `
+              <div style="background:rgba(245,158,11,0.15);padding:8px 12px;border-radius:4px;margin-top:10px;font-size:11px;color:#78350f;line-height:1.5;">
+                <strong>Typical \$/point/yr for ${isParcel ? 'parcel' : 'TL/LTL'} networks runs ${isParcel ? '\$5K-50K' : '\$2K-20K'}.</strong> Your scenario shows <strong>${calc.formatCurrency(costPerPoint)}</strong>. Common causes:
+                <ul style="margin:4px 0 0 18px;padding:0;">
+                  <li>Weight column is in tons / cwt / pallets but tool reads it as ${wtUnit} (convert in Inputs, or change Weight unit selector).</li>
+                  <li>Demand is monthly / partial-year instead of annual — multiply by 12 (or the right factor) before loading.</li>
+                  ${isParcel ? '<li>parcelAvgPackageWeightLb (currently ' + (config.parcelAvgPackageWeightLb || 5) + ' lb) is too high — at this avg, ' + Math.round(pkgsPerPoint) + ' pkgs / point / yr is unrealistic for DTC.</li>' : ''}
+                  <li>Weights are sample values (per-shipment, not annual totals) — normalize before loading.</li>
+                </ul>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      })()}
+
       <!-- 2026-05-29 E3 — Multi-year cost timeline. Only rendered when
            horizon > 1; defaults to 1 = back-compat hidden. RFP-grade
            output: year-by-year projection + cumulative + NPV. -->
