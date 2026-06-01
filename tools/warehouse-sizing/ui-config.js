@@ -25,7 +25,7 @@
 
 import * as calc from './calc.js?v=20260514-engineoverride1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
-import { showConfirm } from '../../shared/confirm-modal.js';
+import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 

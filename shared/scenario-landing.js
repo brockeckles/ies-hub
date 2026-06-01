@@ -33,7 +33,7 @@
 
 import { db } from './supabase.js?v=20260429-demo-s3';
 import { showToast } from './toast.js?v=20260419-uC';
-import { showConfirm } from './confirm-modal.js';
+import { showConfirm } from './confirm-modal.js?v=20260601-prompt2';
 
 /**
  * @param {HTMLElement} rootEl

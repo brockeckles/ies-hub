@@ -9,7 +9,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260511-port2';
+import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260526-mfalift1';
 import * as calc from './calc.js?v=20260512-heur1v';

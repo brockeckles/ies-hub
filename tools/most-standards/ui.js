@@ -8,7 +8,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260526-phaseAs1';
-import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
+import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 // Note: MOST intentionally opts out of run-state tracking. Its Quick Analysis
 // and Workflow tabs recompute inline on every render — the primary "Run"
 // button is a convenience trigger rather than a discrete compute step, so a

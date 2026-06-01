@@ -18,7 +18,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import * as calc from './calc.js?v=20260511-port11';
 import * as api from './api.js?v=20260512-port27';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
-import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
+import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 
 // ============================================================
@@ -466,7 +466,7 @@ async function handleSaveNetopt() {
       const defaultName = name || `Network ${new Date().toLocaleDateString()}`;
       // 2026-04-30 PM (PL2): native browser prompt() suspends the renderer,
       // freezing CDP/MCP automation (same bug class as the EVE confirm()
-      // sweep). Use the async showPrompt modal from shared/confirm-modal.js.
+      // sweep). Use the async showPrompt modal from shared/confirm-modal.js?v=20260601-prompt2.
       const entered = await showPrompt('Name this scenario:', defaultName);
       if (entered === null) return;
       name = (entered || '').trim() || defaultName;

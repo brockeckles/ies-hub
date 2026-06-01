@@ -14,7 +14,7 @@ import * as calc from './calc.js?v=20260514-engineoverride1';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
-import { showConfirm } from '../../shared/confirm-modal.js';
+import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 import { render3DView, disposeScene3d } from './ui-3d.js?v=20260526-hudtoggle1';
 import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260526-phaseAm3';

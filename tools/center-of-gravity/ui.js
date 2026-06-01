@@ -16,7 +16,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import * as calc from './calc.js?v=20260529-scale1';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
-import { showConfirm, showPrompt } from '../../shared/confirm-modal.js';
+import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
