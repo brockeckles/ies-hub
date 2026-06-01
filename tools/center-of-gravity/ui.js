@@ -3476,25 +3476,9 @@ function renderCompare(el) {
 // ============================================================
 
 function renderMap(el) {
-  // 2026-06-01 mapfix7 — TEST overlay + diagnostic chip at the very top
-  // of renderMap, OUTSIDE initCogMap. If they don't appear, the issue is
-  // page-level (extension, ad-blocker, an ancestor with transform/filter
-  // creating a containing block that breaks position:fixed). If they DO
-  // appear, the issue is inside initCogMap.
-  if (!document.getElementById('cog-marker-test-overlay')) {
-    const test = document.createElement('div');
-    test.id = 'cog-marker-test-overlay';
-    test.textContent = 'TEST';
-    test.style.cssText = 'position:fixed;top:150px;right:14px;width:60px;height:60px;border-radius:50%;background:#ef4444;border:4px solid #0a1628;box-shadow:0 0 0 6px rgba(255,255,255,0.95),0 4px 14px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px;font-family:-apple-system,sans-serif;z-index:2147483647;pointer-events:none;';
-    document.body.appendChild(test);
-  }
-  if (!document.getElementById('cog-marker-status-chip')) {
-    const chip = document.createElement('div');
-    chip.id = 'cog-marker-status-chip';
-    chip.textContent = 'mapfix10 · renderMap reached';
-    chip.style.cssText = 'position:fixed;top:80px;right:12px;z-index:2147483646;font-family:monospace;font-size:11px;background:#facc15;color:#0a1628;padding:6px 10px;border-radius:6px;pointer-events:none;border:2px solid #0a1628;box-shadow:0 4px 12px rgba(0,0,0,0.3);max-width:340px;font-weight:600;line-height:1.45;';
-    document.body.appendChild(chip);
-  }
+  // Remove any leftover diagnostic overlays from earlier sessions.
+  document.getElementById('cog-marker-test-overlay')?.remove();
+  document.getElementById('cog-marker-status-chip')?.remove();
   if (!cogResult) {
     el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Run analysis first to see the map.</p></div>';
     return;
@@ -3517,47 +3501,46 @@ function renderMap(el) {
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
         <h3 class="text-section" style="margin:0;">Center of Gravity Map</h3>
         <span style="font-size:11px;color:var(--ies-gray-400);">${points.length} points • ${cogResult.centers.length} center(s)</span>
-        <!-- 2026-05-29 v3 — make the diagnostic banner large enough to be
-             unmissable; if Brock doesn't see this row he's still on a
-             cached build. Reports build tag + each center's lat/lng. -->
-        ${(() => {
-          const invalidCount = cogResult.centers.filter(c => !Number.isFinite(c.lat) || !Number.isFinite(c.lng)).length;
-          const bg = invalidCount > 0 ? '#fee2e2' : '#fef3c7';
-          const fg = invalidCount > 0 ? '#991b1b' : '#78350f';
-          const summary = cogResult.centers.map((c, i) => {
-            const ok = Number.isFinite(c.lat) && Number.isFinite(c.lng);
-            return ok
-              ? `C${i+1}: ${c.lat.toFixed(3)},${c.lng.toFixed(3)} (${c.nearestCity || '?'})`
-              : `<strong>C${i+1} INVALID (${c.lat}, ${c.lng})</strong>`;
-          }).join(' &nbsp;·&nbsp; ');
-          return `<div style="width:100%;font-size:11px;background:${bg};color:${fg};padding:6px 10px;border-radius:4px;font-family:monospace;margin-top:4px;"><strong>build mapfix10</strong> &nbsp;·&nbsp; ${summary} &nbsp;·&nbsp; <a href="#" data-cog-action="zoom-centers" style="color:${fg};text-decoration:underline;">zoom to centers →</a></div>`;
-        })()}
-        <!-- 2026-06-01 mapfix7 — Bulletproof Center Locations card. Plain
-             HTML rendered inside renderMap's innerHTML — does NOT depend
-             on Leaflet, on initCogMap completing, or on any DOM injection
-             outside the page content. If the on-map marker is invisible
-             for any reason, Brock still has the center info here. -->
-        <div style="width:100%;background:#ffffff;border:2px solid #0a1628;border-radius:8px;padding:14px 18px;margin-top:6px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-          <div style="font-size:13px;font-weight:800;color:#0a1628;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Center Locations</div>
-          ${cogResult.centers.map((c, i) => {
-            const color = clusterColor(i);
-            const valid = Number.isFinite(c.lat) && Number.isFinite(c.lng);
-            return `
-              <div style="display:flex;align-items:center;gap:14px;padding:8px 0;${i < cogResult.centers.length - 1 ? 'border-bottom:1px solid #e2e8f0;' : ''}">
-                <div style="flex:none;width:36px;height:36px;border-radius:50%;background:${color};border:3px solid #0a1628;box-shadow:0 0 0 4px rgba(255,255,255,0.95),0 2px 6px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;color:#ffffff;font-weight:800;font-size:14px;">C${i + 1}</div>
-                <div style="flex:1;">
-                  <div style="font-size:14px;font-weight:700;color:#0a1628;">${c.nearestCity || `Center ${i + 1}`}</div>
-                  <div style="font-size:11px;color:#475569;font-family:monospace;">
-                    ${valid ? `${c.lat.toFixed(4)}°, ${c.lng.toFixed(4)}°` : `<span style="color:#b91c1c;font-weight:700;">INVALID COORDS (${c.lat}, ${c.lng})</span>`}
-                    ${c.avgWeightedDistance != null ? ` · avg drive ${calc.formatMiles(c.avgWeightedDistance)}` : ''}
-                    ${c.totalWeight != null ? ` · ${Math.round(c.totalWeight).toLocaleString()} total weight` : ''}
+        ${cogResult.centers.some(c => !Number.isFinite(c.lat) || !Number.isFinite(c.lng)) ? `
+          <div style="width:100%;font-size:11px;background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:4px;margin-top:4px;">
+            <strong>⚠ Invalid center coordinates</strong> — re-run the solve to recompute.
+          </div>
+        ` : ''}
+        <!-- Center Locations — collapsible. Renders a 1-line summary by
+             default; click to expand the full per-center detail with
+             lat/lng + avg drive + total weight + zoom-to button. -->
+        <details style="width:100%;margin-top:6px;">
+          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;font-weight:600;color:#0a1628;user-select:none;">
+            <span style="font-size:11px;color:#64748b;">▸</span>
+            <span style="text-transform:uppercase;letter-spacing:0.04em;font-size:11px;color:#64748b;">Center Locations</span>
+            ${cogResult.centers.map((c, i) => `
+              <span style="display:inline-flex;align-items:center;gap:5px;">
+                <span style="width:12px;height:12px;border-radius:50%;background:${clusterColor(i)};border:1.5px solid #0a1628;"></span>
+                <span>C${i + 1}${c.nearestCity ? ' · ' + c.nearestCity.split('(')[0].trim() : ''}</span>
+              </span>
+            `).join('')}
+          </summary>
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 6px 6px;padding:10px 14px;">
+            ${cogResult.centers.map((c, i) => {
+              const color = clusterColor(i);
+              const valid = Number.isFinite(c.lat) && Number.isFinite(c.lng);
+              return `
+                <div style="display:flex;align-items:center;gap:14px;padding:6px 0;${i < cogResult.centers.length - 1 ? 'border-bottom:1px solid #e2e8f0;' : ''}">
+                  <div style="flex:none;width:32px;height:32px;border-radius:50%;background:${color};border:2.5px solid #0a1628;display:flex;align-items:center;justify-content:center;color:#ffffff;font-weight:800;font-size:13px;">C${i + 1}</div>
+                  <div style="flex:1;">
+                    <div style="font-size:13px;font-weight:700;color:#0a1628;">${c.nearestCity || `Center ${i + 1}`}</div>
+                    <div style="font-size:11px;color:#475569;font-family:monospace;">
+                      ${valid ? `${c.lat.toFixed(4)}°, ${c.lng.toFixed(4)}°` : `<span style="color:#b91c1c;font-weight:700;">INVALID COORDS (${c.lat}, ${c.lng})</span>`}
+                      ${c.avgWeightedDistance != null ? ` · avg drive ${calc.formatMiles(c.avgWeightedDistance)}` : ''}
+                      ${c.totalWeight != null ? ` · ${Math.round(c.totalWeight).toLocaleString()} total weight` : ''}
+                    </div>
                   </div>
+                  <button type="button" data-cog-action="zoom-centers" style="flex:none;font-size:11px;font-weight:700;padding:5px 10px;border:1.5px solid #0a1628;background:#fff;color:#0a1628;border-radius:5px;cursor:pointer;">Zoom to →</button>
                 </div>
-                <button type="button" data-cog-action="zoom-centers" style="flex:none;font-size:11px;font-weight:700;padding:6px 12px;border:1.5px solid #0a1628;background:#fff;color:#0a1628;border-radius:5px;cursor:pointer;">Zoom to →</button>
-              </div>
-            `;
-          }).join('')}
-        </div>
+              `;
+            }).join('')}
+          </div>
+        </details>
         <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
             <input type="checkbox" data-cog-toggle="zones" ${mapOptions.zones ? 'checked' : ''} style="margin:0;"> Service zones
@@ -3689,16 +3672,8 @@ function initCogMap() {
     _initCogMapBody();
     _setChipStatus('initCogMap done');
   } catch (err) {
+    // Surface to console — silently degrade rather than crash the tab.
     console.error('[COG initCogMap] threw:', err);
-    const chip = document.getElementById('cog-marker-status-chip');
-    const lastStep = chip ? chip.textContent.replace(/^mapfix\d+ . /, '') : '?';
-    const stack = err && err.stack ? err.stack.split('\n').slice(0, 3).join(' | ') : '';
-    if (chip) {
-      chip.textContent = 'mapfix9 · LAST=' + lastStep + ' | THREW: ' + (err && err.message ? err.message : String(err));
-      chip.title = stack;
-      // Also dump stack frame line numbers into the chip on a second line via title attr
-    }
-    // Don't re-throw — let the chip carry the diagnosis.
   }
 }
 function _initCogMapBody() {
@@ -4082,34 +4057,11 @@ function _initCogMapBody() {
   // Surface a status chip showing the latest computed viewport coords
   // so we can SEE where the marker SHOULD be even if styling fails.
   // Replaces the existing chip if any.
-  // The chip element was already created at top of renderMap.
-  const chip = document.getElementById('cog-marker-status-chip');
-  if (chip) chip.style.zIndex = '2147483646';
-  const _refreshChip = () => {
-    if (!mapInstance || !container || !container.isConnected) {
-      chip.textContent = 'mapfix8 · no map';
-      return;
-    }
-    const rect = container.getBoundingClientRect();
-    const parts = cogResult.centers.map((c, i) => {
-      if (!Number.isFinite(c.lat) || !Number.isFinite(c.lng)) return `C${i+1} invalid`;
-      const pt = mapInstance.latLngToContainerPoint([c.lat, c.lng]);
-      return `C${i+1} ll=${c.lat.toFixed(2)},${c.lng.toFixed(2)} px=${Math.round(pt.x)},${Math.round(pt.y)} vp=${Math.round(rect.left + pt.x)},${Math.round(rect.top + pt.y)}`;
-    });
-    chip.textContent = 'mapfix10 · ' + parts.join(' · ');
-  };
-  _refreshChip();
-  mapInstance.on('move zoom moveend zoomend', _refreshChip);
   // Defer initial positioning until Leaflet finishes container sizing.
   requestAnimationFrame(() => {
-    try { _updateCenterOverlayPositions(); _refreshChip(); } catch (e) {
-      console.error('[COG marker] update failed:', e);
-      if (chip) chip.textContent = 'mapfix8 · POSITIONING ERROR: ' + (e.message || e);
-    }
+    try { _updateCenterOverlayPositions(); } catch (e) { console.error('[COG marker] update failed:', e); }
     setTimeout(() => {
-      try { _updateCenterOverlayPositions(); _refreshChip(); } catch (e) {
-        console.error('[COG marker] delayed update failed:', e);
-      }
+      try { _updateCenterOverlayPositions(); } catch (e) { console.error('[COG marker] delayed update failed:', e); }
     }, 250);
   });
 
