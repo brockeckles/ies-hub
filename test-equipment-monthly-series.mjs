@@ -6,7 +6,7 @@
 //   1. computeEquipmentMonthlySeries returns length-12 array
 //   2. Owned/IT/Facility lines contribute equally to every month (annual/12)
 //   3. rented_mhe lines add qty × monthly_cost ONLY to each month in seasonal_months
-//   4. Sum-of-series equals totalEquipmentCost (mass-conservation)
+//   4. Sum-of-series equals totalEquipmentCost + totalEquipmentAmort (mass-conservation, incl. 2026-06-10 capital-amort fix)
 //   5. Mixed-bag project: Q4 months carry the rental bump, Q1-Q3 carry only owned
 //
 // Run:  node test-equipment-monthly-series.mjs
@@ -14,6 +14,7 @@
 import {
   computeEquipmentMonthlySeries,
   totalEquipmentCost,
+  totalEquipmentAmort,
   equipLineAnnual,
 } from './tools/cost-model/calc.js';
 
@@ -49,11 +50,15 @@ t('owned_mhe lease: $120K/yr → $10K every month', () => {
   for (const v of s) near(v, 10000, 0.01);
 });
 
-t('it_equipment capital: maintenance-only opex spread evenly', () => {
+t('it_equipment capital: maintenance + capital amort spread evenly', () => {
   const lines = [{ line_type: 'it_equipment', quantity: 48, acquisition_type: 'capital', acquisition_cost: 2850, monthly_maintenance: 15 }];
-  // 48 × 15 × 12 = 8640; /12 = 720 per month
+  // 2026-06-10 Critical #3 fix: capital lines now carry amortization in the
+  // series, not maintenance-only (which silently dropped acquisition cost
+  // from every financial output).
+  // maintenance: 48 × 15 × 12 = 8640/yr; amort: 48 × 2850 / 5yr = 27360/yr
+  // total 36000/yr → 3000/month
   const s = computeEquipmentMonthlySeries(lines);
-  for (const v of s) near(v, 720, 0.01);
+  for (const v of s) near(v, 3000, 0.01);
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -86,7 +91,7 @@ t('rented_mhe default months: uses [10,11,12] when missing', () => {
 // 4. Mass conservation — sum of series = annual total
 // ────────────────────────────────────────────────────────────────────────────
 
-t('sum of monthly series equals totalEquipmentCost', () => {
+t('sum of monthly series equals totalEquipmentCost + totalEquipmentAmort', () => {
   const lines = [
     { line_type: 'owned_mhe', quantity: 20, acquisition_type: 'lease', monthly_cost: 800, monthly_maintenance: 150 },
     { line_type: 'rented_mhe', quantity: 6, monthly_cost: 1000, seasonal_months: [10, 11, 12] },
@@ -95,8 +100,8 @@ t('sum of monthly series equals totalEquipmentCost', () => {
   ];
   const s = computeEquipmentMonthlySeries(lines);
   const sumSeries = s.reduce((a, b) => a + b, 0);
-  const totalAnnual = totalEquipmentCost(lines);
-  near(sumSeries, totalAnnual, 0.5, 'series sum ≈ annual total');
+  const totalAnnual = totalEquipmentCost(lines) + totalEquipmentAmort(lines);
+  near(sumSeries, totalAnnual, 0.5, 'series sum ≈ annual opex + capital amort');
 });
 
 // ────────────────────────────────────────────────────────────────────────────

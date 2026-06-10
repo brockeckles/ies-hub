@@ -12,7 +12,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260526-mfalift1';
-import * as calc from './calc.js?v=20260512-heur1v';
+import * as calc from './calc.js?v=20260610-capfix1';
 import * as api from './api.js?v=20260528-cogwriteback1';
 import * as scenarios from './calc.scenarios.js?v=20260430-pm-otfix2';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
@@ -90,8 +90,8 @@ import {
 } from './operational-flow-render.js?v=20260512-heur1v';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260512-heur1v';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260512-heur1v';
+import { computeHeaderKpis } from './header-kpis.js?v=20260610-capfix1';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260610-capfix1';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -2007,6 +2007,7 @@ function getCellProvenance(rowKey, year) {
         value: p.equipment,
         inputs: [
           { label: 'Base Equipment Cost', value: _fmtMoney(s.equipmentCost), source: 'Sum of equipmentLines (own + rent + IT + 3-way)' },
+          { label: 'Equipment Capital Amort', value: _fmtMoney(s.equipmentAmort || 0), source: 'Capital acquisition ÷ amort_years — amortized into opex (2026-06-10 fix)' },
           { label: 'Equipment Escalation', value: (((ch.equipmentEscPct ?? ch.costEscPct) || 0).toFixed(1) + '%/yr'), source: ch.equipmentEscPct != null ? 'Heuristics → Equipment Esc' : 'Heuristics → Cost Esc (default)' },
           { label: 'Cumulative escalation', value: _fmtPct(calc.cumulativeEscalation((ch.equipmentEscPct ?? ch.costEscPct) || 0, year)), source: `Compounded over ${year - 1} year(s)` },
         ],
@@ -2225,6 +2226,7 @@ function getCellProvenance(rowKey, year) {
       const k = ctx.kpi || {};
       const channelRows = _buildChannelBreakdownInputs(lineage, 'units');
       const totalCost = (s.laborCost || 0) + (s.facilityCost || 0) + (s.equipmentCost || 0)
+                       + (s.equipmentAmort || 0)
                        + (s.overheadCost || 0) + (s.vasCost || 0) + (s.startupAmort || 0);
       const annualVolume = ctx.baseOrders || 1;
       return {
@@ -2236,7 +2238,7 @@ function getCellProvenance(rowKey, year) {
           { label: 'Total Annual Cost', value: _fmtMoney(totalCost), source: 'Σ Labor + Facility + Equipment + Overhead + VAS + Startup amort.' },
           { label: 'Labor', value: _fmtMoney(s.laborCost || 0), source: 'Sum of laborLines + indirectLaborLines' },
           { label: 'Facility', value: _fmtMoney(s.facilityCost || 0), source: 'Rent + utilities + TI amort + property tax' },
-          { label: 'Equipment', value: _fmtMoney(s.equipmentCost || 0), source: 'Sum of equipmentLines (own + rent + IT)' },
+          { label: 'Equipment', value: _fmtMoney((s.equipmentCost || 0) + (s.equipmentAmort || 0)), source: 'Sum of equipmentLines (own + rent + IT) + capital amort' },
           { label: 'Overhead', value: _fmtMoney(s.overheadCost || 0), source: 'Sum of overheadLines (annualized)' },
           { label: 'VAS (pass-through)', value: _fmtMoney(s.vasCost || 0), source: 'Sum of vasLines' },
           { label: 'Startup amort.', value: _fmtMoney(s.startupAmort || 0), source: 'Sum of startupLines ÷ contract term' },
@@ -7362,7 +7364,7 @@ function renderSummary() {
     years: contractYears,
     baseLaborCost: summary.laborCost,
     baseFacilityCost: summary.facilityCost,
-    baseEquipmentCost: summary.equipmentCost,
+    baseEquipmentCost: summary.equipmentCost + (summary.equipmentAmort || 0),
     baseOverheadCost: summary.overheadCost,
     baseVasCost: summary.vasCost,
     startupAmort: summary.startupAmort,
@@ -7459,7 +7461,7 @@ function renderSummary() {
   const baseCosts = {
     labor:     p1.labor     ?? summary.laborCost,
     facility:  p1.facility  ?? summary.facilityCost,
-    equipment: p1.equipment ?? summary.equipmentCost,
+    equipment: p1.equipment ?? (summary.equipmentCost + (summary.equipmentAmort || 0)),
     overhead:  p1.overhead  ?? summary.overheadCost,
     vas:       p1.vas       ?? summary.vasCost,
     startup:   p1.startup   ?? summary.startupAmort,
@@ -7480,7 +7482,7 @@ function renderSummary() {
   const pcts = summary.totalCost > 0 ? {
     labor: (summary.laborCost / summary.totalCost * 100).toFixed(0),
     facility: (summary.facilityCost / summary.totalCost * 100).toFixed(0),
-    equipment: (summary.equipmentCost / summary.totalCost * 100).toFixed(0),
+    equipment: ((summary.equipmentCost + (summary.equipmentAmort || 0)) / summary.totalCost * 100).toFixed(0),
     overhead: (summary.overheadCost / summary.totalCost * 100).toFixed(0),
     vas: (summary.vasCost / summary.totalCost * 100).toFixed(0),
     startup: (summary.startupAmort / summary.totalCost * 100).toFixed(0),
@@ -7612,7 +7614,7 @@ function renderSummary() {
           return [
             { label: 'Labor', value: summary.laborCost, pct: pcts.labor, color: 'var(--ies-blue, #0047AB)' },
             { label: 'Facility', value: summary.facilityCost, pct: pcts.facility, color: '#2563eb' },
-            { label: 'Equipment', value: summary.equipmentCost, pct: pcts.equipment, color: '#60a5fa',
+            { label: 'Equipment', value: summary.equipmentCost + (summary.equipmentAmort || 0), pct: pcts.equipment, color: '#60a5fa',
               subAnnotation: rentalCost > 0
                 ? `of which ${calc.formatCurrency(rentalCost, {compact: true})} peak rentals (Oct-Dec opex)`
                 : null },
@@ -11756,7 +11758,7 @@ function ensureMonthlyBundle() {
       years: contractYears,
       baseLaborCost: summary.laborCost,
       baseFacilityCost: summary.facilityCost,
-      baseEquipmentCost: summary.equipmentCost,
+      baseEquipmentCost: summary.equipmentCost + (summary.equipmentAmort || 0),
       baseOverheadCost: summary.overheadCost,
       baseVasCost: summary.vasCost,
       startupAmort: summary.startupAmort,
@@ -11961,6 +11963,7 @@ function handleExportExcel() {
       rows.push(['Labor Cost',       Math.round(summary.laborCost || 0)]);
       rows.push(['Facility Cost',    Math.round(summary.facilityCost || 0)]);
       rows.push(['Equipment Cost',   Math.round(summary.equipmentCost || 0)]);
+      rows.push(['Equipment Capital Amortization', Math.round(summary.equipmentAmort || 0)]);
       rows.push(['Overhead Cost',    Math.round(summary.overheadCost || 0)]);
       rows.push(['VAS Cost',         Math.round(summary.vasCost || 0)]);
       rows.push(['Startup Amortization', Math.round(summary.startupAmort || 0)]);

@@ -1168,7 +1168,8 @@ export function totalRentedMheCost(lines) {
  *                                in seasonal_months (defaults to [10,11,12])
  *
  * Used by the monthly engine so Q4 shows the real peak-rental bump rather
- * than a smoothed /12 spread. Sum across months equals totalEquipmentCost.
+ * than a smoothed /12 spread. Sum across months equals totalEquipmentCost
+ * + totalEquipmentAmort (capital amort included since 2026-06-10).
  *
  * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
  * @returns {number[]} length-12 array, index 0 = January
@@ -1184,7 +1185,11 @@ export function computeEquipmentMonthlySeries(lines) {
       const months = _normalizeSeasonalMonths(line.seasonal_months);
       for (const m of months) series[m - 1] += qty * monthly;
     } else {
-      const annual = equipLineAnnual(line);
+      // 2026-06-10: include capital amortization so the series sum equals
+      // totalEquipmentCost + totalEquipmentAmort — the monthly engine's
+      // base_equipment_cost now carries amort (Critical #3 fix), and a series
+      // that omitted it would silently drop amort whenever the series path won.
+      const annual = equipLineAnnual(line) + equipLineAmort(line);
       const perMonth = annual / 12;
       for (let i = 0; i < 12; i++) series[i] += perMonth;
     }
@@ -1613,8 +1618,17 @@ export function computeSummary(params) {
   const overheadCost = totalOverheadCost(params.overheadLines);
   const vasCost = totalVasCost(params.vasLines);
   const startupAmort = totalStartupAmort(params.startupLines, params.contractYears);
+  // 2026-06-10 ground-up assessment Critical #3: capital-equipment acquisition
+  // cost previously appeared in NO financial output. The R5 fix (2026-04-29)
+  // removed equipmentCapital from totalInvestment on the assumption that
+  // equipment amort was flowing through opex — but no path actually included
+  // it. Per the engine's documented opex-amortization accounting, the annual
+  // amortization (acquisition / amort_years, capital lines only) now flows
+  // into totalCost and the revenue gross-up, so pricing recovers capital and
+  // NPV genuinely ties to cumFcf.
+  const equipmentAmort = totalEquipmentAmort(params.equipmentLines);
 
-  const totalCost = laborCost + facilityCost + equipmentCost + overheadCost + vasCost + startupAmort;
+  const totalCost = laborCost + facilityCost + equipmentCost + equipmentAmort + overheadCost + vasCost + startupAmort;
   // Reference-aligned cost-plus gross-up: Revenue = Cost / (1 − margin).
   // Applied per-category so the Pricing Schedule + P&L can display line-level
   // gross-up per reference Part I §3.2. The sum is mathematically identical
@@ -1623,7 +1637,7 @@ export function computeSummary(params) {
   const marginFrac = Math.min(0.999, Math.max(0, (params.targetMarginPct || 0) / 100));
   const laborRevenue     = grossUp(laborCost,     marginFrac);
   const facilityRevenue  = grossUp(facilityCost,  marginFrac);
-  const equipmentRevenue = grossUp(equipmentCost, marginFrac);
+  const equipmentRevenue = grossUp(equipmentCost + equipmentAmort, marginFrac);
   const overheadRevenue  = grossUp(overheadCost,  marginFrac);
   const vasRevenue       = grossUp(vasCost,       marginFrac);
   const startupRevenue   = grossUp(startupAmort,  marginFrac);
@@ -1650,7 +1664,7 @@ export function computeSummary(params) {
     totalFtes: totalFtes(params.laborLines, params.indirectLaborLines, opHrs),
     costPerOrder: totalCost / orders,
     equipmentCapital: totalEquipmentCapital(params.equipmentLines),
-    equipmentAmort: totalEquipmentAmort(params.equipmentLines),
+    equipmentAmort,
     startupCapital: totalStartupCapital(params.startupLines),
     // Y0 TI outlay (dock levelers, office build-out, CCTV, etc.). Intentionally
     // NOT folded into equipmentCapital / totalInvestment — TI rolls into

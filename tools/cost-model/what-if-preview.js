@@ -18,7 +18,7 @@
  * single what-if slider value (or full whatIfTransient when called
  * without an arg).
  */
-import * as calc from './calc.js?v=20260512-heur1v';
+import * as calc from './calc.js?v=20260610-capfix1';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 
 /**
@@ -163,7 +163,7 @@ export function computeWhatIfPreview(overlay, {
       years: contractYears,
       baseLaborCost: scaledBaseLaborCost,
       baseFacilityCost: summary.facilityCost,
-      baseEquipmentCost: summary.equipmentCost,
+      baseEquipmentCost: summary.equipmentCost + (summary.equipmentAmort || 0),
       baseOverheadCost: summary.overheadCost,
       baseVasCost: summary.vasCost,
       startupAmort: summary.startupAmort,

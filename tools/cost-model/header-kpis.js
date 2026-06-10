@@ -17,7 +17,7 @@
  * The function never throws; any failure inside the try block returns
  * `{ ready: false, items: [] }` with a console.warn diagnostic.
  */
-import * as calc from './calc.js?v=20260512-heur1v';
+import * as calc from './calc.js?v=20260610-capfix1';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
@@ -126,7 +126,7 @@ export function computeHeaderKpis({
       years: contractYears,
       baseLaborCost:     summary.laborCost,
       baseFacilityCost:  summary.facilityCost,
-      baseEquipmentCost: summary.equipmentCost,
+      baseEquipmentCost: summary.equipmentCost + (summary.equipmentAmort || 0),
       baseOverheadCost:  summary.overheadCost,
       baseVasCost:       summary.vasCost,
       startupAmort:      summary.startupAmort,
