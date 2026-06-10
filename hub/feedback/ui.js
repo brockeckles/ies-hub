@@ -9,6 +9,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import * as calc from './calc.js?v=20260418-sK';
 import * as api from './api.js?v=20260430-fb1';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
+import { escapeHtml as _h, escapeAttr as _a } from '../../shared/escape.js?v=20260511-port12';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -114,7 +115,7 @@ function renderBoard(el) {
     </div>
     ${sorted.length === 0 ? '<div class="hub-card"><p class="text-body text-muted">No feedback items found.</p></div>' :
       sorted.map(item => `
-        <div class="hub-card" style="margin-bottom:10px;padding:14px;cursor:pointer;" data-item="${item.id}">
+        <div class="hub-card" style="margin-bottom:10px;padding:14px;cursor:pointer;" data-item="${_a(item.id)}">
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="display:flex;flex-direction:column;align-items:center;min-width:40px;">
               <span style="font-size:16px;font-weight:800;color:${item.upvotes >= 8 ? '#2563eb' : 'var(--ies-gray-400)'};">${item.upvotes}</span>
@@ -123,12 +124,12 @@ function renderBoard(el) {
             <div style="flex:1;">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
                 <span style="font-size:14px;">${calc.typeIcon(item.type)}</span>
-                <span style="font-size:14px;font-weight:700;">${item.title}</span>
+                <span style="font-size:14px;font-weight:700;">${_h(item.title)}</span>
               </div>
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;color:#fff;background:${calc.typeBadgeColor(item.type)};">${item.type}</span>
-                <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;color:#fff;background:${calc.statusBadgeColor(item.status)};">${item.status}</span>
-                ${item.tool ? `<span style="font-size:11px;color:var(--ies-gray-400);">${item.tool}</span>` : ''}
+                <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;color:#fff;background:${calc.typeBadgeColor(item.type)};">${_h(item.type)}</span>
+                <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;color:#fff;background:${calc.statusBadgeColor(item.status)};">${_h(item.status)}</span>
+                ${item.tool ? `<span style="font-size:11px;color:var(--ies-gray-400);">${_h(item.tool)}</span>` : ''}
                 <span style="font-size:11px;color:var(--ies-gray-300);margin-left:auto;">${calc.formatDate(item.submittedDate)} • ${item.comments.length} comment${item.comments.length !== 1 ? 's' : ''}</span>
               </div>
             </div>
@@ -149,19 +150,19 @@ function renderDetail(el) {
     <div class="hub-card" style="padding:20px;margin-bottom:16px;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
         <span style="font-size:18px;">${calc.typeIcon(item.type)}</span>
-        <h3 style="font-size:18px;font-weight:800;margin:0;flex:1;">${item.title}</h3>
-        <span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;color:#fff;background:${calc.statusBadgeColor(item.status)};">${item.status}</span>
+        <h3 style="font-size:18px;font-weight:800;margin:0;flex:1;">${_h(item.title)}</h3>
+        <span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;color:#fff;background:${calc.statusBadgeColor(item.status)};">${_h(item.status)}</span>
       </div>
-      <div style="font-size:13px;color:var(--ies-gray-500);line-height:1.6;margin-bottom:16px;">${item.description}</div>
+      <div style="font-size:13px;color:var(--ies-gray-500);line-height:1.6;margin-bottom:16px;">${_h(item.description)}</div>
       <div style="display:flex;gap:16px;font-size:12px;color:var(--ies-gray-400);margin-bottom:12px;">
-        <span>By: ${item.submittedBy}</span>
+        <span>By: ${_h(item.submittedBy)}</span>
         <span>${calc.formatDate(item.submittedDate)}</span>
-        <span>Tool: ${item.tool || 'General'}</span>
-        <span style="font-weight:700;color:${calc.priorityBadgeColor(item.priority)};">${item.priority} priority</span>
+        <span>Tool: ${_h(item.tool || 'General')}</span>
+        <span style="font-weight:700;color:${calc.priorityBadgeColor(item.priority)};">${_h(item.priority)} priority</span>
         <span style="margin-left:auto;font-weight:700;color:#2563eb;">▲ ${item.upvotes} votes</span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        ${(item.tags || []).map(t => `<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:#f3f4f6;color:#6b7280;">${t}</span>`).join('')}
+        ${(item.tags || []).map(t => `<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:#f3f4f6;color:#6b7280;">${_h(t)}</span>`).join('')}
       </div>
     </div>
     <div class="hub-card" style="padding:16px;">
@@ -170,10 +171,10 @@ function renderDetail(el) {
         item.comments.map(c => `
           <div style="padding:10px 0;border-bottom:1px solid var(--ies-gray-100);">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-              <span style="font-size:12px;font-weight:700;">${c.author}</span>
+              <span style="font-size:12px;font-weight:700;">${_h(c.author)}</span>
               <span style="font-size:11px;color:var(--ies-gray-400);">${new Date(c.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
             </div>
-            <div style="font-size:13px;color:var(--ies-gray-500);">${c.content}</div>
+            <div style="font-size:13px;color:var(--ies-gray-500);">${_h(c.content)}</div>
           </div>
         `).join('')}
     </div>

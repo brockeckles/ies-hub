@@ -3,14 +3,15 @@
  * Static index + dynamic Supabase search, dropdown UI, keyboard navigation.
  *
  * Usage:
- *   import { search } from './search.js?v=20260512-port28';
+ *   import { search } from './search.js?v=20260610-sec1';
  *   search.init(document.querySelector('.hub-search-container'));
  *
  * @module shared/search
  */
 
-import { router } from './router.js?v=20260512-port28';
+import { router } from './router.js?v=20260610-sec1';
 import { bus } from './event-bus.js?v=20260418-sK';
+import { escapeHtml as _h } from './escape.js?v=20260511-port12';
 
 /**
  * @typedef {Object} SearchEntry
@@ -173,8 +174,8 @@ class GlobalSearch {
     this._dropdown.innerHTML = this._results.map((r, i) => `
       <div class="hub-search-result${i === this._focusedIdx ? ' focused' : ''}" data-idx="${i}">
         <div>
-          <div class="hub-search-result-title">${r.title}</div>
-          ${r.section ? `<div class="hub-search-result-section">${r.section}</div>` : ''}
+          <div class="hub-search-result-title">${_h(r.title)}</div>
+          ${r.section ? `<div class="hub-search-result-section">${_h(r.section)}</div>` : ''}
         </div>
       </div>
     `).join('');

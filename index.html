@@ -31,7 +31,7 @@
 
   <!-- Module Preloads (shared core) -->
   <link rel="modulepreload" href="./shared/event-bus.js?v=20260418-sK">
-  <link rel="modulepreload" href="./shared/router.js?v=20260512-port28">
+  <link rel="modulepreload" href="./shared/router.js?v=20260610-sec1">
 
   <!-- Design System -->
   <link rel="stylesheet" href="./css/hub.css?v=20260526-phaseAs1">
@@ -205,8 +205,8 @@
   <!-- App Bootstrap -->
   <script type="module">
     import { auth } from './shared/auth.js?v=20260526-mfalift1';
-    import { router } from './shared/router.js?v=20260512-port28';
-    import { search } from './shared/search.js?v=20260512-port28';
+    import { router } from './shared/router.js?v=20260610-sec1';
+    import { search } from './shared/search.js?v=20260610-sec1';
     import { bus } from './shared/event-bus.js?v=20260418-sK';
     // Shared UX modules — self-wire their listeners/guards on import.
     import { showToast } from './shared/toast.js?v=20260419-uC';
@@ -579,7 +579,7 @@
         'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260429-me-deadcode1' },
         'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260513-port31' },
         'admin': { title: 'Admin', path: './hub/admin/ui.js?v=20260513-port31' },
-        'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260430-fb1' },
+        'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260610-sec1' },
       };
 
       for (const [route, config] of Object.entries(hubRoutes)) {

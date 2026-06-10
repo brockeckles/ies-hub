@@ -6,7 +6,7 @@
  *   #welcome, #overview, #deals, #designtools/cost-model, #designtools/fleet-modeler
  *
  * Usage:
- *   import { router } from './router.js?v=20260512-port28';
+ *   import { router } from './router.js?v=20260610-sec1';
  *
  *   router.register('designtools/cost-model', {
  *     load: () => import('../tools/cost-model/ui.js?v=20260601-prompt2'),
@@ -19,6 +19,7 @@
  */
 
 import { bus } from './event-bus.js?v=20260418-sK';
+import { escapeHtml as _h } from './escape.js?v=20260511-port12';
 
 /**
  * @typedef {Object} RouteConfig
@@ -125,7 +126,7 @@ class Router {
         this._outlet.innerHTML = `
           <div style="padding: 40px; text-align: center; color: var(--ies-gray-500);">
             <p class="text-section">Section not found</p>
-            <p class="mt-4">The page "${key}" doesn't exist or hasn't been built yet.</p>
+            <p class="mt-4">The page "${_h(key)}" doesn't exist or hasn't been built yet.</p>
           </div>`;
       }
       this._active = null;
@@ -151,7 +152,7 @@ class Router {
         this._outlet.innerHTML = `
           <div style="padding: 40px; text-align: center; color: var(--ies-red);">
             <p class="text-section">Error loading module</p>
-            <p class="mt-4">${err.message}</p>
+            <p class="mt-4">${_h(err.message)}</p>
           </div>`;
       }
     }
