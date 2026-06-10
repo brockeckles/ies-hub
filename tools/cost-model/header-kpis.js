@@ -17,7 +17,7 @@
  * The function never throws; any failure inside the try block returns
  * `{ ready: false, items: [] }` with a console.warn diagnostic.
  */
-import * as calc from './calc.js?v=20260610-capfix1';
+import * as calc from './calc.js?v=20260610-bucketfix1';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';

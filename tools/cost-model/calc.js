@@ -2207,6 +2207,9 @@ export function autoAssignBuckets(model, opts = {}) {
  * @param {import('./types.js?v=20260418-sK').StartupLine[]} params.startupLines
  * @param {number} params.facilityCost — pre-computed facility annual cost
  * @param {number} params.operatingHours
+ * @param {Object} [params.laborOpts] — engine labor opts (otPct, shift premiums,
+ *   ptoPct, bonusPct, benefitLoadFallback, wageLoadByYear) for full parity with
+ *   totalLaborCost; defaults mirror computeSummary's defaults
  * @returns {Record<string, number>} — bucket ID → annual cost
  */
 export function computeBucketCosts(params) {
@@ -2220,16 +2223,22 @@ export function computeBucketCosts(params) {
     else costs['_unassigned'] += amount;
   };
 
-  // Direct labor
+  // Direct + indirect labor — 2026-06-10 ground-up assessment Critical #4:
+  // this function previously priced labor with its own formula (burden
+  // defaulting to 0% vs the engine's 30%, no temp-agency markup, no OT/
+  // shift/PTO/bonus), so bucket costs ran up to ~30% under the P&L labor
+  // cost and "recommended" rates under-recovered. Now routes through the
+  // engine's own line-annual functions so buckets price the same dollars
+  // the P&L books. Callers may pass params.laborOpts for OT/shift/PTO
+  // parity; absent that, defaults match the engine's computeSummary
+  // defaults (burden fallback 30%, temp markup honored, no OT/shift).
+  const laborOpts = params.laborOpts || {};
   for (const l of params.laborLines) {
-    const loaded = (l.hourly_rate || 0) * (1 + (l.burden_pct || 0) / 100) + (l.benefits_per_hour || 0);
-    add(l.pricing_bucket, (l.annual_hours || 0) * loaded);
+    add(l.pricing_bucket, directLineAnnual(l, laborOpts));
   }
 
-  // Indirect labor
   for (const l of params.indirectLaborLines) {
-    const loaded = (l.hourly_rate || 0) * (1 + (l.burden_pct || 0) / 100);
-    add(l.pricing_bucket, (l.headcount || 0) * params.operatingHours * loaded);
+    add(l.pricing_bucket, indirectLineAnnual(l, { ...laborOpts, operatingHours: params.operatingHours || 0 }));
   }
 
   // Equipment
