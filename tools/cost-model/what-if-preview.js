@@ -159,39 +159,22 @@ export function computeWhatIfPreview(overlay, {
     const whatIfBucketsAfterDiscount = pricingMult === 1 ? whatIfBuckets
       : whatIfBuckets.map(b => ({ ...b, rate: (Number(b.rate) || 0) * pricingMult }));
 
-    const projResult = calc.buildYearlyProjections({
-      years: contractYears,
-      baseLaborCost: scaledBaseLaborCost,
-      baseFacilityCost: summary.facilityCost,
-      baseEquipmentCost: summary.equipmentCost + (summary.equipmentAmort || 0),
-      baseOverheadCost: summary.overheadCost,
-      baseVasCost: summary.vasCost,
-      startupAmort: summary.startupAmort,
-      startupCapital: summary.startupCapital,
-      baseOrders: orders || 1,
-      marginPct: whatIfMarginFrac,
-      volGrowthPct: calcHeur.volGrowthPct / 100,
-      laborEscPct:  calcHeur.laborEscPct  / 100,
-      costEscPct:   calcHeur.costEscPct   / 100,
-      facilityEscPct:  calcHeur.facilityEscPct  / 100,
-      equipmentEscPct: calcHeur.equipmentEscPct / 100,
-      laborLines: scaledLaborLines,
-      taxRatePct: calcHeur.taxRatePct,
-      useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
-      periods: (refData && refData.periods) || [],
-      ramp: null,
-      seasonality: model.seasonalityProfile || null,
-      preGoLiveMonths: calcHeur.preGoLiveMonths,
-      dsoDays:           calcHeur.dsoDays,
-      dpoDays:           calcHeur.dpoDays,
-      laborPayableDays:  calcHeur.laborPayableDays,
-      startupLines: model.startupLines || [],
+    // Phase 2a (2026-06-10): shared builder. The What-If's genuine deltas
+    // (scaled labor, what-if margin, discounted buckets, what-if market
+    // profile) ride in overrides; everything else — INCLUDING the SG&A
+    // overlay this site previously dropped (assessment #11) — comes from
+    // the same bag Summary uses, so the unchanged-baseline preview now
+    // matches the Summary P&L by construction.
+    const projResult = calc.buildYearlyProjections(scenarios.buildProjectionParams({
+      model, summary, calcHeur, contractYears, orders, refData,
       pricingBuckets: whatIfBucketsAfterDiscount,
-      project_id: model.id || 0,
-      _calcHeur: calcHeur,
       marketLaborProfile: whatIfMarketProfile,
-      wageLoadByYear: null,
-    });
+      overrides: {
+        baseLaborCost: scaledBaseLaborCost,
+        laborLines: scaledLaborLines,
+        marginPct: whatIfMarginFrac,
+      },
+    }));
 
     // Aggregate over the projection horizon
     const projections = projResult.projections || [];
@@ -218,18 +201,8 @@ export function computeWhatIfPreview(overlay, {
     }, 0);
     let npv = 0;
     try {
-      const metrics = calc.computeFinancialMetrics(projections, {
-        startupCapital:   summary.startupCapital || 0,
-        equipmentCapital: summary.equipmentCapital || 0,
-        annualDepreciation: (summary.equipmentAmort || 0) + (summary.startupAmort || 0),
-        discountRatePct: calcHeur.discountRatePct,
-        reinvestRatePct: calcHeur.reinvestRatePct || 8,
-        taxRatePct:      calcHeur.taxRatePct,
-        dsoDays:         calcHeur.dsoDays,
-        dpoDays:         calcHeur.dpoDays,
-        totalFtes,
-        fixedCost: (summary.facilityCost || 0) + (summary.overheadCost || 0) + (summary.startupAmort || 0),
-      });
+      const metrics = calc.computeFinancialMetrics(projections,
+        scenarios.buildMetricsOpts({ summary, calcHeur, overrides: { totalFtes } }));
       npv = metrics.npv || 0;
     } catch (metricsErr) {
       // Metrics are defensive; a failure here shouldn't break the preview.

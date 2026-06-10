@@ -14,7 +14,7 @@ import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260526-mfalift1';
 import * as calc from './calc.js?v=20260610-bucketfix1';
 import * as api from './api.js?v=20260528-cogwriteback1';
-import * as scenarios from './calc.scenarios.js?v=20260430-pm-otfix2';
+import * as scenarios from './calc.scenarios.js?v=20260610-params1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260511-port8';
 import { renderImplementation } from './render-implementation.js?v=20260511-port9';
@@ -90,8 +90,8 @@ import {
 } from './operational-flow-render.js?v=20260512-heur1v';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260610-capfix1';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260610-capfix1';
+import { computeHeaderKpis } from './header-kpis.js?v=20260610-params1';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260610-params1';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -7360,50 +7360,14 @@ function renderSummary() {
   const enrichedPricingBuckets = pricingSnapshot.buckets;
   const unassignedCost = pricingSnapshot.bucketCosts['_unassigned'] || 0;
   const unassignedCount = pricingSnapshot.unassignedCount;
-  const projResult = calc.buildYearlyProjections({
-    years: contractYears,
-    baseLaborCost: summary.laborCost,
-    baseFacilityCost: summary.facilityCost,
-    baseEquipmentCost: summary.equipmentCost + (summary.equipmentAmort || 0),
-    baseOverheadCost: summary.overheadCost,
-    baseVasCost: summary.vasCost,
-    startupAmort: summary.startupAmort,
-    startupCapital: summary.startupCapital,
-    baseOrders: orders || 1,
-    marginPct: marginFrac,
-    volGrowthPct: calcHeur.volGrowthPct / 100,
-    laborEscPct:  calcHeur.laborEscPct  / 100,
-    costEscPct:   calcHeur.costEscPct   / 100,
-    // 2026-04-21 audit: thread facility + equipment escalation separately so
-    // the What-If Facility Escalation slider actually moves facility P&L.
-    facilityEscPct:  calcHeur.facilityEscPct  / 100,
-    equipmentEscPct: calcHeur.equipmentEscPct / 100,
-    laborLines: model.laborLines || [],
-    taxRatePct: calcHeur.taxRatePct,
-    useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
-    periods: (refData && refData.periods) || [],
-    ramp: null,
-    seasonality: model.seasonalityProfile || null,
-    preGoLiveMonths: calcHeur.preGoLiveMonths,
-    dsoDays:           calcHeur.dsoDays,
-    dpoDays:           calcHeur.dpoDays,
-    laborPayableDays:  calcHeur.laborPayableDays,
-    startupLines: model.startupLines || [],
+  // Phase 2a (2026-06-10): params assembled by the single shared builder —
+  // the four hand-rolled ~40-key bags were the active drift mechanism
+  // (assessment findings #10/#11). Per-surface differences go in overrides.
+  const projResult = calc.buildYearlyProjections(scenarios.buildProjectionParams({
+    model, summary, calcHeur, contractYears, orders, refData,
     pricingBuckets: enrichedPricingBuckets, // I-02: derived rates when unset
-    project_id: model.id || 0,
-    // M2 (2026-04-21): SG&A overlay (default 0 = no behavior change)
-    sgaOverlayPct: Number(model.financial?.sgaOverlayPct) || 0,
-    sgaAppliesTo: model.financial?.sgaAppliesTo || 'net_revenue',
-    // Phase 4d — thread calc heuristics + market profile so the monthly
-    // engine can compute per-line labor cost using Phase 4b profiles.
-    _calcHeur: calcHeur,
     marketLaborProfile: currentMarketLaborProfile,
-    // Year-scheduled wage load was removed 2026-04-21 pm per Brock — Benefit
-    // Load is now a flat total (sum of 5 buckets) with per-position overrides.
-    wageLoadByYear: null,
-    // Diagnostic: carries which keys came from snapshot vs override vs default.
-    _heuristicsSource: calcHeur.used,
-  });
+  }));
   _lastCalcHeuristics = calcHeur; // for the frozen-banner in Summary/Timeline
   // CM-PROV-1 — stash the inputs the cell-inspector panel needs to explain
   // any P&L cell. Refreshed every Summary render so heuristic / what-if
@@ -7439,18 +7403,11 @@ function renderSummary() {
   // invested-capital denominator, and EBIT/EBITDA are sourced from the new
   // monthly-engine COGS/SG&A split. taxRatePct + dso/dpo threaded through
   // so ROIC/NOPAT reconcile with the P&L's tax line and AR/AP carry.
-  const metrics = calc.computeFinancialMetrics(projections, {
-    startupCapital: summary.startupCapital,
-    equipmentCapital: summary.equipmentCapital,
-    annualDepreciation: (summary.equipmentAmort || 0) + (summary.startupAmort || 0),
-    discountRatePct: fin.discountRate || 10,
-    reinvestRatePct: fin.reinvestRate || 8,
-    taxRatePct:  calcHeur.taxRatePct,
-    dsoDays:     calcHeur.dsoDays,
-    dpoDays:     calcHeur.dpoDays,
-    totalFtes: summary.totalFtes,
-    fixedCost: summary.facilityCost + summary.overheadCost + summary.startupAmort,
-  });
+// Phase 2a (2026-06-10): buildMetricsOpts — discount/reinvest now read
+  // calcHeur.discountRatePct/reinvestRatePct (full override→snapshot→project
+  // chain). This site previously read fin.discountRate||10, ignoring
+  // heuristic overrides — the F3-class drift the suite claims to lock.
+  const metrics = calc.computeFinancialMetrics(projections, scenarios.buildMetricsOpts({ summary, calcHeur }));
 
   // Sensitivity data — use Year-1 projection as the base so the driver deltas
   // tie out to the P&L the user is looking at. Previously we used
@@ -11754,40 +11711,14 @@ function ensureMonthlyBundle() {
       whatIfTransient,
     ), model);
     const emBMarginFrac = (calcHeur.targetMarginPct || 0) / 100;
-    const projResult = calc.buildYearlyProjections({
-      years: contractYears,
-      baseLaborCost: summary.laborCost,
-      baseFacilityCost: summary.facilityCost,
-      baseEquipmentCost: summary.equipmentCost + (summary.equipmentAmort || 0),
-      baseOverheadCost: summary.overheadCost,
-      baseVasCost: summary.vasCost,
-      startupAmort: summary.startupAmort,
-      startupCapital: summary.startupCapital,
-      baseOrders: orders || 1,
-      marginPct: emBMarginFrac,
-      volGrowthPct: calcHeur.volGrowthPct / 100,
-      laborEscPct:  calcHeur.laborEscPct  / 100,
-      costEscPct:   calcHeur.costEscPct   / 100,
-      facilityEscPct:  calcHeur.facilityEscPct  / 100,
-      equipmentEscPct: calcHeur.equipmentEscPct / 100,
-      laborLines: model.laborLines || [],
-      taxRatePct: calcHeur.taxRatePct,
-      useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
-      periods: (refData && refData.periods) || [],
-      ramp: null,
-      seasonality: model.seasonalityProfile || null,
-      preGoLiveMonths: calcHeur.preGoLiveMonths,
-      dsoDays:           calcHeur.dsoDays,
-      dpoDays:           calcHeur.dpoDays,
-      laborPayableDays:  calcHeur.laborPayableDays,
-      startupLines: model.startupLines || [],
+    // Phase 2a (2026-06-10): shared builder. This site previously OMITTED
+    // the SG&A overlay — persisted monthly facts disagreed with Summary on
+    // overlay projects. The builder includes it unconditionally now.
+    const projResult = calc.buildYearlyProjections(scenarios.buildProjectionParams({
+      model, summary, calcHeur, contractYears, orders, refData,
       pricingBuckets: buildEnrichedPricingBuckets(summary, emBMarginFrac, opHrs, contractYears),
-      project_id: model.id || 0,
-      _calcHeur: calcHeur,
       marketLaborProfile: currentMarketLaborProfile,
-      wageLoadByYear: null,
-      _heuristicsSource: calcHeur.used,
-    });
+    }));
     if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;
     if (projResult && projResult.projections) _lastProjections = projResult.projections;
     if (calcHeur) _lastCalcHeuristics = calcHeur;

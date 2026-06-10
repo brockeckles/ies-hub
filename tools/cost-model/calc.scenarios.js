@@ -956,3 +956,107 @@ export function filterCurrent(rows, asOf) {
     return String(end) > todayStr;
   });
 }
+
+// ============================================================
+// PROJECTION PARAM BUILDER — single source of truth
+// ============================================================
+
+/**
+ * 2026-06-10 ground-up assessment, Phase 2a. The four surfaces that build
+ * yearly projections (Summary render, ensureMonthlyBundle, header KPI strip,
+ * What-If preview) each hand-assembled a ~40-key param bag for
+ * buildYearlyProjections. Audit findings #10 (discount-rate honored by 1 of
+ * 3 NPV surfaces) and #11 (What-If missing the SG&A overlay) were both
+ * instances of one site missing a key another had — the param bags WERE the
+ * drift mechanism. This builder is now the only place the bag is assembled;
+ * call sites pass only their genuine per-surface differences via `overrides`.
+ *
+ * @param {Object} ctx
+ * @param {Object} ctx.model — the project model
+ * @param {Object} ctx.summary — computeSummary output
+ * @param {Object} ctx.calcHeur — resolveCalcHeuristics output (post applySplitMonthBilling)
+ * @param {number} ctx.contractYears
+ * @param {number} ctx.orders — annual order volume divisor
+ * @param {Array}  ctx.pricingBuckets — enriched buckets for the surface
+ * @param {Object} [ctx.refData] — for billing periods
+ * @param {Object} [ctx.marketLaborProfile]
+ * @param {Object} [ctx.overrides] — per-surface param overrides (spread last)
+ * @returns {Object} params for buildYearlyProjections
+ */
+export function buildProjectionParams(ctx) {
+  const { model, summary, calcHeur, contractYears, orders, pricingBuckets,
+          refData, marketLaborProfile, overrides = {} } = ctx;
+  return {
+    years: contractYears,
+    baseLaborCost:     summary.laborCost,
+    baseFacilityCost:  summary.facilityCost,
+    // Capital amort included since the 2026-06-10 Critical #3 fix
+    baseEquipmentCost: summary.equipmentCost + (summary.equipmentAmort || 0),
+    baseOverheadCost:  summary.overheadCost,
+    baseVasCost:       summary.vasCost,
+    startupAmort:      summary.startupAmort,
+    startupCapital:    summary.startupCapital,
+    baseOrders:        orders || 1,
+    marginPct:         (calcHeur.targetMarginPct || 0) / 100,
+    volGrowthPct:      calcHeur.volGrowthPct      / 100,
+    laborEscPct:       calcHeur.laborEscPct       / 100,
+    costEscPct:        calcHeur.costEscPct        / 100,
+    facilityEscPct:    calcHeur.facilityEscPct    / 100,
+    equipmentEscPct:   calcHeur.equipmentEscPct   / 100,
+    laborLines: model.laborLines || [],
+    taxRatePct: calcHeur.taxRatePct,
+    useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
+    periods: (refData && refData.periods) || [],
+    ramp: null,
+    seasonality: model.seasonalityProfile || null,
+    preGoLiveMonths:  calcHeur.preGoLiveMonths,
+    dsoDays:          calcHeur.dsoDays,
+    dpoDays:          calcHeur.dpoDays,
+    laborPayableDays: calcHeur.laborPayableDays,
+    startupLines: model.startupLines || [],
+    pricingBuckets: pricingBuckets || [],
+    project_id: model.id || 0,
+    // SG&A overlay rides on EVERY surface now — What-If previously omitted
+    // it, so its baseline EBITDA disagreed with Summary before a single
+    // slider moved (audit finding #11).
+    sgaOverlayPct: Number(model.financial?.sgaOverlayPct) || 0,
+    sgaAppliesTo:  model.financial?.sgaAppliesTo || 'net_revenue',
+    _calcHeur: calcHeur,
+    marketLaborProfile: marketLaborProfile || null,
+    wageLoadByYear: null,
+    _heuristicsSource: calcHeur.used,
+    ...overrides,
+  };
+}
+
+/**
+ * Companion builder for computeFinancialMetrics opts. Fixes audit finding
+ * #10's other half: Summary read fin.discountRate||10 (ignoring snapshot/
+ * override heuristics) and the header KPI strip read the NONEXISTENT key
+ * calcHeur.discountRate — so a discount_rate_pct heuristic moved only the
+ * What-If NPV. calcHeur.discountRatePct already resolves the full chain
+ * (override → snapshot → project fallback → 10) in resolveCalcHeuristics.
+ *
+ * @param {Object} ctx
+ * @param {Object} ctx.summary
+ * @param {Object} ctx.calcHeur
+ * @param {Object} [ctx.overrides]
+ * @returns {Object} opts for computeFinancialMetrics
+ */
+export function buildMetricsOpts(ctx) {
+  const { summary, calcHeur, overrides = {} } = ctx;
+  return {
+    startupCapital:     summary.startupCapital,
+    equipmentCapital:   summary.equipmentCapital,
+    annualDepreciation: (summary.equipmentAmort || 0) + (summary.startupAmort || 0),
+    discountRatePct:    calcHeur.discountRatePct,
+    reinvestRatePct:    calcHeur.reinvestRatePct,
+    taxRatePct:         calcHeur.taxRatePct,
+    dsoDays:            calcHeur.dsoDays,
+    dpoDays:            calcHeur.dpoDays,
+    totalFtes:          summary.totalFtes,
+    fixedCost:          (summary.facilityCost || 0) + (summary.overheadCost || 0) + (summary.startupAmort || 0),
+    ...overrides,
+  };
+}
+

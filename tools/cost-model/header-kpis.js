@@ -122,55 +122,18 @@ export function computeHeaderKpis({
     const pricingSnapshot = calc.computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears });
     const enrichedPricingBuckets = pricingSnapshot.buckets;
 
-    const projResult = calc.buildYearlyProjections({
-      years: contractYears,
-      baseLaborCost:     summary.laborCost,
-      baseFacilityCost:  summary.facilityCost,
-      baseEquipmentCost: summary.equipmentCost + (summary.equipmentAmort || 0),
-      baseOverheadCost:  summary.overheadCost,
-      baseVasCost:       summary.vasCost,
-      startupAmort:      summary.startupAmort,
-      startupCapital:    summary.startupCapital,
-      baseOrders:        orders,
-      marginPct:         marginFrac,
-      volGrowthPct:      calcHeur.volGrowthPct      / 100,
-      laborEscPct:       calcHeur.laborEscPct       / 100,
-      costEscPct:        calcHeur.costEscPct        / 100,
-      facilityEscPct:    calcHeur.facilityEscPct    / 100,
-      equipmentEscPct:   calcHeur.equipmentEscPct   / 100,
-      laborLines: model.laborLines || [],
-      taxRatePct: calcHeur.taxRatePct,
-      useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
-      periods: (refData && refData.periods) || [],
-      ramp: null,
-      seasonality: model.seasonalityProfile || null,
-      preGoLiveMonths:  calcHeur.preGoLiveMonths,
-      dsoDays:          calcHeur.dsoDays,
-      dpoDays:          calcHeur.dpoDays,
-      laborPayableDays: calcHeur.laborPayableDays,
-      startupLines: model.startupLines || [],
+    // Phase 2a (2026-06-10): shared builder (see calc.scenarios.js).
+    const projResult = calc.buildYearlyProjections(scenarios.buildProjectionParams({
+      model, summary, calcHeur, contractYears, orders, refData,
       pricingBuckets: enrichedPricingBuckets,
-      project_id: model.id || 0,
-      sgaOverlayPct: Number(model.financial?.sgaOverlayPct) || 0,
-      sgaAppliesTo:  model.financial?.sgaAppliesTo || 'net_revenue',
-      _calcHeur: calcHeur,
       marketLaborProfile: currentMarketLaborProfile,
-      wageLoadByYear: null,
-    });
+    }));
     const projections = (projResult && projResult.projections) || [];
     const y1 = projections[0] || null;
-    const metrics = calc.computeFinancialMetrics(projections, {
-      startupCapital:      summary.startupCapital,
-      equipmentCapital:    summary.equipmentCapital,
-      annualDepreciation:  (summary.equipmentAmort || 0) + (summary.startupAmort || 0),
-      discountRatePct:     calcHeur.discountRate ?? (fin.discountRate ?? 10),
-      reinvestRatePct:     calcHeur.reinvestRate ?? (fin.reinvestRate ?? 8),
-      taxRatePct:          calcHeur.taxRatePct,
-      dsoDays:             calcHeur.dsoDays || 0,
-      dpoDays:             calcHeur.dpoDays || 0,
-      totalFtes:           summary.totalFtes,
-      fixedCost:           summary.facilityCost + summary.overheadCost + summary.startupAmort,
-    });
+    // Phase 2a (2026-06-10): buildMetricsOpts — previously read the
+    // NONEXISTENT calcHeur.discountRate (vs .discountRatePct), silently
+    // falling back to fin.discountRate ?? 10 and ignoring heuristics.
+    const metrics = calc.computeFinancialMetrics(projections, scenarios.buildMetricsOpts({ summary, calcHeur }));
 
     const costPerUnit = summary.costPerOrder || 0;
     // 2026-04-30 (F3) — fall back to summary.totalRevenue when the projection
@@ -211,7 +174,7 @@ export function computeHeaderKpis({
         y1Margin,
         totalFtes,
         npv,
-        payback: (metrics && metrics.payback) || null,
+        payback: (metrics && metrics.paybackMonths) || null, // 2026-06-10: was metrics.payback (nonexistent) — KPI inspector payback was always null
         outboundUomLabel: outboundUomLabel || 'Unit',
         discountRate: fin.discountRate || 10,
       },
