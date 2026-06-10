@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260610-cogfix1';
+import * as calc from './calc.js?v=20260610-cogdisp1';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
@@ -554,7 +554,10 @@ async function handleSave() {
               yearCosts: proj.years.map(y => ({ year: y.year, cost: y.cost, cumulative: y.cumulative, npv: y.npv })),
             };
           })(),
-          avgWeightedDistance: cogResult.totalWeightedDistance / Math.max(1, (points || []).reduce((s, p) => s + (p.weight || 0), 0)),
+          // Phase 2c (2026-06-10): canonical solve-set denominator — was raw
+          // unscaled excluded-inclusive points, drifting from the benchmark
+          // card whenever scale factor / exclusions were active.
+          avgWeightedDistance: calc.deriveCogDisplayMetrics(cogResult, config, _pointsForSolve()).avgWeightedDistanceMi ?? 0,
           params: {
             transportCostPerMile: config.transportCostPerMile,
             roadFactor: config.roadFactor ?? 1.22,
@@ -615,6 +618,16 @@ async function handleSave() {
  */
 export function unmount() {
   if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+  // 2026-06-10 (Brock live report + assessment COG #13): the C1/C2 center
+  // badges are body-level fixed-position overlays — they bypass the map
+  // container entirely, so without this they float over whatever tool the
+  // user navigates to next. _cleanupCogBodyOverlays' own docstring says
+  // "call this from any unmount path"; unmount was the one path that didn't.
+  _cleanupCogBodyOverlays();
+  // Pending debounce timers fire post-unmount otherwise (auto-save could
+  // write whatever state the NEXT tool has mutated by then).
+  if (_autoRunTimer) { clearTimeout(_autoRunTimer); _autoRunTimer = null; }
+  if (_autoSaveTimer) { clearTimeout(_autoSaveTimer); _autoSaveTimer = null; }
   runState.reset();
   rootEl = null;
 }
@@ -2984,12 +2997,32 @@ function renderAnalysis(el) {
            Helps users sanity-check the result against their own back-of-envelope
            and catch unit-of-measure mismatches early. -->
       ${(() => {
-        const totalWeight = points.filter(p => p.type !== 'excluded' && p.lat != null).reduce((s, p) => s + (p.weight || 0), 0);
+        // Phase 2c (2026-06-10, assessment COG #6): the audit-trail chain now
+        // mirrors the engine — SOLVE-set points (scaled, excluded out) and,
+        // when parcel is on, per-point TRUCK-SHARE weights (engine prices
+        // truckCost from weight × (1 − parcelShare); the panel previously
+        // built truckloads/miles from 100% of demand, so its own arithmetic
+        // didn't multiply out to the truckCost it displayed, and totalMi was
+        // overstated by 1/(1−parcelShare)).
+        const panelPts = _pointsForSolve();
+        const panelById = new Map(panelPts.map(p => [p.id, p]));
+        const parcelOnPanel = !!cogResult.parcelDetails;
+        const mixSum = Math.max(1, (+config.modeMix?.tlPct || 0) + (+config.modeMix?.ltlPct || 0) + (+config.modeMix?.parcelPct || 0));
+        const defParcelShare = (parcelOnPanel && config.modeMixEnabled) ? (Math.max(0, +config.modeMix?.parcelPct || 0) / mixSum) : 0;
+        const truckShareFor = (pt) => {
+          if (!parcelOnPanel) return 1;
+          const ps = (pt && pt.parcelSharePct != null && Number.isFinite(+pt.parcelSharePct))
+            ? Math.max(0, Math.min(100, +pt.parcelSharePct)) / 100
+            : defParcelShare;
+          return 1 - ps;
+        };
+        const totalWeight = panelPts.reduce((s, p) => s + (p.weight || 0), 0);
+        const truckWeight = panelPts.reduce((s, p) => s + (p.weight || 0) * truckShareFor(p), 0);
         const capacity = Math.max(1, config.unitsPerTruck || 25000);
-        const trucks = totalWeight / capacity;
+        const trucks = truckWeight / capacity;
         const totalGcMi = cogResult.assignments.reduce((s, a) => {
-          const pt = points.find(p => p.id === a.pointId);
-          const w = pt?.weight || 0;
+          const pt = panelById.get(a.pointId);
+          const w = (pt?.weight || 0) * truckShareFor(pt);
           return s + (w / capacity) * a.distanceToCenter;
         }, 0);
         // 2026-05-28 — surface road-factor before round-trip so the path
@@ -3009,9 +3042,14 @@ function renderAnalysis(el) {
         <div class="hub-card" style="margin-bottom:20px;padding:14px 18px;background:#f8fafc;border-left:4px solid #475569;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--ies-gray-500);margin-bottom:10px;">How this cost was calculated</div>
           <div style="display:grid;grid-template-columns:auto 1fr auto;gap:6px 18px;font-size:13px;font-family:'SFMono-Regular',Consolas,Menlo,monospace;align-items:baseline;">
-            <span style="color:var(--ies-gray-500);">Annual demand</span>
+            <span style="color:var(--ies-gray-500);">Annual demand (solve set)</span>
             <span></span>
             <span style="text-align:right;font-weight:600;">${fmtNum(totalWeight)} ${unitLabel}</span>
+            ${parcelOnPanel ? `
+              <span style="color:var(--ies-gray-500);">− parcel share (scenario ${Math.round(defParcelShare * 100)}% + per-point overrides)</span>
+              <span></span>
+              <span style="text-align:right;font-weight:600;">= ${fmtNum(truckWeight)} ${unitLabel} truck-share</span>
+            ` : ''}
             <span style="color:var(--ies-gray-500);">÷ ${fmtNum(capacity)} ${unitLabel} per truckload</span>
             <span></span>
             <span style="text-align:right;font-weight:600;">= ${fmtNum(trucks)} truckloads/yr</span>
@@ -3044,9 +3082,14 @@ function renderAnalysis(el) {
               <span style="text-align:right;font-weight:800;color:var(--ies-blue);">= ${calc.formatCurrency(cogResult.totalCost, { compact: true })}/yr</span>
             ` : ''}
             <span style="color:var(--ies-gray-500);grid-column:1 / 4;border-top:1px dashed var(--ies-gray-200);padding-top:6px;margin-top:4px;"></span>
-            <span style="color:var(--ies-gray-500);">CO₂: ${fmtNum(totalMi)} truck-mi × ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi ${cogResult.parcelDetails ? '<em>(truck only; parcel CO₂ embedded in carrier rate)</em>' : ''}</span>
+            <span style="color:var(--ies-gray-500);">CO₂ (truck): ${fmtNum(totalMi)} truck-mi × ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi</span>
             <span></span>
-            <span style="text-align:right;font-weight:600;">= ${(totalMi * (config.co2KgPerTruckMile ?? 1.62) / 1000).toFixed(0).toLocaleString()} tons CO₂/yr</span>
+            <span style="text-align:right;font-weight:600;">= ${(totalMi * (config.co2KgPerTruckMile ?? 1.62) / 1000).toFixed(0).toLocaleString()} t/yr</span>
+            ${parcelOnPanel ? `
+              <span style="color:var(--ies-gray-500);">CO₂ (parcel): ${fmtNum(cogResult.parcelDetails.totalPackages)} pkgs × ${(+config.parcelCo2KgPerPkg || 0.5).toFixed(2)} kg/pkg</span>
+              <span></span>
+              <span style="text-align:right;font-weight:600;">= ${(((cogResult.parcelDetails.totalPackages || 0) * (+config.parcelCo2KgPerPkg || 0.5)) / 1000).toFixed(0).toLocaleString()} t/yr</span>
+            ` : ''}
           </div>
           <div style="font-size:11px;color:var(--ies-gray-500);margin-top:10px;line-height:1.4;">
             <strong>Sanity check:</strong> ${calc.formatCurrency(totalMi * cpm / Math.max(1, trucks), { compact: true })} per truckload &middot;
@@ -3323,17 +3366,28 @@ function _cogMetricsFromSavedRow(row) {
     maxServiceMiles: cfg.maxServiceMiles || 0,
     peakUtil: typeof result?.capacityStats?.peakUtilization === 'number' ? result.capacityStats.peakUtilization : null,
     capacityPerDC: cfg.capacityPerDC || 0,
-    avgDistance: result && typeof result.totalWeightedDistance === 'number' && (d.points || []).length > 0
-      ? result.totalWeightedDistance / Math.max(1, d.points.reduce((s, p) => s + (p.weight || 0), 0))
-      : null,
+    // Phase 2c (2026-06-10): denominator approximates the saved scenario's
+    // SOLVE set — excluded rows out, its own demandScaleFactor applied —
+    // matching what its engine actually costed (was raw saved weight).
+    avgDistance: (() => {
+      if (!result || typeof result.totalWeightedDistance !== 'number' || !(d.points || []).length) return null;
+      const scale = +cfg.demandScaleFactor > 0 ? +cfg.demandScaleFactor : 1;
+      const w = d.points.filter(p => p && p.type !== 'excluded' && p.lat != null)
+        .reduce((s, p) => s + (p.weight || 0), 0) * scale;
+      return w > 0 ? result.totalWeightedDistance / w : null;
+    })(),
     transportCostPerMile: cfg.transportCostPerMile ?? null,
     roadFactor: cfg.roadFactor ?? null,
     roundTripFactor: cfg.roundTripFactor ?? null,
     // 2026-05-29 F13 — landed cost per unit. The TCO metric SDs present.
     avgCostPerUnit: typeof result?.avgCostPerUnit === 'number' ? result.avgCostPerUnit
-      : (typeof result?.totalCost === 'number' && (d.points || []).length > 0
-        ? result.totalCost / Math.max(1, (d.points || []).reduce((s, p) => s + (p.weight || 0), 0))
-        : null),
+      : (() => { // Phase 2c: same solve-set approximation as avgDistance above
+        if (typeof result?.totalCost !== 'number' || !(d.points || []).length) return null;
+        const scale = +cfg.demandScaleFactor > 0 ? +cfg.demandScaleFactor : 1;
+        const w = d.points.filter(p => p && p.type !== 'excluded' && p.lat != null)
+          .reduce((s, p) => s + (p.weight || 0), 0) * scale;
+        return w > 0 ? result.totalCost / w : null;
+      })(),
     // 2026-05-29 — parcel metrics. Pre-parcel scenarios store these as
     // null; the Compare table hides parcel rows when no scenario in
     // the cols set has parcelDetails.
@@ -3856,6 +3910,7 @@ function _initCogMapBody() {
   // configured radii. Sits under the cluster lines so they read clearly.
   if (mapOptions.zones && Array.isArray(mapOptions.zoneRadiiMiles)) {
     cogResult.centers.forEach((c, i) => {
+      if (!Number.isFinite(+c.lat) || !Number.isFinite(+c.lng)) return; // mapfix10 class: bad coord must not abort map init
       const color = clusterColor(i);
       mapOptions.zoneRadiiMiles.forEach((mi, ringIdx) => {
         L.circle([c.lat, c.lng], {
@@ -3887,6 +3942,7 @@ function _initCogMapBody() {
       { mi: 1800, color: '#ef4444', label: 'Z7' },
     ];
     cogResult.centers.forEach((c) => {
+      if (!Number.isFinite(+c.lat) || !Number.isFinite(+c.lng)) return; // mapfix10 class guard
       PARCEL_ZONE_BANDS.forEach((band) => {
         L.circle([c.lat, c.lng], {
           radius: band.mi * 1609.34,
@@ -4151,7 +4207,7 @@ function renderSensitivity(el) {
   // 2026-05-28 B15 — Cost-driver tornado. Quick multi-variable
   // sensitivity at the current k, using estimateTransportCost so the
   // numbers stay consistent with everything else on the tab.
-  const tornado = calc.tornadoSensitivity(cogResult, points, config);
+  const tornado = calc.tornadoSensitivity(cogResult, _pointsForSolve(), config); // Phase 2c: solve set, not raw points — baseline ties to the KPI strip
 
   el.innerHTML = `
     <div>
@@ -4826,7 +4882,8 @@ async function openPptxExport() {
     const parcelOn = parcelCost > 0;
     const co2Tons = cogResult.co2Tons || 0;
     const coverage = cogResult.serviceStats?.maxMiles > 0 ? cogResult.serviceStats.coveragePct : null;
-    const totalDemand = points.reduce((s, p) => s + (p.weight || 0), 0);
+    // Phase 2c (2026-06-10): solve-set weight, matching the engine + KPI strip
+    const totalDemand = _pointsForSolve().reduce((s, p) => s + (p.weight || 0), 0);
     const costPerUnit = totalDemand > 0 ? totalCost / totalDemand : 0;
     const co2Display = co2Tons >= 1000 ? (co2Tons / 1000).toFixed(1) + ' kt' : co2Tons.toFixed(0) + ' t';
 
@@ -5129,7 +5186,7 @@ async function openPptxExport() {
 
     // Right: Cost-driver tornado as horizontal bar chart
     try {
-      const tornado = calc.tornadoSensitivity(cogResult, points, config);
+      const tornado = calc.tornadoSensitivity(cogResult, _pointsForSolve(), config); // Phase 2c: solve set
       if (Array.isArray(tornado) && tornado.length > 0) {
         s.addText('Cost-driver tornado', { x: 6.9, y: 1.1, w: 6, h: 0.3, fontSize: 12, fontFace: 'Calibri', color: C.gray500, bold: true, charSpacing: 3 });
         // Take top 6 drivers by absolute swing

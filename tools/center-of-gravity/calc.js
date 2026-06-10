@@ -2781,3 +2781,43 @@ export function runScenario(params) {
   );
   return { ok: true, version: ENGINE_VERSION, result: { ...cogResult, transportCost: cost }, errors: [] };
 }
+
+/**
+ * 2026-06-10 Phase 2c (ground-up assessment) — canonical display metrics.
+ * The assessment found the same quantity computed with DIFFERENT
+ * denominators across surfaces: CM writeback + Compare divided weighted
+ * distance by raw/unscaled/excluded-inclusive weight, the deck divided cost
+ * by raw weight, the benchmark card by the scaled solve weight. One helper,
+ * one denominator: the SOLVE set (excluded rows out, demand scale applied) —
+ * the same population the engine costs. Every display surface routes here.
+ *
+ * @param {Object} result — enriched cogResult (or a saved scenario's result)
+ * @param {Object} config — scenario config (CO₂ intensities, etc.)
+ * @param {Array}  solvePts — the solve-set points (excluded out, scale applied)
+ * @returns {{ totalSolveWeight:number, totalCost:number,
+ *   avgWeightedDistanceMi:number|null, costPerUnit:number|null,
+ *   co2Tons:number, truckCo2Tons:number, parcelCo2Tons:number }}
+ */
+export function deriveCogDisplayMetrics(result, config, solvePts) {
+  const pts = Array.isArray(solvePts) ? solvePts : [];
+  const totalSolveWeight = pts.reduce((s, p) => s + (+p?.weight || 0), 0);
+  const totalCost = +result?.totalCost || 0;
+  const avgWeightedDistanceMi =
+    (totalSolveWeight > 0 && Number.isFinite(+result?.totalWeightedDistance))
+      ? result.totalWeightedDistance / totalSolveWeight
+      : null;
+  // Prefer the engine's own per-unit figure (F13) — fall back to the
+  // canonical division only when reading older saved results.
+  const costPerUnit = Number.isFinite(+result?.avgCostPerUnit)
+    ? +result.avgCostPerUnit
+    : (totalSolveWeight > 0 && totalCost > 0 ? totalCost / totalSolveWeight : null);
+  const truckCo2Tons = Number.isFinite(+result?.truckCo2Tons)
+    ? +result.truckCo2Tons
+    : ((+result?.totalTruckMiles || 0) * (Math.max(0, +config?.co2KgPerTruckMile || 1.62))) / 1000;
+  const parcelCo2Tons = Number.isFinite(+result?.parcelCo2Tons)
+    ? +result.parcelCo2Tons
+    : ((result?.parcelDetails?.totalPackages || 0) * (+config?.parcelCo2KgPerPkg || 0.5)) / 1000;
+  const co2Tons = Number.isFinite(+result?.co2Tons) ? +result.co2Tons : truckCo2Tons + parcelCo2Tons;
+  return { totalSolveWeight, totalCost, avgWeightedDistanceMi, costPerUnit, co2Tons, truckCo2Tons, parcelCo2Tons };
+}
+

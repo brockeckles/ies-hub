@@ -60,7 +60,7 @@ export function renderDashboard(ctx) {
   return `
     <!-- KPI Bar — Sized Facility (v2-equivalent volume-first engine) -->
     <div class="hub-kpi-bar mb-6">
-      <div class="hub-kpi-item"><div class="hub-kpi-label">Sized Total SF</div><div class="hub-kpi-value" title="Sum of pallet storage + carton shelving + dock + staging + ctx.zones + office, computed from peak units / mix / dock throughput. v2-equivalent engine.">${calc.formatSqft(sized.totalSqft)}</div></div>
+      <div class="hub-kpi-item"><div class="hub-kpi-label">Sized Total SF</div><div class="hub-kpi-value" title="Requirements-driven total: storage + Phase-1 dock + staging + office + additional + 10% circulation. Matches the Zone Breakdown rows exactly (they sum to this).">${calc.formatSqft(sized.totalSqft)}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Storage SF</div><div class="hub-kpi-value">${calc.formatSqft(sized.storageSqft)}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Gross Positions</div><div class="hub-kpi-value" title="Designed positions + ${sized.utilization.designed > 0 ? Math.round((sized.positions.surgePositions / sized.utilization.designed) * 100) : 0}% surge buffer">${sized.positions.grossPositions.toLocaleString()}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Rack Levels</div><div class="hub-kpi-value">${sized.rackLevels}</div></div>
@@ -207,6 +207,24 @@ export function renderDashboard(ctx) {
           <tr><td title="Surge buffer = additional positions for seasonal peaks above the engineered design.">+ Surge buffer (${Math.round((sized.positions.surgeFactor - 1) * 100)}%)</td><td class="cm-num">${sized.positions.surgePositions.toLocaleString()} pos</td></tr>
           <tr style="border-top:2px solid var(--ies-blue);"><td><strong>Gross Positions</strong></td><td class="cm-num"><strong>${sized.positions.grossPositions.toLocaleString()}</strong></td></tr>
 
+          <!-- 2026-06-10 canonicalization (assessment WSC #2 follow-through):
+               Phase-1 IE-correct shelving is the CANONICAL count — it is what
+               the CM writeback ships. Surfaced here with provenance so the
+               number a human quotes off this page matches the number the Cost
+               Model receives. The mix rows above remain the v2 storage-area
+               audit trail (they drive storage SF), distinct by design. -->
+          <tr><td colspan="2" style="padding-top:14px;font-weight:700;color:var(--ies-blue);font-size:11px;text-transform:uppercase;" title="IE-correct shelving location math: ti×hi carton profile, demand-bound vs SKU-minimum, honeycomb+surge buffered. This is the canonical count pushed to the Cost Model.">Shelving Locations (canonical — IE model)</td></tr>
+          ${(() => {
+            const sh = sized.locations?.shelving || {};
+            const modeChip = sh.mode === 'override'
+              ? '<span style="font-size:10px;background:#dbeafe;color:#1e3a8a;padding:1px 5px;border-radius:3px;margin-left:4px;">OVERRIDE</span>'
+              : `<span style="font-size:10px;background:#f0fdf4;color:#166534;padding:1px 5px;border-radius:3px;margin-left:4px;">${(sh.mode || 'tie').toUpperCase()}</span>`;
+            return `
+            <tr><td>Demand-side locations <span style="color:var(--ies-gray-400);font-size:11px;">(cartons ÷ per-shelf)</span></td><td class="cm-num">${(sh.demandLocations || 0).toLocaleString()}</td></tr>
+            <tr><td>SKU minimum <span style="color:var(--ies-gray-400);font-size:11px;">(≥ 1 location per SKU)</span></td><td class="cm-num">${(sh.skuMinLocations || 0).toLocaleString()}</td></tr>
+            <tr style="border-top:1px dashed var(--ies-gray-200);"><td><strong>Locations required</strong> ${modeChip}</td><td class="cm-num"><strong>${(sh.locationsRequired || 0).toLocaleString()}</strong></td></tr>`;
+          })()}
+
           ${byChannel.length > 0 ? `
             <tr><td colspan="2" style="padding-top:14px;font-weight:700;color:var(--ies-blue);font-size:11px;text-transform:uppercase;" title="Phase 4 Layer B (ctx.volumes-as-nucleus): positions sized per-channel using each channel's storageAllocation override (falls back to ctx.facility allocation when no override).">Inventory → Positions by Channel</td></tr>
             ${byChannel.map(c => `
@@ -321,7 +339,7 @@ export function renderDashboard(ctx) {
             <tr><td>Outbound Doors ${sized.dock.outboundDoorsExplicit ? '<span style="font-size:10px;background:#dbeafe;color:#1e3a8a;padding:1px 5px;border-radius:3px;margin-left:4px;">EXPLICIT</span>' : `<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;margin-left:4px;" title="Throughput-derived. Set explicit count in Dock Configuration to override.">DERIVED</span>`}</td><td class="cm-num" style="color:var(--ies-blue);">${sized.dock.outboundDoors}${!sized.dock.outboundDoorsExplicit ? ` <span style="font-size:11px;color:var(--ies-gray-500);font-weight:400;">(throughput suggests ${sized.dock.outboundDoorsDerived})</span>` : ''}</td></tr>
             <tr><td>Total Doors${(sized.dock.inboundDoorsExplicit || sized.dock.outboundDoorsExplicit) ? '' : ' (incl. 25% surge)'}</td><td class="cm-num" style="font-weight:700;">${sized.dock.totalDoors}</td></tr>
             <tr><td>Dock Wall Required</td><td class="cm-num" style="color:${sized.dock.dockWallOk ? 'var(--ies-green)' : 'var(--ies-red)'};">${sized.dock.dockWallRequiredFt} ft${sized.dock.dockWallOk ? '' : ` > ${sized.dock.dockWallAvailableFt} ft avail`}</td></tr>
-            <tr><td>Dock Staging SF</td><td class="cm-num">${calc.formatSqft(sized.dockSqft || 0)}</td></tr>
+            <tr><td title="Requirements-driven dock SF — the same number inside the headline Sized Total and the CM writeback. (Legacy v2 chain: ${calc.formatSqft(sized.dockSqft || 0)}.)">Dock SF (requirements-driven)</td><td class="cm-num">${calc.formatSqft(sized.dockRequirement?.dockSfRequired ?? sized.dockSqft ?? 0)}</td></tr>
           </tbody>
         </table>
       </div>
