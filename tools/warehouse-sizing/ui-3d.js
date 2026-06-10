@@ -13,7 +13,7 @@
  * @module tools/warehouse-sizing/ui-3d
  */
 
-import * as calc from './calc.js?v=20260514-engineoverride1';
+import * as calc from './calc.js?v=20260610-wscrec1';
 
 // ============================================================
 // MODULE-LOCAL 3D STATE
@@ -108,6 +108,13 @@ export function render3DView(container, ctx) {
   // Phase B.B22 (2026-05-26) — generic data-3d-toggle delegation. Handles
   // both walls (legacy) + roof (new) by mapping the toggle key to a module
   // state var + a userData marker on the scene group to traverse.
+  // 2026-06-10 (assessment WSC #1): #wsc-content survives every
+  // renderContentView, but render3DView previously added these two click
+  // listeners on EVERY invocation — each config keystroke in 3D view stacked
+  // another pair, and with an even count the Walls/Roof/HUD toggles visibly
+  // did nothing. Same idempotent-bind discipline as ui-shell-events.
+  if (!container.__wsc3dToggleBound) {
+  container.__wsc3dToggleBound = true;
   container.addEventListener('click', (e) => {
     const btn = /** @type {HTMLElement} */ (e.target)?.closest('[data-3d-toggle]');
     if (!btn) return;
@@ -139,12 +146,14 @@ export function render3DView(container, ctx) {
   // build3DScene populates on the container element.
   container.addEventListener('click', (e) => {
     const btn = /** @type {HTMLElement} */ (e.target)?.closest('[data-3d-camera]');
+    // (second listener of the idempotent-bound pair — see guard above)
     if (!btn) return;
     const preset = btn.getAttribute('data-3d-camera');
     const cont = container.querySelector('#wsc-3d-container');
     const handle = cont && cont.__wsc3d;
     if (handle && typeof handle.tweenTo === 'function') handle.tweenTo(preset);
   });
+  } // end __wsc3dToggleBound idempotent-bind guard
 
   // Defer 3D scene build so the flex layout settles first.
   setTimeout(() => build3DScene(ctx), 80);

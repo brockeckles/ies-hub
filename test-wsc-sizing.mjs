@@ -832,12 +832,23 @@ import { assignDemand } from './tools/network-opt/calc.js';
     cartonPalletSkus: 1500,
     shelvingSkus: 5000,
   });
-  // Locations: shelving demand-bound (5K pallets-equiv × 0.15 × 64 = 624K cartons / 6 per shelf = 104K)
+  // 2026-06-10 reconciliation (assessment WSC #2): totalPalletsOverride is
+  // documented (UI tooltip + derived-branch semantics) as FP+CP PALLET
+  // POSITIONS, excluding the shelving share — but the shelving basis was
+  // consuming it raw as total inventory pallets, double-dipping the mix.
+  // Basis now reconstructs total pallets = override / (1 − shelvingMix):
+  //   65,000 / 0.85 = 76,471 pallets-equiv × 0.15 × 64 = 734,118 cartons
+  //   (engine rounds the carton product) / 6 per shelf ≈ 122,353 locations
   t('wayfair shelving mode = demand-bound', r.locations.shelving.mode === 'demand-bound');
-  t('wayfair shelving demandLocations = 104,000', r.locations.shelving.demandLocations === 104000);
+  {
+    const expectPallets = Math.round(65000 / 0.85);
+    const expectCartons = expectPallets * 0.15 * 64;
+    const expectLocations = Math.round(expectCartons / 6);
+    t('wayfair shelving demandLocations = override/(1−mix) basis', r.locations.shelving.demandLocations === expectLocations, `expected ${expectLocations}, got ${r.locations.shelving.demandLocations}`);
+    const expectRequired = Math.ceil((expectCartons / 6) * 1.10 * 1.20);
+    t('wayfair shelving locationsRequired = buffered', r.locations.shelving.locationsRequired === expectRequired, `expected ${expectRequired}, got ${r.locations.shelving.locationsRequired}`);
+  }
   t('wayfair shelving skuMinLocations = 5,000', r.locations.shelving.skuMinLocations === 5000);
-  // 104000 × 1.10 × 1.20 = 137,280
-  t('wayfair shelving locationsRequired = 137,280', r.locations.shelving.locationsRequired === 137280);
   // FP: 25,000 positions vs 500 SKUs → demand-bound
   t('wayfair FP mode = demand-bound', r.locations.fullPallet.mode === 'demand-bound');
   t('wayfair FP positions = 25,000', r.locations.fullPallet.positions === 25000);

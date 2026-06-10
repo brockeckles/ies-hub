@@ -25,7 +25,7 @@
  * @module tools/warehouse-sizing/ui-cm-bridge
  */
 
-import * as calc from './calc.js?v=20260514-engineoverride1';
+import * as calc from './calc.js?v=20260610-wscrec1';
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 
 // ============================================================

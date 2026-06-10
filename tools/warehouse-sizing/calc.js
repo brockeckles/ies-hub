@@ -1808,8 +1808,11 @@ export function calcDockAnalysis(facility, zones, volumes) {
   const peakOutbound = out * peak;
 
   const capacity = dock.palletsPerDockHour * dock.dockOperatingHours;
-  const inboundDoorsNeeded = Math.ceil(peakInbound / capacity);
-  const outboundDoorsNeeded = Math.ceil(peakOutbound / capacity);
+  // 2026-06-10 (assessment WSC #6): zeroed post-2026-05-08 defaults made
+  // capacity 0 — ceil(x/0) = Infinity doors. Guard to 0 doors when there is
+  // no configured dock throughput.
+  const inboundDoorsNeeded = capacity > 0 ? Math.ceil(peakInbound / capacity) : 0;
+  const outboundDoorsNeeded = capacity > 0 ? Math.ceil(peakOutbound / capacity) : 0;
 
   const inboundUtilization = capacity > 0 ? (peakInbound / capacity) * 100 : 0;
   const outboundUtilization = capacity > 0 ? (peakOutbound / capacity) * 100 : 0;
@@ -2768,17 +2771,12 @@ export function sizeFacility(userInputs = {}) {
   else if (utilizationPct < 70) warning = 'low_util';
 
   // ── Zone Breakdown ──
-  const zoneBreakdown = [
-    { label: 'Storage', sqft: storageSqft },
-    { label: 'Dock Area', sqft: dockSqft },
-    { label: 'Recv Staging', sqft: recvStagingSqft },
-    { label: 'Ship Staging', sqft: shipStagingSqft },
-    { label: 'Office', sqft: officeSqft },
-    ...additionalItems,
-  ].filter(z => z.sqft > 0).map(z => ({
-    ...z,
-    pct: totalSqft > 0 ? Math.round((z.sqft / totalSqft) * 100) : 0,
-  }));
+  // 2026-06-10 reconciliation (assessment WSC #5): moved below — the
+  // breakdown is now built from the SAME components as the returned
+  // totalSqft (requirementsDriven aggregate incl. Phase-1 dock SF +
+  // circulation), so rows sum to the headline total. Previously rows used
+  // the legacy dock + no circulation with pcts against legacyTotalSqft —
+  // they could not sum to the totalSqft shown two lines above them.
 
   // ============================================================
   // Phase 1 redesign — IE-correct unit-load / carton / SKU / dock helpers
@@ -2820,8 +2818,17 @@ export function sizeFacility(userInputs = {}) {
   // Total palletized-equivalent inventory: when override engaged, that's
   // the user's declared count; otherwise derive from peakUnits. Used as
   // the basis for shelving demand-side carton math.
+  // 2026-06-10 reconciliation (assessment WSC #2): totalPalletsOverride is a
+  // PALLET-POSITION count (full + carton-on-pallet — the derived branch above
+  // explicitly excludes the shelving share), but this basis feeds
+  // computeShelvingLocations which multiplies by shelvingMixPct expecting
+  // TOTAL inventory pallets. Using the override raw double-dipped the mix:
+  // shelving% × an already-shelving-excluded number. Reconstruct the total
+  // by dividing the override back up by its (1 − shelving) share. First-order
+  // approximation (full-pallet vs carton-pallet densities differ) — but
+  // dimensionally correct, vs. structurally wrong before.
   const _totalPalletsForShelving = palletPositionsExplicit
-    ? Math.round(i.totalPalletsOverride)
+    ? Math.round(i.totalPalletsOverride / Math.max(0.05, 1 - (mix.cartonOnShelvingPct || 0)))
     : Math.ceil((+i.peakUnits || 0) / Math.max(1, +i.unitsPerPallet || 1));
 
   const _shelvingLocationsDerived = computeShelvingLocations({
@@ -2840,17 +2847,28 @@ export function sizeFacility(userInputs = {}) {
   // count replaces both demand-bound and sku-bound paths; mode tag flips
   // to 'override'. Keeps the buffered grossLocations symmetry by applying
   // the same honeycomb + surge buffers the demand-bound path uses.
+  // 2026-06-10 reconciliation (assessment WSC #3): the override block
+  // previously emitted locationsRequired = raw base but ALSO grossLocations/
+  // surgeLocations fields with hidden ×1.1/×1.2 inflation on top — fields the
+  // derived path doesn't even produce, leaving consumers unable to tell which
+  // semantics they were reading. Resolved per the engine's own override
+  // philosophy (see dock doors above: "Explicit counts are the user's
+  // engineered answer — no implicit inflation"). CONTRACT: locationsRequired
+  // is always "locations to provide" — derived = demand × (1+honeycomb) ×
+  // (1+surge); explicit = the user's final count with NO hidden buffers
+  // (slotting studies already include them). The explicit flag + mode:
+  // 'override' tell consumers which provenance they're reading.
   const _shelvingLocations = shelvingPositionsExplicit
     ? (() => {
         const base = Math.round(i.totalShelvingLocationsOverride);
-        const buf = 1 + ((i.honeycombPct || 0) / 100);
-        const surge = 1 + ((i.surgePct || 0) / 100);
-        const grossLocations = Math.ceil(base * buf);
+        const shelfLevels = _shelvingLocationsDerived.shelfLevels || 6;
         return {
           ..._shelvingLocationsDerived,
+          locationsRaw: base,
           locationsRequired: base,
-          grossLocations,
-          surgeLocations: Math.ceil(grossLocations * surge),
+          baysRequired: Math.ceil(base / shelfLevels),
+          grossLocations: base,
+          surgeLocations: base,
           mode: 'override',
           explicit: true,
         };
@@ -2943,6 +2961,36 @@ export function sizeFacility(userInputs = {}) {
   const reconciledTotalSqft = (_requirementsDriven && +_requirementsDriven.totalSfRequired > 0)
     ? +_requirementsDriven.totalSfRequired
     : totalSqft;
+
+  // Zone breakdown — built from the same components as reconciledTotalSqft
+  // (see relocation note above). When the requirements-driven aggregate is
+  // active (the normal case) the rows are exactly its inputs + circulation;
+  // in the degenerate fallback they are the legacy components, which sum to
+  // the legacy total that reconciledTotalSqft falls back to. Either way:
+  // Σ rows === totalSqft. test-wsc-reconciliation.mjs locks this invariant.
+  const _rdActive = _requirementsDriven && +_requirementsDriven.totalSfRequired > 0;
+  const zoneBreakdown = (_rdActive
+    ? [
+        { label: 'Storage', sqft: storageSqft },
+        { label: 'Dock Area', sqft: _dockRequirement.dockSfRequired },
+        { label: 'Recv Staging', sqft: recvStagingSqft },
+        { label: 'Ship Staging', sqft: shipStagingSqft },
+        { label: 'Office', sqft: officeSqft },
+        ...additionalItems,
+        { label: 'Circulation', sqft: _requirementsDriven.circulationSf },
+      ]
+    : [
+        { label: 'Storage', sqft: storageSqft },
+        { label: 'Dock Area', sqft: dockSqft },
+        { label: 'Recv Staging', sqft: recvStagingSqft },
+        { label: 'Ship Staging', sqft: shipStagingSqft },
+        { label: 'Office', sqft: officeSqft },
+        ...additionalItems,
+      ]
+  ).filter(z => z.sqft > 0).map(z => ({
+    ...z,
+    pct: reconciledTotalSqft > 0 ? Math.round((z.sqft / reconciledTotalSqft) * 100) : 0,
+  }));
 
   return {
     totalSqft: reconciledTotalSqft,

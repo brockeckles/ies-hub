@@ -10,13 +10,13 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260526-phaseAs1';
-import * as calc from './calc.js?v=20260514-engineoverride1';
+import * as calc from './calc.js?v=20260610-wscrec1';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
-import { render3DView, disposeScene3d } from './ui-3d.js?v=20260526-hudtoggle1';
+import { render3DView, disposeScene3d } from './ui-3d.js?v=20260610-wscrec1';
 import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260526-phaseAm3';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260526-measure1';
 import { renderDashboard } from './ui-dashboard.js?v=20260526-phaseBs1';
@@ -805,7 +805,7 @@ let _planMeta = null;
  * Extraction 2026-05-14 (autonomous session). Body moved verbatim into
  * calc.js so it can be unit-tested directly and so ui.js drops below 1K LOC.
  *
- * @returns {import('./calc.js?v=20260514-engineoverride1').SizingInputs}
+ * @returns {import('./calc.js?v=20260610-wscrec1').SizingInputs}
  */
 function toSizingInputs() {
   return calc.formStateToInputs({ facility, zones, volumes });
