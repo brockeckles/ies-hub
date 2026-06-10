@@ -13,7 +13,7 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260529-scale1';
+import * as calc from './calc.js?v=20260610-cogfix1';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
@@ -499,7 +499,7 @@ async function handleSave() {
           if (csMcr) {
             const csCost = calc.estimateBlendedCost(csMcr, solvePts, config);
             calc.flagServiceViolations(csMcr, solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
-            const csCo2 = (csCost.totalTruckMiles || 0) * (config.co2KgPerTruckMile ?? 1.62) / 1000;
+            const csCo2 = ((csCost.totalTruckMiles || 0) * (config.co2KgPerTruckMile ?? 1.62) + (csCost.parcelDetails?.totalPackages || 0) * (+config.parcelCo2KgPerPkg || 0.5)) / 1000; // 2026-06-10: truck + parcel, symmetric with proposed-side co2Tons
             const propCost = cogResult.totalCost || 0;
             const propCo2 = cogResult.co2Tons || 0;
             const totalWtForDelta = solvePts.reduce((sW, p) => sW + (p.weight || 0), 0);
@@ -860,11 +860,15 @@ function _computeCogKpis() {
   let co2Str = '—';
   let co2Hint = 'CO₂ tons/yr from total truck-miles × emissions intensity.';
   if (cogResult && typeof cogResult.co2Tons === 'number' && cogResult.co2Tons >= 0) {
-    const truckCo2 = cogResult.co2Tons || 0;
+    // 2026-06-10 assessment fix: co2Tons ALREADY includes the parcel slice
+    // (enrichment sums truck + parcel since 2026-05-29). The KPI previously
+    // re-added parcel on top — double-counting it and mislabeling the
+    // parcel-inclusive total as "Truck". Read the split fields instead.
+    const truckCo2 = cogResult.truckCo2Tons ?? (cogResult.co2Tons || 0);
     const parcelPkgs = cogResult.parcelDetails?.totalPackages || 0;
     const parcelKgPerPkg = +config.parcelCo2KgPerPkg || 0.5;
-    const parcelCo2 = (parcelPkgs * parcelKgPerPkg) / 1000;
-    const t = truckCo2 + parcelCo2;
+    const parcelCo2 = cogResult.parcelCo2Tons ?? ((parcelPkgs * parcelKgPerPkg) / 1000);
+    const t = cogResult.co2Tons || (truckCo2 + parcelCo2);
     if (t >= 1000) co2Str = (t / 1000).toFixed(1) + ' kt';
     else if (t >= 1) co2Str = t.toFixed(0) + ' t';
     else co2Str = (t * 1000).toFixed(0) + ' kg';
@@ -2721,7 +2725,7 @@ function renderAnalysis(el) {
         // cogResult enrichment).
         const csCost = calc.estimateBlendedCost(csMcr, solvePts, config);
         calc.flagServiceViolations(csMcr, solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
-        const csCo2 = (csCost.totalTruckMiles || 0) * (config.co2KgPerTruckMile ?? 1.62) / 1000;
+        const csCo2 = ((csCost.totalTruckMiles || 0) * (config.co2KgPerTruckMile ?? 1.62) + (csCost.parcelDetails?.totalPackages || 0) * (+config.parcelCo2KgPerPkg || 0.5)) / 1000; // 2026-06-10: truck + parcel, symmetric with proposed-side co2Tons
         const csAvgDist = csMcr.totalWeightedDistance / Math.max(1, solvePts.reduce((s, p) => s + (p.weight || 0), 0));
 
         // Proposed-state numbers from cogResult (already enriched).
@@ -4836,7 +4840,7 @@ async function openPptxExport() {
         if (csMcr) {
           const csCost = calc.estimateBlendedCost(csMcr, solvePts, config);
           calc.flagServiceViolations(csMcr, solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
-          const csCo2 = (csCost.totalTruckMiles || 0) * (config.co2KgPerTruckMile ?? 1.62) / 1000;
+          const csCo2 = ((csCost.totalTruckMiles || 0) * (config.co2KgPerTruckMile ?? 1.62) + (csCost.parcelDetails?.totalPackages || 0) * (+config.parcelCo2KgPerPkg || 0.5)) / 1000; // 2026-06-10: truck + parcel, symmetric with proposed-side co2Tons
           vsCurrent = {
             n: csList.length,
             cost: csCost.totalCost,
@@ -4903,7 +4907,7 @@ async function openPptxExport() {
       { label: 'Distribution Centers', value: String(numCenters), sub: numCenters === 1 ? 'single-DC network' : `${numCenters} DCs in solution` },
       { label: 'Annual Network Cost', value: fmtMoneyCompact(totalCost), sub: `${fmtMoney(costPerUnit)} per unit` },
       { label: 'Service Coverage', value: coverage != null ? fmtPct(coverage, 0) : 'n/a', sub: coverage != null ? `within ${cogResult.serviceStats?.maxMiles || 0}-mi SLA` : 'no SLA defined' },
-      { label: 'Annual CO\u2082', value: co2Display, sub: 'EPA SmartWay 1.62 kg/mi' },
+      { label: 'Annual CO\u2082', value: co2Display, sub: `truck ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi + parcel ${(+config.parcelCo2KgPerPkg || 0.5).toFixed(2)} kg/pkg` },
     ];
     kpiCards.forEach((k, i) => {
       const x = 0.6 + i * 3.1;
@@ -5323,7 +5327,7 @@ function openPrintView() {
       + ${(cogResult.parcelDetails.fuelPct || 0).toFixed(0)}% fuel · ${(cogResult.parcelDetails.residentialShare * 100 || 0).toFixed(0)}% residential${(cogResult.parcelDetails.discountPct || 0) > 0 ? ` · −${(cogResult.parcelDetails.discountPct || 0).toFixed(0)}% contract discount` : ''}<br/>
       = <strong>${fmtMoney(cogResult.parcelCost || 0)}/yr</strong> (avg $${cogResult.parcelDetails.totalPackages > 0 ? ((cogResult.parcelCost || 0) / cogResult.parcelDetails.totalPackages).toFixed(2) : '0.00'}/pkg)<br/>
       <br/>
-      <strong>Total: ${fmtMoney(costEst.totalCost)}/yr</strong> · CO₂ at ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi (truck only) = <strong>${co2Str}/yr</strong>
+      <strong>Total: ${fmtMoney(costEst.totalCost)}/yr</strong> · CO₂ (truck ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi + parcel ${(+config.parcelCo2KgPerPkg || 0.5).toFixed(2)} kg/pkg) = <strong>${co2Str}/yr</strong>
     </div>
     <h2>Parcel zone distribution</h2>
     <table>

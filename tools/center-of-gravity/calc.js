@@ -1736,7 +1736,7 @@ export function multiYearCostProjection(baseCost, cfg) {
  * @param {number} [maxIter=100]
  * @param {number} [unitsPerTruck=25000]
  * @param {number} [fixedCostPerDC=0]  Annual fixed cost per facility ($/year).
- * @returns {Array<{ k: number, totalWeightedDistance: number, transportCost: number, facilityCost: number, totalCost: number, estimatedCost: number, avgDistance: number, isElbow?: boolean }>}
+ * @returns {Array<{ k: number, totalWeightedDistance: number, transportCost: number, facilityCost: number, totalCost: number, estimatedCost: number, avgDistance: number, isElbow?: boolean, isRecommended?: boolean }>}
  */
 export function sensitivityAnalysis(points, maxK = 5, configOrCpm = 2.85, maxIter = 100, unitsPerTruck = 25000, fixedCostPerDC = 0, roundTripFactor = 2.0, roadFactor = 1.22) {
   // 2026-05-28 — accept config object (new, parcel-aware) or scalar cpm (legacy).
@@ -1829,10 +1829,12 @@ export function sensitivityAnalysis(points, maxK = 5, configOrCpm = 2.85, maxIte
     if (hasFixedCostMode) {
       if (minIsInterior) {
         results[minIdxGlobal].isElbow = true;
+        results[minIdxGlobal].isRecommended = true; // 2026-06-10: consumers read isRecommended; isElbow kept for back-compat
       }
     } else {
       if (bestIdx > 0 && bestIdx < N - 1 && bestDist > MIN_KNEE_GAP) {
         results[bestIdx].isElbow = true;
+        results[bestIdx].isRecommended = true; // 2026-06-10: consumers read isRecommended; isElbow kept for back-compat
       }
     }
   }
