@@ -15,7 +15,7 @@ import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillbac
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260511-port11';
+import * as calc from './calc.js?v=20260610-shipv2';
 import * as api from './api.js?v=20260512-port27';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
@@ -436,6 +436,13 @@ function openEditor(savedRow) {
   if (savedRow && d.scenarios && d.scenarios.length > 0) {
     runState.markClean({ facilities, demands, modeMix, rateCard, serviceConfig, maxDCsToTest });
   }
+  // 2026-06-10 shipment-build model: one-time heads-up on rows saved under
+  // the old transport math (blendedCost × annualDemand/52, dimensionally
+  // arbitrary). Totals re-price on next Run; there is no "compatible" path
+  // back to the old number because it was wrong.
+  if (savedRow && d.engineModel !== 'shipment-v2') {
+    setTimeout(() => showToast('Transport model corrected 2026-06-10 — annual cost now prices shipments from each lane\u2019s Frequency. Totals will re-price on next Run.', 'info', { duration: 9000 }), 400);
+  }
 
   rootEl.innerHTML = renderShell();
   bindShellEvents();
@@ -479,6 +486,7 @@ async function handleSaveNetopt() {
       modeMix,
       rateCard,
       serviceConfig,
+      engineModel: 'shipment-v2', // 2026-06-10 — marks rows priced under the shipment-build model
       // 2026-04-30 (G12): persist CM linkage. saveConfig on the api side
       // promotes these to the top-level columns so reload picks them up
       // via savedRow.parent_cost_model_id.
@@ -2727,6 +2735,46 @@ function initMap() {
 // RESULTS VIEW
 // ============================================================
 
+/**
+ * 2026-06-10 shipment-build model — data-sanity card (mirrors the COG card
+ * that caught the last unit-of-measure bug). Surfaces the derived shipment
+ * profile so a bad UOM read is visible BEFORE the number reaches a customer:
+ * shipments/yr, units/shipment, shipment weights, multi-truck lanes, and
+ * rows priced off the legacy 25-lb fallback weight.
+ */
+function _renderShipmentSanityCard(s) {
+  const asg = Array.isArray(s.assignments) ? s.assignments.filter(a => Number.isFinite(Number(a.shipmentsPerYear))) : [];
+  if (asg.length === 0) return '';
+  const totShipments = asg.reduce((t, a) => t + (a.shipmentsPerYear || 0), 0);
+  const weights = asg.map(a => Number(a.shipmentWeightLbs) || 0).sort((a, b) => a - b);
+  const wMin = weights[0], wMax = weights[weights.length - 1];
+  const wMed = weights[Math.floor(weights.length / 2)];
+  const multiTruck = asg.filter(a => (a.trucksPerShipment || 1) > 1).length;
+  const fallback = asg.filter(a => a.weightSource === 'fallback25').length;
+  const heavy = asg.filter(a => (Number(a.shipmentWeightLbs) || 0) > 45000).length;
+  const warns = [];
+  if (fallback > 0) warns.push(`${fallback} lane${fallback === 1 ? '' : 's'} priced at the 25-lb default weight — set Avg Wt on those demand rows`);
+  if (heavy > 0) warns.push(`${heavy} lane${heavy === 1 ? '' : 's'} exceed${heavy === 1 ? 's' : ''} one dry-van payload (45K lbs) — priced as multi-truck shipments`);
+  const warnHtml = warns.length
+    ? `<div style="margin-top:8px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:12px;color:#92400e;">${warns.map(w => '⚠ ' + w).join('<br/>')}</div>`
+    : '';
+  const fmtW = (v) => v >= 1000 ? (v / 1000).toFixed(1) + 'K' : String(Math.round(v));
+  return `
+      <div class="hub-card" style="padding:14px 20px;margin-bottom:20px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-size:13px;font-weight:700;color:var(--ies-navy);">Shipment profile sanity</span>
+          <span style="font-size:11px;color:var(--ies-gray-400);" title="Annual transport = Σ per-lane $/shipment × shipments/yr. Shipments/yr derive from each demand row's Frequency; shipment weight from its Avg Wt. Corrected 2026-06-10 — previously cost was blended $/shipment × annualDemand÷52, which is not a shipment count.">ⓘ how cost is built</span>
+        </div>
+        <div style="display:flex;gap:28px;flex-wrap:wrap;font-size:12px;color:var(--ies-gray-600);">
+          <span><b>${Math.round(totShipments).toLocaleString()}</b> shipments/yr across ${asg.length} lanes</span>
+          <span>shipment weight <b>${fmtW(wMin)}–${fmtW(wMax)} lbs</b> (median ${fmtW(wMed)})</span>
+          <span><b>${multiTruck}</b> multi-truck lane${multiTruck === 1 ? '' : 's'}</span>
+          <span>avg <b>${(totShipments / Math.max(1, asg.length) / 52).toFixed(1)}</b> shipments/wk per lane</span>
+        </div>
+        ${warnHtml}
+      </div>`;
+}
+
 function renderResults(el) {
   if (!activeScenario) {
     // Slice A: distinguish between "never run" and "run was blocked by missing inputs".
@@ -2828,6 +2876,8 @@ function renderResults(el) {
         </div>
       </div>
 
+      ${_renderShipmentSanityCard(s)}
+
       <!-- Cost Breakdown (unified stacked bar — 2026-04-25) -->
       ${costBreakdownBar(s.costBreakdown, s.totalCost)}
 
@@ -2910,12 +2960,18 @@ function pushToFleet(scenario) {
     const dem = demands.find(d => d.id === a.demandId);
     if (!fac || !dem) return null;
 
+    // 2026-06-10 shipment-build model: weekly shipments + weight come from
+    // the SAME assignment profile the cost rollup used (was annualDemand/52
+    // under a units-as-shipments misread, with full objects in origin/
+    // destination that Fleet rendered as [object Object]).
+    const spy = Number(a.shipmentsPerYear) || calc.shipmentsPerYearForDemand(dem);
+    const wt = Number(a.shipmentWeightLbs) || dem.avgWeight || 25;
     return {
-      origin: fac,
-      destination: dem,
-      weeklyShipments: Math.ceil(dem.annualDemand / 52),
-      avgWeightLbs: dem.avgWeight || 25,
-      avgCubeFt3: (dem.avgWeight || 25) / 10, // Rough estimate: 1 cu ft per 10 lbs
+      origin: fac.name || fac.id,
+      destination: dem.zip3 ? `ZIP ${dem.zip3}` : (dem.name || dem.id),
+      weeklyShipments: +(spy / 52).toFixed(2),
+      avgWeightLbs: wt,
+      avgCubeFt3: wt / 10, // Rough estimate: 1 cu ft per 10 lbs
       distanceMiles: a.distanceMiles,
     };
   }).filter(Boolean);

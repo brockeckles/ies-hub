@@ -39,6 +39,13 @@ export const DEFAULT_RATES = {
     [22.00, 29.50, 39.00, 59.00, 91.00, 117.00], // Zone 8
   ],
   fuelSurcharge: 0.12,
+  // 2026-06-10 shipment-build model — equipment assumptions for weight-honest
+  // mode legs. TL: dry-van payload capacity (multi-truck shipments when a
+  // single shipment exceeds it). Parcel: average package weight a shipment
+  // splits into (a 500-lb parcel-mode shipment is ~20 boxes, not one 500-lb
+  // package priced off the bracket edge).
+  tlCapacityLbs: 45000,
+  parcelAvgPkgWeightLbs: 25,
   // NET-C1 — Per-lane rate overrides. Each entry shadows the global rates
   // for a specific origin→destination pair when both keys match. Use facility
   // ids, demand-point ids, region codes, or '*' wildcards. First match wins.
@@ -166,6 +173,44 @@ export const FREQUENCY_OPTIONS = ['daily', 'weekly', 'biweekly', 'monthly', 'irr
 export function freqPerWeekForBucket(frequency, explicit) {
   if (Number.isFinite(explicit) && explicit > 0) return explicit;
   return FREQUENCY_PER_WEEK[frequency] ?? 1.0;
+}
+
+/**
+ * 2026-06-10 shipment-build model (ground-up assessment High #6).
+ * Annual shipments for a demand point, driven by its frequency bucket
+ * (the FREQUENCY_PER_WEEK machinery was built for exactly this and was
+ * previously never consumed — total transport used the dimensionally
+ * arbitrary blendedCost × annualDemand/52 instead).
+ * @param {import('./types.js?v=20260418-sM').DemandPoint} d
+ * @returns {number} shipments per year (e.g. weekly → 52)
+ */
+export function shipmentsPerYearForDemand(d) {
+  return freqPerWeekForBucket(d?.frequency, d?.shipmentsPerWeek) * 52;
+}
+
+/**
+ * Full shipment profile for a demand point: cadence, shipment size, weight.
+ * Weight resolution: explicit avgWeight (lbs/shipment) wins; else
+ * unitsPerShipment × opts.lbsPerUnit; else the legacy 25-lb fallback.
+ * @param {import('./types.js?v=20260418-sM').DemandPoint} d
+ * @param {{ lbsPerUnit?: number }} [opts]
+ * @returns {{ shipmentsPerYear: number, unitsPerShipment: number, shipmentWeightLbs: number, weightSource: 'avgWeight'|'lbsPerUnit'|'fallback25' }}
+ */
+export function shipmentProfileForDemand(d, opts = {}) {
+  const shipmentsPerYear = shipmentsPerYearForDemand(d);
+  const annual = Number(d?.annualDemand) || 0;
+  const unitsPerShipment = shipmentsPerYear > 0 ? annual / shipmentsPerYear : 0;
+  let shipmentWeightLbs, weightSource;
+  const aw = Number(d?.avgWeight);
+  const lpu = Number(opts.lbsPerUnit);
+  if (Number.isFinite(aw) && aw > 0) {
+    shipmentWeightLbs = aw; weightSource = 'avgWeight';
+  } else if (Number.isFinite(lpu) && lpu > 0 && unitsPerShipment > 0) {
+    shipmentWeightLbs = unitsPerShipment * lpu; weightSource = 'lbsPerUnit';
+  } else {
+    shipmentWeightLbs = 25; weightSource = 'fallback25';
+  }
+  return { shipmentsPerYear, unitsPerShipment, shipmentWeightLbs, weightSource };
 }
 
 /** UN hazmat classes 1-9 — surfaced in the demand-point table when hazmat=true. */
@@ -562,7 +607,7 @@ export function parcelCost(weight, miles, zoneRates = DEFAULT_RATES.parcelZoneRa
  * @param {import('./types.js?v=20260418-sM').RateCard} [rateCard]
  * @param {number} [originLng] — for regional TL surcharge
  * @param {number} [destLng]
- * @returns {{ tlCost: number, ltlCost: number, parcelCost: number, blendedCost: number }}
+ * @returns {{ tlCost: number, ltlCost: number, parcelCost: number, blendedCost: number, trucksPerShipment: number, pkgsPerShipment: number }}
  */
 export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RATES, originLng, destLng, originLat, destLat, nmfcClass, ctx) {
   // NET-C1 — apply per-lane overrides if a matching row exists. ctx is
@@ -575,9 +620,15 @@ export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RA
   // Previously LTL & Parcel still produced their minimum-bracket charge against a 0-mile lane,
   // which surfaced as $6 LTL / $25 Parcel / $11 blended on Lane Assignments — dimensionally wrong.
   if (!isFinite(miles) || miles <= 0) {
-    return { tlCost: 0, ltlCost: 0, parcelCost: 0, blendedCost: 0 };
+    return { tlCost: 0, ltlCost: 0, parcelCost: 0, blendedCost: 0, trucksPerShipment: 0, pkgsPerShipment: 0 };
   }
-  const tl = tlCost(miles, rateCard.tlRatePerMile, rateCard.fuelSurcharge, originLng, destLng);
+  // 2026-06-10 shipment-build model: TL leg is per-truck — a shipment heavier
+  // than one dry van takes multiple trucks. Previously one full-truck cost was
+  // charged per "shipment" regardless of weight (a 25-lb default shipment was
+  // priced as a full truckload inside the blend).
+  const tlCap = Number(rateCard.tlCapacityLbs) > 0 ? Number(rateCard.tlCapacityLbs) : 45000;
+  const trucksPerShipment = Math.max(1, Math.ceil((Number(avgWeight) || 0) / tlCap));
+  const tl = tlCost(miles, rateCard.tlRatePerMile, rateCard.fuelSurcharge, originLng, destLng) * trucksPerShipment;
 
   // Derive regions from coords if not already on rateCard
   const originRegion = rateCard.originRegion
@@ -592,7 +643,12 @@ export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RA
     destRegion,
   });
 
-  const pcl = parcelCost(avgWeight, miles, rateCard.parcelZoneRates, rateCard.fuelSurcharge);
+  // Parcel leg: split the shipment into packages of parcelAvgPkgWeightLbs and
+  // price per package — a heavy parcel-mode shipment is many boxes, not one
+  // oversize package read off the bracket edge.
+  const pkgWt = Number(rateCard.parcelAvgPkgWeightLbs) > 0 ? Number(rateCard.parcelAvgPkgWeightLbs) : 25;
+  const pkgsPerShipment = Math.max(1, Math.ceil((Number(avgWeight) || 0) / pkgWt));
+  const pcl = parcelCost((Number(avgWeight) || 0) / pkgsPerShipment, miles, rateCard.parcelZoneRates, rateCard.fuelSurcharge) * pkgsPerShipment;
 
   const tlPct = (modeMix.tlPct || 0) / 100;
   const ltlPct = (modeMix.ltlPct || 0) / 100;
@@ -600,7 +656,7 @@ export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RA
 
   const blended = tl * tlPct + ltl * ltlPct + pcl * parcelPct;
 
-  return { tlCost: tl, ltlCost: ltl, parcelCost: pcl, blendedCost: blended };
+  return { tlCost: tl, ltlCost: ltl, parcelCost: pcl, blendedCost: blended, trucksPerShipment, pkgsPerShipment };
 }
 
 // ============================================================
@@ -696,9 +752,14 @@ export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RA
     const effectiveMix = (channelMixMap && d.channelKey && channelMixMap[d.channelKey])
       ? channelMixMap[d.channelKey]
       : modeMix;
+    // 2026-06-10 shipment-build model: shipment weight + cadence come from
+    // the demand point's profile (frequency-driven), replacing the bare
+    // `d.avgWeight || 25` that priced every lane as one 25-lb default
+    // shipment with no shipment count at all.
+    const profile = shipmentProfileForDemand(d, opts);
     const costs = blendedLaneCost(
       best.dist,
-      d.avgWeight || 25,
+      profile.shipmentWeightLbs,
       effectiveMix,
       rateCard,
       fLngN,
@@ -719,6 +780,13 @@ export function assignDemand(facilities, demands, modeMix, rateCard = DEFAULT_RA
       distanceMiles: best.dist,
       transitDays: best.transit,
       ...costs,
+      // shipment profile — single source of truth for every downstream
+      // consumer (annual rollup, Fleet push, sanity card)
+      shipmentsPerYear: profile.shipmentsPerYear,
+      unitsPerShipment: profile.unitsPerShipment,
+      shipmentWeightLbs: profile.shipmentWeightLbs,
+      weightSource: profile.weightSource,
+      annualTransportCost: (Number(costs.blendedCost) || 0) * profile.shipmentsPerYear,
       meetsSlA: best.transit <= maxDays,
       withinMaxDistance: maxDist == null || best.dist <= maxDist,
     };
@@ -749,12 +817,12 @@ export function evaluateScenario(name, facilities, demands, modeMix, rateCard, s
   // (which JS coerces correctly *most* of the time), but produced 0 when
   // the field was an empty string. Same pattern fixed for variableCost,
   // fixedCost, blendedCost, and distanceMiles.
-  const totalTransport = assignments.reduce((s, a) => {
-    const blended = Number(a.blendedCost) || 0;
-    const dem = demands.find(d => d.id === a.demandId);
-    const annual = Number(dem?.annualDemand) || 0;
-    return s + blended * (annual / 52);
-  }, 0);
+  // 2026-06-10 shipment-build model (assessment High #6): annual transport =
+  // Σ per-lane $/shipment × shipments/year. The prior blendedCost ×
+  // (annualDemand / 52) multiplied a per-shipment cost by a unit count that
+  // was neither shipments nor weight — dimensionally arbitrary, and read as
+  // "weekly shipments" by pushToFleet under a contradictory interpretation.
+  const totalTransport = assignments.reduce((s, a) => s + (Number(a.annualTransportCost) || 0), 0);
   const totalFacility = facilities.filter(f => f.isOpen !== false).reduce((s, f) => s + (Number(f.fixedCost) || 0), 0);
   const totalHandling = demands.reduce((s, d) => {
     const asg = assignments.find(a => a.demandId === d.id);
@@ -1699,13 +1767,29 @@ export function runScenario(params) {
   if (!Array.isArray(params.demands)) errors.push('demands must be an array');
   if (!params.modeMix || typeof params.modeMix !== 'object') errors.push('modeMix must be an object with tlPct/ltlPct/parcelPct');
   if (errors.length) return { ok: false, version: ENGINE_VERSION, result: null, errors };
-  const assignments = assignDemand(
+  // 2026-06-10: delegate to evaluateScenario so the calc-as-service wrapper
+  // returns the same totals as the UI. Previously summed `a.cost` — a field
+  // no assignment carries — so external callers always got totalCost = 0
+  // (and the smoke test couldn't see it: 0 is finite).
+  const scenario = evaluateScenario(
+    params.name || 'runScenario',
     params.facilities,
     params.demands,
     params.modeMix,
     params.rateCard || DEFAULT_RATES,
-    params.serviceConfig || DEFAULT_SERVICE
+    params.serviceConfig || DEFAULT_SERVICE,
+    params.opts || {}
   );
-  const totalCost = assignments.reduce((s, a) => s + (a.cost || 0), 0);
-  return { ok: true, version: ENGINE_VERSION, result: { assignments, totalCost }, errors: [] };
+  return {
+    ok: true,
+    version: ENGINE_VERSION,
+    result: {
+      assignments: scenario.assignments,
+      totalCost: scenario.totalCost,
+      totalTransport: scenario.costBreakdown.transport,
+      costBreakdown: scenario.costBreakdown,
+      serviceLevel: scenario.serviceLevel,
+    },
+    errors: [],
+  };
 }

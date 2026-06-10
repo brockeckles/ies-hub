@@ -132,29 +132,57 @@ export async function mount(el) {
     }
   } catch (e) { console.warn('[Fleet] Failed to consume NetOpt handoff:', e); }
 
-  await renderLanding();
+  if (_pendingNetOptLanes) {
+    openEditor(null); // consumes _pendingNetOptLanes — see applyNetOptHandoff
+  } else {
+    await renderLanding();
+  }
 }
 
 /**
  * Apply NetOpt push into the module-level lanes array. Shared by both
  * the in-session bus listener and the sessionStorage handoff path.
  */
+// 2026-06-10 handoff repair (ground-up assessment High #5): lanes pushed
+// while Fleet sat on the scenario landing were applied to module state and
+// then WIPED by openEditor's lanes-reset — success toast, nothing delivered.
+// Lanes now stash in _pendingNetOptLanes; openEditor(null) consumes them
+// (mirrors the COG→NetOpt consumer's openEditor-then-apply order). Old
+// payloads carried full facility/demand objects in origin/destination which
+// rendered as [object Object] — coerce to display names defensively.
+let _pendingNetOptLanes = null;
+
+function _laneEndpointName(v, fallback) {
+  if (v == null) return fallback;
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') return v.name || (v.zip3 ? `ZIP ${v.zip3}` : null) || v.id || fallback;
+  return String(v);
+}
+
 function applyNetOptHandoff(payload) {
   const pushLanes = payload?.lanes;
-  if (!Array.isArray(pushLanes) || pushLanes.length === 0) return;
-  lanes = pushLanes.map(l => ({
+  if (!Array.isArray(pushLanes) || pushLanes.length === 0) return false;
+  const mapped = pushLanes.map(l => ({
     id: l.id || 'l' + Date.now() + Math.random(),
-    origin: l.origin,
-    destination: l.destination,
+    origin: _laneEndpointName(l.origin, 'origin'),
+    destination: _laneEndpointName(l.destination, 'destination'),
     weeklyShipments: l.weeklyShipments || 1,
     avgWeightLbs: l.avgWeightLbs || 5000,
     avgCubeFt3: l.avgCubeFt3 || 300,
     distanceMiles: l.distanceMiles || 200,
   }));
-  if (typeof showToast === 'function') showToast(`Received ${lanes.length} lanes from Network Optimizer`, 'success');
-  if (activePhase === 'inputs' && rootEl?.querySelector('#fm-content')) {
+  if (rootEl?.querySelector('#fm-content') && activePhase === 'inputs') {
+    // Editor already open — apply live (in-session bus case).
+    lanes = mapped;
+    if (typeof showToast === 'function') showToast(`Received ${lanes.length} lanes from Network Optimizer`, 'success');
     renderLanes(rootEl.querySelector('#fm-content'));
+  } else {
+    // Landing (nav case) — stash; openEditor(null) consumes so the lanes
+    // survive the editor's lane reset.
+    _pendingNetOptLanes = mapped;
+    if (typeof showToast === 'function') showToast(`Received ${mapped.length} lanes from Network Optimizer — opening a new fleet scenario`, 'success');
   }
+  return true;
 }
 
 async function renderLanding() {
@@ -195,6 +223,12 @@ function openEditor(savedRow) {
   // pre-populated (day-cab / sleeper / box truck with ATRI rates) since it's
   // a reference list every scenario needs, not scenario-specific data.
   lanes = (d.lanes && d.lanes.length) ? d.lanes.map(l => ({ ...l })) : [];
+  // 2026-06-10: consume a pending NetOpt handoff on NEW scenarios only —
+  // applied after the reset above so the push survives (High #5 fix).
+  if (!savedRow && _pendingNetOptLanes) {
+    lanes = _pendingNetOptLanes;
+    _pendingNetOptLanes = null;
+  }
   vehicles = (d.vehicles && d.vehicles.length) ? d.vehicles.map(v => ({ ...v })) : calc.DEFAULT_VEHICLES.map(v => ({ ...v }));
   config = { ...calc.DEFAULT_CONFIG, leaseMode: false, ...(d.config || {}) };
   result = d.result || null;
