@@ -105,9 +105,23 @@ export async function deleteMasterRecord(tableName, id) {
  * @returns {Promise<import('./types.js?v=20260418-sP').UserAccount[]>}
  */
 export async function listUsers() {
-  const { data, error } = await db.from('user_accounts').select('*').order('display_name');
+  // 2026-06-10 (assessment hub #13): was querying 'user_accounts' — a table
+  // that exists in ZERO of 122 migrations. The real table is 'profiles'
+  // (phase3_01_profiles_teams). Mapped to the legacy UserAccount shape so
+  // existing render code keeps working.
+  const { data, error } = await db.from('profiles')
+    .select('id, email, full_name, role, team_id, created_at')
+    .order('full_name');
   if (error) throw error;
-  return data || [];
+  return (data || []).map(r => ({
+    id: r.id,
+    display_name: r.full_name || r.email,
+    email: r.email,
+    role: r.role,
+    team_id: r.team_id,
+    active: true, // profiles carries no active flag; deactivation = auth-level ban (not exposed here)
+    created_at: r.created_at,
+  }));
 }
 
 /**
@@ -117,7 +131,13 @@ export async function listUsers() {
  * @returns {Promise<void>}
  */
 export async function updateUser(id, updates) {
-  await db.update('user_accounts', id, updates);
+  // 2026-06-10: real table is 'profiles'. Only role changes are supported —
+  // and they are enforced server-side by the role-immutability trigger
+  // (admin JWT required), so a non-admin calling this gets a 42501.
+  const allowed = {};
+  if (updates && updates.role != null) allowed.role = updates.role;
+  if (Object.keys(allowed).length === 0) return;
+  await db.update('profiles', id, allowed);
 }
 
 // ============================================================

@@ -198,30 +198,26 @@ const VALID_SEQUENCE_TYPES = new Set([
 export const CANONICAL_TMU_INDEX_VALUES = [0, 1, 3, 6, 10, 16, 24, 32, 42, 54];
 
 /**
- * MOS-B2 — fast lookup: every value reachable as a sum of 1-3 canonical
- * indices (covers single index, two parameters, and three-parameter
- * General Move). Anything beyond this in the small-TMU range is suspicious.
- */
-const _PLAUSIBLE_SMALL_TMU = (() => {
-  const set = new Set();
-  const idx = CANONICAL_TMU_INDEX_VALUES;
-  for (const a of idx) for (const b of idx) for (const c of idx) set.add(a + b + c);
-  return set;
-})();
-
-/**
- * MOS-B2 — true if `tmu` looks like a plausible MOST element TMU.
- * Returns true for any non-negative integer >= 50 (approaching ceilings)
- * since long-cycle elements legitimately sum many parameters; only flags
- * small values that aren't reachable from the canonical index set.
+ * MOS-B2 — true if `tmu` looks like a plausible BasicMOST element TMU.
+ *
+ * 2026-06-10 (ground-up assessment MOST #9): this check previously treated
+ * an element's TMU as a RAW SUM of canonical indices ("A1B0G1 A1B0P1 A0 =
+ * 4") while the MOS-B1 parser in this same file implements the actual
+ * BasicMOST standard: TMU = index-sum × 10 ("…= 11 → 110 model TMU").
+ * A correctly-coded 40-TMU element passed only by coincidence, and a
+ * wrongly-entered raw sum of 4 got blessed. An IE audience knows this
+ * convention cold — the two cannot disagree.
+ *
+ * Standard invariant: every BasicMOST element TMU is a POSITIVE MULTIPLE
+ * OF 10 (all canonical indices {0,1,3,6,10,16,24,32,42,54} are ×10 in TMU
+ * terms). Values < 10 are almost always a raw index-sum entered by mistake.
  * @param {number} tmu
  */
 export function isPlausibleMostTmu(tmu) {
   const v = Number(tmu);
-  if (!Number.isFinite(v) || v < 0) return false;
-  if (v % 1 !== 0) return false; // canonical indices are integers
-  if (v >= 50) return true;       // long sequences — trust the user
-  return _PLAUSIBLE_SMALL_TMU.has(v);
+  if (!Number.isFinite(v) || v <= 0) return false;
+  if (v % 1 !== 0) return false;   // TMUs are integers
+  return v % 10 === 0;             // BasicMOST: index-sum × 10
 }
 
 /**
@@ -248,12 +244,11 @@ export function validateElementSequence(elements) {
     if (!(el.tmu_value > 0)) {
       issues.push({ severity: 'error', message: `Element #${idx + 1} has zero or invalid TMU.`, elementIndex: idx });
     } else if (!isPlausibleMostTmu(el.tmu_value)) {
-      // MOS-B2: warn (not error) when the TMU isn't reachable from the
-      // canonical MOST index set {0,1,3,6,10,16,24,32,42,54}. Sums of
-      // canonical indices are always plausible; small non-canonical
-      // values (e.g., 2, 4, 5, 7) suggest a typo or that the analyst
-      // entered a TMU instead of an index code.
-      issues.push({ severity: 'warning', message: `Element #${idx + 1} TMU=${el.tmu_value} is not reachable from MOST canonical indices {0,1,3,6,10,16,24,32,42,54}. Verify the parameter coding.`, elementIndex: idx });
+      // MOS-B2 (2026-06-10 fix): BasicMOST element TMU = index-sum × 10, so
+      // every legitimate TMU is a positive multiple of 10. Anything else —
+      // especially small values like 4 or 11 — suggests the analyst entered
+      // the raw index sum instead of the ×10 TMU.
+      issues.push({ severity: 'warning', message: `Element #${idx + 1} TMU=${el.tmu_value} is not a multiple of 10 — BasicMOST element TMU = index-sum × 10 (e.g. A1B0G1 A1B0P1 A0 → 4 × 10 = 40 TMU). Did you enter the raw index sum?`, elementIndex: idx });
     }
     // Case-insensitive check: historical data stores uppercase ("GET"/"PUT"/"VERIFY")
     // while the catalog uses lowercase. Normalize before comparing so data written

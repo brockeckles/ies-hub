@@ -172,9 +172,12 @@ const near = (a, b, tol = 0.01) => Math.abs(a - b) <= tol;
 
 // ─── sequence validation ───
 {
+  // 2026-06-10: tmu_value 12 → 20. BasicMOST element TMU = index-sum × 10,
+  // so 12 is not a legitimate element TMU (minimal Place A1B0P1 = 2 → 20).
+  // The old fixture pinned the raw-index-sum misread this suite now rejects.
   const issues = validateElementSequence([
     { element_name: 'Walk 3m', sequence_type: 'get', tmu_value: 10, sequence_order: 1, freq_per_cycle: 1 },
-    { element_name: 'Place',   sequence_type: 'put', tmu_value: 12, sequence_order: 2, freq_per_cycle: 1 },
+    { element_name: 'Place',   sequence_type: 'put', tmu_value: 20, sequence_order: 2, freq_per_cycle: 1 },
   ]);
   t('sequence valid: no issues on well-formed pair', issues.length === 0);
 }

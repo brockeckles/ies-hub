@@ -175,14 +175,26 @@ export function computeDealFinancials(sites, contractTermYears = DEFAULT_CONTRAC
   const annualGrossProfit = totalAnnualRevenue - totalAnnualCost;
   const annualEbitda = totalAnnualRevenue * (ebitdaPct / 100);
 
-  // NPV (uses caller-supplied discount rate)
-  const npv = computeNpv(totalStartupCost, annualEbitda, contractTermYears, discountRate);
-
-  // Payback
-  const paybackMonths = computePaybackMonths(totalStartupCost, annualEbitda);
-
-  // IRR (simplified — Newton's method)
-  const irr = computeIrr(totalStartupCost, annualEbitda, contractTermYears);
+  // 2026-06-10 (ground-up assessment DM #10): headline NPV/IRR/payback
+  // previously discounted a FLAT Y1 EBITDA for every year while the
+  // Multi-Year P&L on the same screen modeled margin compression from
+  // independent revenue/cost escalators (MUL-D1) — on a 5-year deal with
+  // 2.5% rev / 4.5% cost the NPV card and the cumulative-cash-flow column
+  // disagreed. The metrics now run on the SAME escalated EBITDA series the
+  // P&L shows (opts.escalation { revenue, cost } %, default 3/3 — matching
+  // the UI's dealConfig defaults).
+  const escRev = Number(opts.escalation?.revenue ?? DEFAULT_ESCALATION_PCT);
+  const escCost = Number(opts.escalation?.cost ?? DEFAULT_ESCALATION_PCT);
+  const ebitdaSeries = [];
+  for (let yr = 1; yr <= contractTermYears; yr++) {
+    const rev = totalAnnualRevenue * Math.pow(1 + escRev / 100, yr - 1);
+    const cost = totalAnnualCost * Math.pow(1 + escCost / 100, yr - 1);
+    const gmPct = rev > 0 ? ((rev - cost) / rev) * 100 : 0;
+    ebitdaSeries.push(rev * ((gmPct - ebitdaOverheadPct) / 100));
+  }
+  const npv = computeNpvFromSeries(totalStartupCost, ebitdaSeries, discountRate);
+  const paybackMonths = computePaybackMonthsFromSeries(totalStartupCost, ebitdaSeries);
+  const irr = computeIrrFromSeries(totalStartupCost, ebitdaSeries);
 
   return {
     totalAnnualCost,
@@ -228,6 +240,49 @@ function emptyFinancials() {
  * @param {number} [rate]
  * @returns {number}
  */
+export function computeNpvFromSeries(startup, flows, rate = DISCOUNT_RATE) {
+  let npv = -(Number(startup) || 0);
+  (flows || []).forEach((cf, i) => { npv += (Number(cf) || 0) / Math.pow(1 + rate, i + 1); });
+  return npv;
+}
+
+/** Payback in months walking a non-flat series (linear within the breakeven year). */
+export function computePaybackMonthsFromSeries(startup, flows) {
+  let remaining = Number(startup) || 0;
+  if (remaining <= 0) return 0;
+  for (let i = 0; i < (flows || []).length; i++) {
+    const cf = Number(flows[i]) || 0;
+    if (cf <= 0) continue;
+    if (cf >= remaining) return (i + remaining / cf) * 12;
+    remaining -= cf;
+  }
+  return Infinity;
+}
+
+/** IRR via Newton's method over an arbitrary series. */
+export function computeIrrFromSeries(startup, flows) {
+  const s0 = Number(startup) || 0;
+  const fl = (flows || []).map(Number);
+  if (s0 <= 0 || !fl.some(v => v > 0)) return 0;
+  let rate = 0.10;
+  for (let iter = 0; iter < 100; iter++) {
+    let npv = -s0, deriv = 0;
+    fl.forEach((cf, i) => {
+      const t = i + 1;
+      const disc = Math.pow(1 + rate, t);
+      npv += cf / disc;
+      deriv -= t * cf / (disc * (1 + rate));
+    });
+    if (Math.abs(npv) < 1e-7) break;
+    if (deriv === 0) break;
+    const next = rate - npv / deriv;
+    if (!Number.isFinite(next) || next <= -0.99) break;
+    if (Math.abs(next - rate) < 1e-9) { rate = next; break; }
+    rate = next;
+  }
+  return Math.max(-0.99, rate);
+}
+
 export function computeNpv(startup, annualCashFlow, years, rate = DISCOUNT_RATE) {
   let npv = -startup;
   for (let t = 1; t <= years; t++) {

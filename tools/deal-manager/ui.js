@@ -8,7 +8,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260526-phaseAs1';
-import * as calc from './calc.js?v=20260511-port11';
+import * as calc from './calc.js?v=20260610-straggler1';
 import * as api from './api.js?v=20260511-port2';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
@@ -1208,6 +1208,12 @@ function renderFinancials(el) {
   const overrideOpts = {
     ebitdaOverheadPct: Number(dealConfig.ebitdaOverheadPct),
     discountRate: Number(dealConfig.discountRate) / 100,
+    // 2026-06-10 (DM #10): thread the escalators so the headline NPV/IRR/
+    // payback run on the same escalated series the Multi-Year P&L shows.
+    escalation: {
+      revenue: Number(dealConfig.escalationRevenuePct),
+      cost: Number(dealConfig.escalationCostPct),
+    },
   };
   const fin = calc.computeDealFinancials(sites, activeDeal.contractTermYears || 5, overrideOpts);
   const plRows = calc.generateMultiYearPL(fin, activeDeal.contractTermYears || 5, {
