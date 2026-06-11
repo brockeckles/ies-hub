@@ -6,10 +6,75 @@
  */
 
 import * as calc from './calc.js?v=20260418-sK';
-import * as api from './api.js?v=20260418-sK';
+import * as api from './api.js?v=20260610-honest1';
 
 // Per-market signal cache: marketId → { news, alerts, fetchedAt }
 const marketSignalCache = new Map();
+
+// 2026-06-10 (assessment hub #4) — live-fundamentals overlay. The 20-market
+// catalog (coords/region/verticals/presence) remains curated, but wages,
+// labor scores, lease rates, and vacancy now overlay from the live
+// labor_markets / industrial_real_estate tables — the same source Command
+// Center reads — with explicit provenance. Fields with no live match stay
+// modeled and the banner says so.
+let _liveMeta = { matched: 0, asOf: null, loaded: false };
+
+const _LIVE_MSA_ALIASES = { njy: 'New York', dal: 'Dallas', lax: 'Los Angeles' };
+
+function _overlayLiveFundamentals(demoMarkets, labor, realEstate) {
+  const norm = (x) => String(x || '').toLowerCase().trim();
+  const tokens = (name) => norm(name).split(/[-,/]/).map(t => t.replace(/ metro| msa/g, '').trim()).filter(t => t.length >= 3);
+  const findRow = (rows, key, m) => {
+    const alias = _LIVE_MSA_ALIASES[m.id];
+    if (alias) {
+      const hit = rows.find(r => norm(r[key]) === norm(alias));
+      if (hit) return hit;
+    }
+    const toks = tokens(m.name);
+    return rows.find(r => {
+      const rn = norm(r[key]);
+      return rn && toks.some(t => rn.includes(t) || t.includes(rn));
+    });
+  };
+  let matched = 0; let asOf = null;
+  const out = demoMarkets.map(m => {
+    const lr = findRow(labor, 'msa', m);
+    const rr = findRow(realEstate, 'market', m);
+    if (!lr && !rr) return { ...m, _live: false };
+    matched++;
+    const live = { ...m, _live: true };
+    if (lr) {
+      const w = parseFloat(lr.avg_warehouse_wage);
+      if (w > 0) live.avgWage = w;
+      const sc = parseInt(lr.availability_score, 10);
+      if (sc > 0) live.laborScore = sc;
+      if (lr.as_of_date && (!asOf || lr.as_of_date > asOf)) asOf = lr.as_of_date;
+    }
+    if (rr) {
+      const rate = parseFloat(rr.lease_rate_psf);
+      if (rate > 0) live.warehouseRate = rate;
+      const vac = parseFloat(rr.vacancy_rate);
+      if (Number.isFinite(vac) && vac >= 0) live.availabilityPct = vac;
+    }
+    return live;
+  });
+  return { markets: out, matched, asOf };
+}
+
+async function _loadLiveFundamentals() {
+  try {
+    const { labor, realEstate } = await api.fetchMarketFundamentals();
+    if (!rootEl) return; // unmounted while fetching
+    if (!labor.length && !realEstate.length) { _liveMeta = { matched: 0, asOf: null, loaded: true }; return; }
+    const res = _overlayLiveFundamentals(markets, labor, realEstate);
+    markets = res.markets;
+    if (selectedMarket) selectedMarket = markets.find(m => m.id === selectedMarket.id) || selectedMarket;
+    _liveMeta = { matched: res.matched, asOf: res.asOf, loaded: true };
+    render(); // render() schedules map re-init itself
+  } catch (err) {
+    console.warn('[ME] live fundamentals overlay failed:', err);
+  }
+}
 
 let rootEl = null;
 let markets = [...calc.DEMO_MARKETS];
@@ -43,6 +108,10 @@ export function mount(el) {
   bindDelegatedEvents();
   // Load Leaflet if not loaded
   ensureLeafletLoaded();
+  // 2026-06-10: overlay live wages/lease-rates from the hub DB (async; UI
+  // renders immediately from the curated catalog, then refreshes).
+  _liveMeta = { matched: 0, asOf: null, loaded: false };
+  _loadLiveFundamentals();
 }
 
 export function unmount() {
@@ -255,6 +324,9 @@ function render() {
       </div>
 
       <!-- KPI strip -->
+      ${_liveMeta.loaded && _liveMeta.matched > 0
+        ? `<div style="display:inline-flex;align-items:center;gap:6px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;margin-bottom:8px;" title="Wages, labor scores, lease rates, and vacancy overlay live from the hub's labor_markets / industrial_real_estate tables (same source as Command Center). Freight index, unemployment, verticals, and deal counts remain modeled estimates.">● LIVE — ${_liveMeta.matched} of ${markets.length} markets carry live wage/real-estate data${_liveMeta.asOf ? ' (as of ' + _liveMeta.asOf + ')' : ''} · other fields modeled</div>`
+        : `<div style="display:inline-flex;align-items:center;gap:6px;background:#fef3c7;border:1px solid #fde68a;color:#92400e;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;margin-bottom:8px;" title="No live rows matched from labor_markets / industrial_real_estate — every figure on this page is a modeled estimate.">MODELED ESTIMATES — live market data ${_liveMeta.loaded ? 'unavailable' : 'loading…'}</div>`}
       <div class="hub-kpi-strip" style="margin-bottom: var(--sp-3);">
         ${meKpi('Markets Tracked', String(stats.totalMarkets), 'Count of MSAs in the filter set (of ' + markets.length + ' total tracked).')}
         ${meKpi('Avg Labor Score', calc.scoreBadge(stats.avgLaborScore), 'Composite labor-availability score (0-100) for filtered markets. Higher = more available workforce.')}

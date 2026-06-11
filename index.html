@@ -212,7 +212,7 @@
     import { showToast } from './shared/toast.js?v=20260419-uC';
     import { mountFeedbackFab } from './shared/feedback-fab.js?v=20260430-btn-cleanup';
     import './shared/unsaved-guard.js?v=20260513-port29';
-    import { tour } from './shared/tour.js?v=20260511-port17';
+    import { tour } from './shared/tour.js?v=20260610-honest1';
     import { analytics } from './shared/analytics.js?v=20260504-auth1';
     import { openMfaGate } from './shared/mfa-ui.js?v=20260512-port27';
     // Expose a couple of helpers for inline handlers + console debugging.
@@ -436,7 +436,7 @@
                 iconFill: '#20c997',
                 iconPath: '<circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 018 8c0 5.5-8 12-8 12s-8-6.5-8-12a8 8 0 018-8z"/>' },
               { key: 'network-opt', name: 'Network Optimization', category: 'Logistics',
-                desc: 'TL / LTL / Parcel freight mix optimizer. Exact GLPK solver with demand heatmap, flow polylines, sensitivity chart, and CSV rate-card upload. Compare k-DC scenarios.',
+                desc: 'TL / LTL / Parcel freight mix optimizer. Exhaustive + greedy network optimization (frequency-driven shipment costing) with demand heatmap, flow polylines, sensitivity chart, and CSV rate-card upload. Compare k-DC scenarios.',
                 iconFill: '#20c997',
                 iconPath: '<circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="18" r="3"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="18" y1="9" x2="18" y2="15"/><line x1="9" y1="18" x2="15" y2="18"/>' },
               { key: 'fleet-modeler', name: 'Fleet Modeler', category: 'Logistics',
@@ -575,8 +575,8 @@
 
       // Hub section routes (lazy loaded)
       const hubRoutes = {
-        'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260512-port27' },
-        'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260429-me-deadcode1' },
+        'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260610-honest1' },
+        'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260610-honest1' },
         'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260513-port31' },
         'admin': { title: 'Admin', path: './hub/admin/ui.js?v=20260513-port31' },
         'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260610-sec1' },

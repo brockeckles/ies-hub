@@ -52,12 +52,22 @@ export async function fetchDashboardData() {
 
       // Build KPIs from live data
       if (fuelRows.length) {
-        const latest = fuelRows.sort((a, b) => (b.date || b.created_at || '').localeCompare(a.date || a.created_at || ''))[0];
-        kpis = { ...kpis, dieselPrice: latest.price || latest.diesel_price || kpis.dieselPrice };
+        // 2026-06-10 (assessment hub #12): live fuel_prices columns are
+        // price_per_gallon + report_date — the old price/diesel_price/date
+        // reads matched NOTHING, so the headline silently stayed at the demo
+        // value while the sparkline beneath it was live. Prefer diesel rows.
+        const dieselRows = fuelRows.filter(r => !r.fuel_type || /diesel/i.test(r.fuel_type));
+        const pool = dieselRows.length ? dieselRows : fuelRows;
+        const latest = [...pool].sort((a, b) => (b.report_date || b.date || b.created_at || '').localeCompare(a.report_date || a.date || a.created_at || ''))[0];
+        const px = parseFloat(latest.price_per_gallon ?? latest.price ?? latest.diesel_price ?? 0);
+        if (px > 0) kpis = { ...kpis, dieselPrice: px };
       }
       if (laborRows.length) {
-        const avgWage = laborRows.reduce((s, r) => s + (r.avg_wage || r.avgWage || 0), 0) / laborRows.length;
-        const avgTightness = laborRows.reduce((s, r) => s + (r.tightness_index || r.laborScore || 0), 0) / laborRows.length;
+        // 2026-06-10: live labor_markets columns are avg_warehouse_wage +
+        // availability_score — prior reads matched nothing (demo fallback
+        // under a 'connected' banner).
+        const avgWage = laborRows.reduce((s, r) => s + parseFloat(r.avg_warehouse_wage ?? r.avg_wage ?? r.avgWage ?? 0), 0) / laborRows.length;
+        const avgTightness = laborRows.reduce((s, r) => s + parseFloat(r.availability_score ?? r.tightness_index ?? r.laborScore ?? 0), 0) / laborRows.length;
         if (avgWage > 0) kpis = { ...kpis, avgWage };
         if (avgTightness > 0) kpis = { ...kpis, laborTightness: avgTightness };
       }
@@ -259,7 +269,7 @@ function buildKpiSparks(src) {
   if (src.labor?.length) {
     // Average across markets for today; generate a gently rising 12-point
     // series ending at that number.
-    const latest = src.labor.reduce((s, r) => s + parseFloat(r.avg_wage || r.avgWage || 0), 0) / src.labor.length;
+    const latest = src.labor.reduce((s, r) => s + parseFloat(r.avg_warehouse_wage ?? r.avg_wage ?? r.avgWage ?? 0), 0) / src.labor.length; // 2026-06-10: live column name
     if (latest > 0) {
       out.wage = Array.from({ length: 12 }, (_, i) => +(latest * (0.96 + i * 0.0036)).toFixed(2));
     } else {

@@ -8,7 +8,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260512-port27';
+import * as api from './api.js?v=20260610-honest1';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -96,7 +96,7 @@ function render() {
       <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px;">
         ${vitalSignTile('Diesel Price', '$' + d.kpis.dieselPrice.toFixed(2), '/gal', d.kpis.dieselTrend, '#dc2626', d.kpis.dieselChange, d.sparks?.diesel, 'marketmap?series=diesel', '26-week range')}
         ${vitalSignTile('Warehouse Wage', '$' + d.kpis.avgWage.toFixed(2), '/hr', d.kpis.wageTrend, '#7c3aed', d.kpis.wageChange, d.sparks?.wage, 'marketmap?series=wage', '12-month modeled')}
-        ${vitalSignTile('Warehouse Rate', '$' + (d.kpis.avgWarehouseRate || 0).toFixed(2), '/sf/yr', d.kpis.warehouseRateTrend || 'neutral', '#2563eb', d.kpis.warehouseRateChange || '—', d.sparks?.warehouseRate, 'marketmap?series=realestate', '8-quarter range')}
+        ${vitalSignTile('Warehouse Rate', '$' + (d.kpis.avgWarehouseRate || 0).toFixed(2), '/sf/yr', d.kpis.warehouseRateTrend || 'neutral', '#2563eb', d.kpis.warehouseRateChange || '—', d.sparks?.warehouseRate, 'marketmap?series=realestate', '8-quarter modeled')}
         ${vitalSignTile('Freight Index', d.kpis.freightIndex.toFixed(0), '', d.kpis.freightTrend, '#ea580c', d.kpis.freightChange, d.sparks?.freight, 'marketmap?series=freight', '26-week range')}
         ${vitalSignTile('Steel Index', '$' + Math.round(d.kpis.steelPrice).toLocaleString(), (d.kpis.steelUnit || '/ton').replace('$/', '/'), d.kpis.steelTrend, '#0891b2', d.kpis.steelChange, d.sparks?.steel, 'marketmap?series=steel', '26-week CRU HRC')}
         ${vitalSignTile('RFP Signals', String(d.kpis.rfpSignalCount || 0), 'active', d.kpis.rfpSignalTrend || 'neutral', '#16a34a', d.kpis.rfpSignalChange || '—', d.sparks?.rfp, 'marketmap?series=rfp', '12-week cumulative')}
@@ -523,7 +523,10 @@ function labelForIntelTab(k) {
  */
 function renderIntelFeed(items, fallbackActivity) {
   if (!items || !items.length) {
-    return (fallbackActivity || []).map(a => activityItem(a.title, a.description, a.time, a.color)).join('');
+    // 2026-06-10 (assessment hub #11): the fallback stream is curated sample
+    // content — label it so it can't be mistaken for live activity.
+    return `<div style="display:inline-flex;align-items:center;gap:6px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;margin-bottom:8px;">SAMPLE DATA — no live intelligence yet</div>`
+      + (fallbackActivity || []).map(a => activityItem(a.title, a.description, a.time, a.color)).join('');
   }
   // Bare-domain guard — ingest pipeline sometimes stores the publisher home
   // page when it can't resolve the article URL. Only treat real article

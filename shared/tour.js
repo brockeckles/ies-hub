@@ -91,7 +91,7 @@ const TOURS = {
     { route: 'designtools/network-opt', selector: '.netopt-map', placement: 'right', title: 'Network map',
       body: 'Leaflet map with facility pins, demand heatmap overlay, flow polylines (color-coded by mode), and service zone circles (SLA radii).' },
     { selector: '.netopt-solver', placement: 'bottom', title: 'Exact solver',
-      body: 'GLPK.js solves the TL/LTL/Parcel mix for the given facility set. Elbow chart suggests optimal DC count.' },
+      body: 'Exhaustive enumeration + greedy heuristics evaluate the TL/LTL/Parcel mix per lane (frequency-driven shipments). Elbow chart suggests optimal DC count.' },
   ],
   // 8. MOST Standards
   most: [

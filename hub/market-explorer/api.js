@@ -58,3 +58,26 @@ export async function fetchMarketSignals(market) {
 function escapeIlike(s) {
   return String(s).replace(/[%_,]/g, ''); // strip special chars to avoid breaking the filter
 }
+
+/**
+ * 2026-06-10 (assessment hub #4): Market Explorer presented 20 hardcoded
+ * demo markets as live market intelligence while Command Center queried the
+ * same tables live — same hub, two different wage numbers for one market.
+ * This fetches the live fundamentals (labor_markets keyed by msa,
+ * industrial_real_estate keyed by market) so the UI can overlay them onto
+ * the demo catalog with explicit provenance.
+ * @returns {Promise<{ labor: any[], realEstate: any[] }>}
+ */
+export async function fetchMarketFundamentals() {
+  try {
+    const [labor, realEstate] = await Promise.all([
+      db.fetchAll('labor_markets').catch(() => []),
+      db.fetchAll('industrial_real_estate').catch(() => []),
+    ]);
+    return { labor: labor || [], realEstate: realEstate || [] };
+  } catch (err) {
+    console.warn('[ME] fetchMarketFundamentals failed:', err);
+    return { labor: [], realEstate: [] };
+  }
+}
+
