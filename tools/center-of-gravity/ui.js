@@ -1089,6 +1089,16 @@ function renderContent() {
   const el = rootEl?.querySelector('#cog-content');
   if (!el) return;
 
+  // 2026-06-11 (Brock live report #2): the C1/C2 center badges + locked-city
+  // chips are position:fixed BODY-level overlays (mapfix5 design — they
+  // bypass all container clipping on purpose). The 2026-06-10 fix tore them
+  // down on unmount()/renderLanding(), but intra-tool navigation (Inputs ↔
+  // Parameters ↔ Run sub-tabs) only swaps #cog-content — the overlays kept
+  // floating over the new section at their last viewport coordinates.
+  // Wipe them on EVERY content dispatch; the map path recreates them via
+  // initCogMap (which self-cleans first, so the double-remove is harmless).
+  _cleanupCogBodyOverlays();
+
   // 2026-04-27 EVE2 (COG-SCOPE-1/2/3): phase-driven dispatch. Inputs is the
   // pure points surface; Parameters holds Analysis Config + Candidate
   // Facilities (lifted off the old Demand Points tab); Run hosts Numbers /
