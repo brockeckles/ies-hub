@@ -7,7 +7,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260526-phaseAs1';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260610-life1';
 import * as calc from './calc.js?v=20260610-straggler1';
 import * as api from './api.js?v=20260511-port2';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';

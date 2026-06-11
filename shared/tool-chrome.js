@@ -104,6 +104,9 @@ function _actionButtonHtml(a) {
  * rootEl.innerHTML. Includes top ribbon, sidebar drawer, content area
  * placeholder, AND the chrome stylesheet.
  */
+// 2026-06-10: removes the previously-bound Cmd+Enter document listener (see bindToolChromeEvents).
+let _tcRemovePrevShortcut = null;
+
 export function renderToolChrome(opts) {
   const {
     toolKey = 'tool',
@@ -315,6 +318,11 @@ export function bindToolChromeEvents(rootEl, handlers) {
   });
 
   if (handlers.onPrimaryShortcut) {
+    // 2026-06-10 (assessment shared #9): every tool mount added a document
+    // keydown listener that was never removed — unbounded accumulation over
+    // a session of tool switching (each guarded by document.contains, so
+    // correct but wasteful). One live handler at a time now.
+    if (typeof _tcRemovePrevShortcut === 'function') _tcRemovePrevShortcut();
     const onKey = e => {
       if (!(e.key === 'Enter' && (e.metaKey || e.ctrlKey))) return;
       if (!document.contains(rootEl)) return;
@@ -325,6 +333,7 @@ export function bindToolChromeEvents(rootEl, handlers) {
     };
     document.addEventListener('keydown', onKey);
     rootEl.__tcShortcutHandler = onKey;
+    _tcRemovePrevShortcut = () => document.removeEventListener('keydown', onKey);
   }
 }
 

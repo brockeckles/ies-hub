@@ -12,7 +12,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260526-mfalift1';
-import * as calc from './calc.js?v=20260610-bucketfix1';
+import * as calc from './calc.js?v=20260610-life1';
 import * as api from './api.js?v=20260528-cogwriteback1';
 import * as scenarios from './calc.scenarios.js?v=20260610-params1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
@@ -26,7 +26,7 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260430-hours-first';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260512-slideover3';
-import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260526-phaseAs1';
+import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260610-life1';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 import {
@@ -4247,7 +4247,7 @@ function renderShifts() {
         <input class="hub-input hub-num cm-currency-input" type="number" step="1000" min="0" value="${p.annual_salary || 0}" data-array="shifts.positions" data-idx="${i}" data-field="annual_salary" data-type="number" ${!p.is_salaried ? 'disabled title="Only applies when Salaried is checked"' : ''} />
       </td>
       <td><input class="hub-input hub-num" type="number" step="0.25" min="0" max="100" value="${p.bonus_pct ?? ''}" placeholder="${s.bonusPct ?? 5}" data-array="shifts.positions" data-idx="${i}" data-field="bonus_pct" data-type="number" title="Leave blank to inherit global bonus %" /></td>
-      <td><input class="hub-input hub-num" type="number" step="0.25" min="0" max="100" value="${p.benefit_load_pct ?? ''}" placeholder="${(lc.defaultBurdenPct ?? 32).toFixed(1)}" data-array="shifts.positions" data-idx="${i}" data-field="benefit_load_pct" data-type="number" title="Per-position Benefit Load %. Blank = inherit global total from buckets above. Salaried roles often have higher load (health + retirement); hourly lower." /></td>
+      <td><input class="hub-input hub-num" type="number" step="0.25" min="0" max="100" value="${p.benefit_load_pct ?? ''}" placeholder="${(lc.defaultBurdenPct ?? calc.DEFAULT_WAGE_LOAD_PCT).toFixed(1)}" data-array="shifts.positions" data-idx="${i}" data-field="benefit_load_pct" data-type="number" title="Per-position Benefit Load %. Blank = inherit global total from buckets above. Salaried roles often have higher load (health + retirement); hourly lower." /></td>
       <td>
         <button type="button"
                 class="cm-pos-note-btn${hasNote ? ' cm-pos-note-btn--filled' : ' cm-pos-note-btn--empty'}${isExpanded ? ' cm-pos-note-btn--open' : ''}"
@@ -5355,7 +5355,7 @@ function renderMonthlyLaborViewCard() {
  */
 function renderLaborFactorsBanner(lc, shifts) {
   const s = shifts || {};
-  const benefitLoad = lc?.defaultBurdenPct ?? 32;
+  const benefitLoad = lc?.defaultBurdenPct ?? calc.DEFAULT_WAGE_LOAD_PCT;
   const ot          = lc?.overtimePct      ?? 5;
   const bonus       = s.bonusPct           ?? 5;
   const turnover    = lc?.turnoverPct      ?? 45;

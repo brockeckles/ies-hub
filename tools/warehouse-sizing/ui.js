@@ -9,7 +9,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260526-phaseAs1';
+import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260610-life1';
 import * as calc from './calc.js?v=20260610-wscrec1';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
@@ -113,6 +113,9 @@ let _seededFromCm = false;
  * Mount the Warehouse Sizing Calculator.
  * @param {HTMLElement} el
  */
+// 2026-06-10: unsubscriber for our cm:push-to-wsc bus handler (see unmount).
+let _offCmPush = null;
+
 export async function mount(el, opts = {}) {
   rootEl = el;
   // 2026-05-12 — `opts.embed` is set by shared/tool-slideover.js to
@@ -133,7 +136,7 @@ export async function mount(el, opts = {}) {
 
   // Listen for CM → WSC push — when CM asks to open a specific scenario,
   // jump straight to the editor with that config loaded.
-  bus.on('cm:push-to-wsc', async (data) => {
+  _offCmPush = bus.on('cm:push-to-wsc', async (data) => {
     viewMode = 'editor';
     // The earlier implementation assumed the editor shell already existed;
     // when this listener fires during a CM→WSC "Size with Calculator" click,
@@ -278,7 +281,9 @@ function openEditor(savedRow) {
  * Cleanup on unmount.
  */
 export function unmount() {
-  bus.clear('cm:push-to-wsc');
+  // 2026-06-10 (assessment WSC #8): bus.clear() nuked ALL subscribers to the
+  // event globally; unsubscribe only our own handler.
+  if (typeof _offCmPush === 'function') { _offCmPush(); _offCmPush = null; }
   disposeScene3d();
   rootEl = null;
   _embedOpts = {};

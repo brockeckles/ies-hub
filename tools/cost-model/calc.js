@@ -418,7 +418,7 @@ export function wageLoadFracForLine(line, year, opts = {}) {
     if (Number.isFinite(v) && v >= 0) return v / 100;
   }
   // Year-schedule
-  return wageLoadForYear(opts.wageLoadByYear, year, opts.defaultWageLoadFrac ?? 0.30);
+  return wageLoadForYear(opts.wageLoadByYear, year, opts.defaultWageLoadFrac ?? (DEFAULT_WAGE_LOAD_PCT / 100));
 }
 
 // ============================================================
@@ -470,7 +470,7 @@ export function fullyLoadedRate(line, opts = {}) {
   const rate = effectiveHourlyRate(line);
   const wageLoadFrac = wageLoadFracForLine(line, opts.year ?? 1, {
     wageLoadByYear: opts.wageLoadByYear,
-    defaultWageLoadFrac: opts.benefitLoadFallback ?? 0.30,
+    defaultWageLoadFrac: opts.benefitLoadFallback ?? (DEFAULT_WAGE_LOAD_PCT / 100),
   });
   const benefitsPerHr = line.benefits_per_hour || 0;
   return rate * (1 + wageLoadFrac) + benefitsPerHr;
@@ -497,7 +497,7 @@ export function directLineAnnual(line, opts = {}) {
   const year = opts.year ?? 1;
   const wageLoadFrac = wageLoadFracForLine(line, year, {
     wageLoadByYear: opts.wageLoadByYear,
-    defaultWageLoadFrac: opts.benefitLoadFallback ?? 0.30,
+    defaultWageLoadFrac: opts.benefitLoadFallback ?? (DEFAULT_WAGE_LOAD_PCT / 100),
   });
   // OT only applies to hourly-nonexempt lines. pay_type default 'hourly'.
   const otEligible = (line.pay_type || 'hourly') === 'hourly';
@@ -549,7 +549,7 @@ export function directLineAnnualSimple(line, costing) {
   const c = costing || {};
   const wageLoadFrac = wageLoadFracForLine(line, c.year ?? 1, {
     wageLoadByYear: c.wageLoadByYear,
-    defaultWageLoadFrac: (c.defaultBurdenPct ?? 30) / 100,
+    defaultWageLoadFrac: (c.defaultBurdenPct ?? DEFAULT_WAGE_LOAD_PCT) / 100,
   });
   return hours * rate * (1 + wageLoadFrac);
 }
@@ -586,7 +586,7 @@ export function indirectLineAnnual(line, opts) {
   const year = opts.year ?? 1;
   const wageLoadFrac = wageLoadFracForLine(line, year, {
     wageLoadByYear: opts.wageLoadByYear,
-    defaultWageLoadFrac: opts.benefitLoadFallback ?? 0.30,
+    defaultWageLoadFrac: opts.benefitLoadFallback ?? (DEFAULT_WAGE_LOAD_PCT / 100),
   });
   const bonusMult = 1 + (opts.bonusPct || 0);
   const otEligible = (line.pay_type || 'hourly') === 'hourly';
@@ -620,7 +620,7 @@ export function indirectLineAnnualSimple(line, opHours, costing) {
   const c = costing || {};
   const wageLoadFrac = wageLoadFracForLine(line, c.year ?? 1, {
     wageLoadByYear: c.wageLoadByYear,
-    defaultWageLoadFrac: (c.defaultBurdenPct ?? 30) / 100,
+    defaultWageLoadFrac: (c.defaultBurdenPct ?? DEFAULT_WAGE_LOAD_PCT) / 100,
   });
   // Baseline year-round cost
   const baseline = hc * opHours * rate * (1 + wageLoadFrac);
@@ -656,7 +656,7 @@ export function indirectLineAnnualBreakdown(line, opHours, costing) {
   const c = costing || {};
   const wageLoadFrac = wageLoadFracForLine(line, c.year ?? 1, {
     wageLoadByYear: c.wageLoadByYear,
-    defaultWageLoadFrac: (c.defaultBurdenPct ?? 30) / 100,
+    defaultWageLoadFrac: (c.defaultBurdenPct ?? DEFAULT_WAGE_LOAD_PCT) / 100,
   });
   const baseline = hc * opHours * rate * (1 + wageLoadFrac);
   let seasonal = 0;
@@ -697,6 +697,20 @@ export function fte(line, opHours) {
  * @param {number} [opts.benefitLoadFallback]
  * @returns {number}
  */
+
+/**
+ * 2026-06-10 (assessment Phase 2/3 wage-load unification): the SINGLE default
+ * employer wage-load (burden) percentage used wherever no per-line burden_pct
+ * and no model-level laborCosting.defaultBurdenPct is configured. Audit found
+ * FOUR different defaults across surfaces (engine 30 / labor table 32 /
+ * monthly per-line 35 / buckets 0 — buckets fixed 2026-06-10 via
+ * directLineAnnual routing). Every fallback now references this constant.
+ * NOTE: resolveCalcHeuristics' benefit_load_pct heuristic (default 35) is the
+ * MONTHLY engine's knob and part of the parked legacy-vs-monthly Y1
+ * reconciliation — deliberately NOT collapsed into this constant here.
+ */
+export const DEFAULT_WAGE_LOAD_PCT = 30;
+
 export function totalLaborCost(directLines, indirectLines, opts) {
   let cost = 0;
   for (const line of directLines) {

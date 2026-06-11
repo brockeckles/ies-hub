@@ -51,11 +51,27 @@ export function createScene(container, opts = {}) {
   scene.add(directional);
 
   // Animation loop helper
+  // 2026-06-10 (assessment shared #10): the loop had no cancellation path —
+  // re-mounts stacked never-ending rAF loops each holding a WebGL context
+  // (the classic '3D gets sluggish after view switches' source). The loop
+  // now self-cancels once its canvas has been connected and later removed
+  // from the DOM, and tears down its own resize listener when it does.
   let _animateFn = null;
+  let _wasConnected = false;
+  let _stopped = false;
   function loop() {
+    if (_stopped) return;
+    const el = renderer.domElement;
+    if (el.isConnected) _wasConnected = true;
+    else if (_wasConnected) { _selfDispose(); return; }
     requestAnimationFrame(loop);
     if (_animateFn) _animateFn();
     renderer.render(scene, camera);
+  }
+  function _selfDispose() {
+    _stopped = true;
+    window.removeEventListener('resize', onResize);
+    try { renderer.dispose(); } catch {}
   }
   loop();
 
@@ -75,6 +91,7 @@ export function createScene(container, opts = {}) {
     renderer,
     animate(fn) { _animateFn = fn; },
     dispose() {
+      _stopped = true; // 2026-06-10: also halt the rAF loop on explicit dispose
       window.removeEventListener('resize', onResize);
       renderer.dispose();
       renderer.domElement.remove();
