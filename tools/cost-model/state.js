@@ -42,6 +42,9 @@
  * @property {Object|null} currentScenarioSnapshots
  * @property {Object} heuristicOverrides
  * @property {Object|null} currentMarketLaborProfile
+ * @property {boolean} isDirty
+ * @property {string|null} lastSavedAt
+ * @property {string|null} lastSavedBy
  */
 
 /** @type {CmState} */
@@ -54,6 +57,12 @@ const _state = {
   currentScenarioSnapshots: null,
   heuristicOverrides: {},
   currentMarketLaborProfile: null,
+  // --- dirty / save-chip state (extracted from ui.js 2026-06-11, the
+  // assessment's last Low-tier leftover). ui.js keeps its _markCmDirty
+  // wrapper for the chrome-refresh side effect; the STATE lives here.
+  isDirty: false,
+  lastSavedAt: null,
+  lastSavedBy: null,
 };
 
 /**
@@ -97,6 +106,59 @@ export function getHeuristicOverrides() { return _state.heuristicOverrides; }
 export function getCurrentMarketLaborProfile() { return _state.currentMarketLaborProfile; }
 
 // ============================================================
+// Dirty / save-chip state (2026-06-11 extraction)
+// ============================================================
+
+/**
+ * Flip isDirty true. Returns true ONLY on the clean→dirty transition so
+ * callers (ui.js's _markCmDirty) can gate their save-chip refresh on it —
+ * idempotent on repeat calls, mirroring the WSC `_markDirty` pattern.
+ * @returns {boolean} true if this call transitioned clean→dirty
+ */
+export function markDirty() {
+  if (_state.isDirty) return false;
+  _state.isDirty = true;
+  return true;
+}
+
+/** Mark everything persisted (after save / load / new-model). */
+export function resetDirty() { _state.isDirty = false; }
+
+export function getIsDirty() { return _state.isDirty; }
+
+/**
+ * Record last-save audit metadata for the toolbar chip.
+ * @param {string|null} at — ISO timestamp (or the loaded model's updated_at)
+ * @param {string|null} by — email of the saving user, null when unknown
+ */
+export function setSavedMeta(at, by) {
+  _state.lastSavedAt = at || null;
+  _state.lastSavedBy = by || null;
+}
+
+export function getLastSavedAt() { return _state.lastSavedAt; }
+export function getLastSavedBy() { return _state.lastSavedBy; }
+
+/**
+ * CM-SAVE-1 — Format the last-saved state for the toolbar chip.
+ * Pure (reads only this module's state); returns '' when never saved.
+ */
+export function formatSavedWhen() {
+  if (!_state.lastSavedAt) return '';
+  try {
+    const d = new Date(_state.lastSavedAt);
+    if (Number.isNaN(d.getTime())) return '';
+    const today = new Date();
+    const sameDay = d.toDateString() === today.toDateString();
+    const when = sameDay
+      ? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+      : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const who = _state.lastSavedBy ? ` · ${_state.lastSavedBy.split('@')[0]}` : '';
+    return `Saved ${when}${who}`;
+  } catch { return 'Saved'; }
+}
+
+// ============================================================
 // resetAll — wipe to defaults. Caller passes the initial model.
 // ============================================================
 
@@ -119,4 +181,7 @@ export function resetAll(initialModel = null) {
   _state.currentScenarioSnapshots = null;
   _state.heuristicOverrides = {};
   _state.currentMarketLaborProfile = null;
+  _state.isDirty = false;
+  _state.lastSavedAt = null;
+  _state.lastSavedBy = null;
 }

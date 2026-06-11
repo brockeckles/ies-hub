@@ -53,7 +53,16 @@ import {
   setCurrentScenarioSnapshots,
   setHeuristicOverrides,
   setCurrentMarketLaborProfile,
-} from './state.js?v=20260512-port26';
+  // 2026-06-11 dirty-state extraction — state lives in state.js; ui.js
+  // keeps the _markCmDirty wrapper for the chrome-refresh side effect.
+  markDirty as _stateMarkDirty,
+  resetDirty,
+  getIsDirty,
+  setSavedMeta,
+  getLastSavedAt,
+  getLastSavedBy,
+  formatSavedWhen,
+} from './state.js?v=20260611-dirty1';
 import {
   ofpEnsureAreaRegistry as _ofpEnsureAreaRegistry,
   ofpRegistry as _ofpRegistry,
@@ -78,7 +87,7 @@ import {
   ofpClassifyAreaFromLine as _classifyAreaFromLine,
   ofpClassifySubAreaFromLine as _classifySubAreaFromLine,
   ofpFlowColor as _flowColor,
-} from './operational-flow-registry.js?v=20260512-port26';
+} from './operational-flow-registry.js?v=20260611-dirty1';
 import {
   renderFlowGroupsForEntries as _renderFlowGroupsForEntries,
   renderOfpSubArea as _renderOfpSubArea,
@@ -87,7 +96,7 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260611-cm1';
+} from './operational-flow-render.js?v=20260611-dirty1';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
 import { computeHeaderKpis } from './header-kpis.js?v=20260611-cm1';
@@ -167,9 +176,6 @@ let activeImplPhase = 'plan';
 /** @type {HTMLElement|null} */
 let rootEl = null;
 
-/** @type {boolean} */
-let isDirty = false;
-
 /**
  * Flip isDirty true and refresh the save chip ONLY on the clean→dirty
  * transition. Mirrors the WSC `_markDirty` pattern (2026-05-13 fix):
@@ -183,18 +189,13 @@ let isDirty = false;
  *    blocks the underlying state mutation.
  */
 function _markCmDirty() {
-  if (isDirty) return;
-  isDirty = true;
+  if (!_stateMarkDirty()) return; // already dirty — idempotent (state.js owns the flag)
   if (rootEl && viewMode === 'editor') {
     try { refreshToolChromeActions(rootEl, _buildCmChromeOpts()); } catch (_) {}
   }
 }
 
 
-/** @type {string|null} ISO timestamp of the last successful save, OR the loaded model's updated_at. */
-let lastSavedAt = null;
-/** @type {string|null} Email of the user who performed the last save in this session. Null on fresh load. */
-let lastSavedBy = null;
 
 /**
  * CM-PROV-1 — Cell-level formula inspector context.
@@ -632,7 +633,7 @@ export async function mount(el) {
         sessionStorage.removeItem('wsc_pending_push');
         // Switch to editor mode first, then apply
         model = setModel(createEmptyModel());
-        isDirty = false;
+        resetDirty();
         userHasInteracted = setUserHasInteracted(false);
         activeSection = 'facility';
         viewMode = 'editor';
@@ -675,7 +676,7 @@ export async function mount(el) {
         // Make sure we're on the editor, not the landing page
         if (viewMode !== 'editor') {
           model = setModel(createEmptyModel());
-          isDirty = false;
+          resetDirty();
           userHasInteracted = setUserHasInteracted(false);
           viewMode = 'editor';
         }
@@ -697,7 +698,7 @@ export async function mount(el) {
         sessionStorage.removeItem('netopt_pending_cm_push');
         if (viewMode !== 'editor') {
           model = setModel(createEmptyModel());
-          isDirty = false;
+          resetDirty();
           userHasInteracted = setUserHasInteracted(false);
           viewMode = 'editor';
         }
@@ -734,9 +735,8 @@ export async function mount(el) {
             if (full.market_id) model.projectDetails.market = full.market_id;
             if (full.deal_deals_id) model.projectDetails.dealId = full.deal_deals_id;
           }
-          lastSavedAt = full.updated_at || full.created_at || null;
-          lastSavedBy = null;
-          isDirty = false;
+          setSavedMeta(full.updated_at || full.created_at || null, null);
+          resetDirty();
           userHasInteracted = setUserHasInteracted(false);
           viewMode = 'editor';
           activeSection = 'projectDetails';
@@ -774,7 +774,7 @@ export async function mount(el) {
         sessionStorage.removeItem('cm_pending_new_for_deal');
         if (viewMode !== 'editor') {
           model = setModel(createEmptyModel());
-          isDirty = false;
+          resetDirty();
           userHasInteracted = setUserHasInteracted(false);
           viewMode = 'editor';
           activeSection = 'projectDetails';
@@ -821,8 +821,7 @@ async function loadModelByCmId(id) {
     if (!full) { showToast('Model not found — it may have been deleted.', 'error'); return; }
     if (full.project_data) {
       model = setModel({ ...createEmptyModel(), ...full.project_data, id: full.id });
-      lastSavedAt = full.updated_at || full.created_at || null;
-      lastSavedBy = null;
+      setSavedMeta(full.updated_at || full.created_at || null, null);
       if (!model.projectDetails) model.projectDetails = createEmptyModel().projectDetails;
       const pdHydrate = model.projectDetails;
       if (!pdHydrate.environment && full.environment_type) pdHydrate.environment = String(full.environment_type).toLowerCase();
@@ -871,8 +870,7 @@ async function loadModelByCmId(id) {
       try { window.__cmLoadedModel = model; } catch (_) {}
     } else {
       model = setModel(reconstructModelFromFlatRow(full));
-      lastSavedAt = full.updated_at || full.created_at || null;
-      lastSavedBy = null;
+      setSavedMeta(full.updated_at || full.created_at || null, null);
       showToast('Legacy model loaded from summary fields. Save to upgrade to the new format.', 'info');
     }
     (model.laborLines || []).forEach(l => {
@@ -883,7 +881,7 @@ async function loadModelByCmId(id) {
     migrateLaborLinesToPositions(model);
     api.backfillEquipmentLineTypes(model);
     api.backfillChannelsFromLegacy(model);
-    isDirty = false;
+    resetDirty();
     userHasInteracted = setUserHasInteracted(false);
     activeSection = 'setup';
     viewMode = 'editor';
@@ -941,7 +939,7 @@ function wireLandingEvents() {
   if (!rootEl) return;
   rootEl.querySelector('#cm-create-new')?.addEventListener('click', () => {
     model = setModel(createEmptyModel());
-    isDirty = false;
+    resetDirty();
     userHasInteracted = setUserHasInteracted(false);
     activeSection = 'setup';
     viewMode = 'editor';
@@ -1230,8 +1228,6 @@ export function unmount() {
   bus.clear('most:push-to-cm');
   bus.clear('netopt:push-to-cm');
   bus.clear('wsc:push-to-cm');
-  if (isDirty) {
-  }
   rootEl = null;
 }
 
@@ -1701,25 +1697,6 @@ function _buildDiscloseHTML(key) {
 // ============================================================
 // SHELL RENDERING
 // ============================================================
-
-/**
- * CM-SAVE-1 — Format the last-saved state for the toolbar chip.
- * Returns "—" when the model has never been saved (or is brand-new).
- */
-function formatSavedWhen() {
-  if (!lastSavedAt) return '';
-  try {
-    const d = new Date(lastSavedAt);
-    if (Number.isNaN(d.getTime())) return '';
-    const today = new Date();
-    const sameDay = d.toDateString() === today.toDateString();
-    const when = sameDay
-      ? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-      : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    const who = lastSavedBy ? ` · ${lastSavedBy.split('@')[0]}` : '';
-    return `Saved ${when}${who}`;
-  } catch { return 'Saved'; }
-}
 
 /**
  * CM-SAVE-1 + EVE8 — Tri-state save chip (Draft / Modified / Saved).
@@ -2718,10 +2695,10 @@ function _buildCmChromeOpts() {
 
   const hasId = !!model?.id;
   const draft = !hasId;
-  const modified = hasId && !!isDirty;
+  const modified = hasId && getIsDirty();
   const stateName = draft ? 'draft' : (modified ? 'modified' : 'saved');
-  const stateTitle = lastSavedAt
-    ? `Last saved ${new Date(lastSavedAt).toLocaleString()}`
+  const stateTitle = getLastSavedAt()
+    ? `Last saved ${new Date(getLastSavedAt()).toLocaleString()}`
     : (draft ? 'Brand-new model — Save to capture an audit timestamp' : 'Save to capture the latest changes');
 
   const actions = [
@@ -8618,7 +8595,7 @@ function bindSectionEvents(section, container) {
         if (model?.id) {
           try {
             await api.saveHeuristicOverrides(model.id, heuristicOverrides);
-            isDirty = false;
+            resetDirty();
           } catch (err) {
             console.warn('[CM] saveHeuristicOverrides failed:', err);
           }
@@ -8689,7 +8666,7 @@ function bindSectionEvents(section, container) {
           if (model?.id) {
             try {
               await api.savePlanningRatioOverrides(model.id, planningRatioOverrides);
-              isDirty = false;
+              resetDirty();
             } catch (err) {
               console.warn('[CM] savePlanningRatioOverrides failed:', err);
             }
@@ -10752,7 +10729,7 @@ async function handleAction(action, idx, btn) {
       const targetId = Number(btn?.dataset?.targetId);
       if (!targetId || targetId === model.id) return;
       // Warn if there are unsaved changes — they\'ll be discarded by the load.
-      if (isDirty) {
+      if (getIsDirty()) {
         const ok = await showConfirm('You have unsaved changes. Switch scenarios anyway? Unsaved edits will be lost.', { okLabel: 'Switch' });
         if (!ok) return;
       }
@@ -11626,12 +11603,11 @@ async function openEquipmentCatalog() {
 // ============================================================
 
 async function handleNew() {
-  if (isDirty && !(await showConfirm('You have unsaved changes. Start a new model?', { okLabel: 'Start new' }))) return;
+  if (getIsDirty() && !(await showConfirm('You have unsaved changes. Start a new model?', { okLabel: 'Start new' }))) return;
   model = setModel(createEmptyModel());
-  isDirty = false;
+  resetDirty();
   // CM-SAVE-1 — Reset save-state on a brand-new model.
-  lastSavedAt = null;
-  lastSavedBy = null;
+  setSavedMeta(null, null);
   refreshSaveStateChip();
   activeSection = 'setup';
   navigateSection('setup');
@@ -11645,10 +11621,11 @@ async function handleSave() {
       const saved = await api.createModel(model);
       model.id = saved.id;
     }
-    isDirty = false;
+    resetDirty();
     // CM-SAVE-1 — Capture audit metadata for the toolbar chip.
-    lastSavedAt = new Date().toISOString();
-    try { lastSavedBy = auth.getUser()?.email || lastSavedBy || null; } catch { /* ignore — chip falls back to time-only */ }
+    let _savedBy = getLastSavedBy();
+    try { _savedBy = auth.getUser()?.email || _savedBy || null; } catch { /* ignore — chip falls back to time-only */ }
+    setSavedMeta(new Date().toISOString(), _savedBy);
     refreshSaveStateChip();
     bus.emit('cm:model-saved', { id: model.id });
 
@@ -11839,7 +11816,7 @@ async function handleLoad() {
   // The Load button now returns to the landing page where models are shown as cards.
   // Refreshes the list so any newly-saved model appears.
   try { savedModels = await api.listModels(); } catch {}
-  if (isDirty && !(await showConfirm('You have unsaved changes. Leave this model?', { okLabel: 'Leave' }))) return;
+  if (getIsDirty() && !(await showConfirm('You have unsaved changes. Leave this model?', { okLabel: 'Leave' }))) return;
   viewMode = 'landing';
   renderCurrentView();
 }
@@ -12075,7 +12052,7 @@ function handleWscPush(payload) {
   // with a fresh model first — otherwise navigateSection is a no-op.
   if (viewMode === 'landing') {
     model = setModel(createEmptyModel());
-    isDirty = false;
+    resetDirty();
     userHasInteracted = setUserHasInteracted(false);
     activeSection = 'facility';
     viewMode = 'editor';
@@ -12123,7 +12100,7 @@ function handleNetOptPush(payload) {
 
   if (viewMode === 'landing') {
     model = setModel(createEmptyModel());
-    isDirty = false;
+    resetDirty();
     userHasInteracted = setUserHasInteracted(false);
     viewMode = 'editor';
   }
