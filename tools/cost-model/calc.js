@@ -2710,6 +2710,39 @@ export function computeImplicationsImpact(params) {
 // VALIDATION
 // ============================================================
 
+// TI-candidate detection (gap-analysis items 10/13, 2026-06-11).
+// Asset Defaults Guidance: dock hardware, office/break-room build-out and
+// ELECTRONIC security (CCTV / access control / alarm) belong in TI — they
+// amortize through facility rent, not equipment capital/lease. PHYSICAL
+// security (fence, gate, guard shack) is legitimately Capital and excluded.
+const TI_CANDIDATE_PATTERNS = [
+  /dock\s*(leveler|seal|restraint|light|bumper|package|door)/i,
+  /build[\s-]?out/i,
+  /(office|break\s*room|breakroom)\s*(fit|finish|improvement)/i,
+  /cctv|access\s*control|(card|badge)\s*reader|burglar|alarm\s*(panel|system)?|motion\s*detector|security\s*camera/i,
+  /freezer\s*(room|build)|cold\s*storage\s*build|temp(erature)?[\s-]control/i,
+];
+const TI_CANDIDATE_EXCLUSIONS = /fence|fencing|\bgate\b|guard\s*(shack|booth|house)|hvls/i;
+
+/**
+ * True when a non-TI equipment line *looks like* Tenant Improvement scope
+ * and is probably misclassified as capital / lease / purchase. Lines already
+ * financed as 'ti' or 'service' never flag. Category 'Dock' or 'Office' is a
+ * strong signal on its own; otherwise the name must match a TI pattern.
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @returns {boolean}
+ */
+export function isTiCandidate(line) {
+  if (!line) return false;
+  const acqType = normalizeAcqType(line.acquisition_type);
+  if (acqType === 'ti' || acqType === 'service') return false;
+  const hay = `${line.equipment_name || ''} ${line.category || ''}`;
+  if (TI_CANDIDATE_EXCLUSIONS.test(hay)) return false;
+  const cat = (line.category || '').toLowerCase();
+  if (cat === 'dock' || cat === 'office') return true;
+  return TI_CANDIDATE_PATTERNS.some(re => re.test(hay));
+}
+
 /**
  * Validate a cost model and return warnings.
  * @param {import('./types.js?v=20260418-sK').CostModelData} model
@@ -2757,6 +2790,13 @@ export function validateModel(model, opts = {}) {
     const acqType = normalizeAcqType(line.acquisition_type);
     if ((acqType === 'capital' || acqType === 'ti') && (line.acquisition_cost || 0) <= 0) {
       warnings.push({ level: 'warning', area: 'equipment', message: `"${line.equipment_name}" is marked ${acqType === 'capital' ? 'Capital' : 'TI'} but has $0 acquisition cost — check the catalog for a default` });
+    }
+    // TI-candidate validator (2026-06-11): dock hardware / build-out /
+    // electronic security financed as capital or lease is the classic
+    // misclassification from the Asset Defaults Guidance audit — it inflates
+    // equipment capital/opex and skips the rent-amortization path.
+    if (isTiCandidate(line)) {
+      warnings.push({ level: 'warning', area: 'equipment', message: `"${line.equipment_name}" is financed as ${acqType === 'capital' ? 'Capital' : 'Lease'} but looks like Tenant Improvement scope (dock hardware / build-out / electronic security) — consider TI so it amortizes through facility rent per Asset Defaults Guidance` });
     }
   }
 
