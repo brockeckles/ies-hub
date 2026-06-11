@@ -1532,16 +1532,77 @@ export function facilityCostBreakdown(facility, facilityRate, utilityRate, opts 
 }
 
 /**
- * Convenience: compute annual TI amortization from equipment lines + contract term.
- * Returns 0 when there are no TI items or contract term isn't set.
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} equipmentLines
- * @param {number} contractYears
+ * Landlord TI allowance in dollars for a facility (TI Phase A, 2026-06-11).
+ * Explicit total wins when set (> 0); otherwise derived as allowance-PSF ×
+ * total sqft. Never negative. Accepts camelCase (jsonb model) or snake_case
+ * (normalized column) field names, matching the automationLevel precedent.
+ *
+ * Per TI Handling doc: a silent $0 allowance is on the "common mistakes"
+ * list — market default is ~$15–25/SF on a 5-yr industrial lease. The UI
+ * surfaces this hint; the engine just computes what it's given.
+ * @param {import('./types.js?v=20260418-sK').FacilityConfig} [facility]
  * @returns {number}
  */
-export function tiAmortAnnual(equipmentLines, contractYears) {
+export function tiAllowanceTotal(facility) {
+  if (!facility) return 0;
+  const explicit = Number(facility.tiAllowanceTotal ?? facility.landlord_ti_allowance_total);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  const psf  = Number(facility.tiAllowancePsf ?? facility.landlord_ti_allowance_psf) || 0;
+  const sqft = Number(facility.totalSqft) || 0;
+  return Math.max(0, psf * sqft);
+}
+
+/**
+ * Split the total TI outlay into landlord-funded vs provider-funded shares
+ * (TI Handling doc, Phase A — "the biggest accuracy gain"):
+ *   landlordFunded = min(total TI, allowance)
+ *   providerFunded = max(0, total TI − landlordFunded)
+ * Only the provider share amortizes into facility rent — the landlord share
+ * is the landlord's capital, already recovered through base rent.
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} equipmentLines
+ * @param {import('./types.js?v=20260418-sK').FacilityConfig} [facility]
+ * @returns {{ totalTi:number, allowanceTotal:number, landlordFunded:number, providerFunded:number }}
+ */
+export function tiNetProviderCost(equipmentLines, facility) {
+  const totalTi = totalEquipmentTiUpfront(equipmentLines || []);
+  const allowanceTotal = tiAllowanceTotal(facility);
+  const landlordFunded = Math.min(totalTi, allowanceTotal);
+  return { totalTi, allowanceTotal, landlordFunded, providerFunded: Math.max(0, totalTi - landlordFunded) };
+}
+
+/**
+ * Sum TI outlay by shell classification ('shell' = base-building scope,
+ * typically landlord-funded; 'non_shell' = provider scope: hazmat rooms,
+ * temp control, freezer build-out). Informational rollup — the funding
+ * split itself is allowance-driven via `tiNetProviderCost`. Lines without
+ * a ti_classification default to 'non_shell'.
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @param {('shell'|'non_shell')} classification
+ * @returns {number}
+ */
+export function totalEquipmentTiByClass(lines, classification) {
+  return (lines || []).reduce((s, line) => {
+    if (normalizeAcqType(line.acquisition_type) !== 'ti') return s;
+    const cls = line.ti_classification === 'shell' ? 'shell' : 'non_shell';
+    return cls === classification ? s + equipTotalAcq(line) : s;
+  }, 0);
+}
+
+/**
+ * Convenience: compute annual TI amortization from equipment lines + contract term.
+ * TI Phase A (2026-06-11): when `facility` is supplied, only the
+ * PROVIDER-FUNDED share (total TI − landlord allowance) amortizes.
+ * Omitting `facility` preserves the legacy behavior (full TI amortizes —
+ * equivalent to a $0 allowance). Returns 0 when nothing to amortize.
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} equipmentLines
+ * @param {number} contractYears
+ * @param {import('./types.js?v=20260418-sK').FacilityConfig} [facility]
+ * @returns {number}
+ */
+export function tiAmortAnnual(equipmentLines, contractYears, facility) {
   const y = Math.max(1, Number(contractYears) || 5);
-  const upfront = totalEquipmentTiUpfront(equipmentLines || []);
-  return upfront > 0 ? upfront / y : 0;
+  const { providerFunded } = tiNetProviderCost(equipmentLines || [], facility);
+  return providerFunded > 0 ? providerFunded / y : 0;
 }
 
 // ============================================================
@@ -1622,7 +1683,10 @@ export function computeSummary(params) {
 
   const laborCost = totalLaborCost(params.laborLines, params.indirectLaborLines, laborOpts);
   // Brock 2026-04-20 — TI upfront rolls into facility rent over the lease term.
-  const tiAmort = tiAmortAnnual(params.equipmentLines, params.contractYears);
+  // TI Phase A (2026-06-11): only the provider-funded share (total TI minus
+  // the landlord allowance on params.facility) amortizes into rent.
+  const tiSplit = tiNetProviderCost(params.equipmentLines, params.facility);
+  const tiAmort = tiAmortAnnual(params.equipmentLines, params.contractYears, params.facility);
   const facilityCost = totalFacilityCost(params.facility, params.facilityRate, params.utilityRate, { tiAmort });
   // Equipment seasonal uplift: when caller supplies the MLV (Monthly Labor
   // View output), each line's peak_markup_pct flows through via overflow
@@ -1687,7 +1751,12 @@ export function computeSummary(params) {
     // NOT folded into equipmentCapital / totalInvestment — TI rolls into
     // facility rent via `tiAmortAnnual`. Surfaced here so Summary can show it
     // as a distinct tile without reaching back into equipmentLines.
-    tiUpfront: totalEquipmentTiUpfront(params.equipmentLines),
+    tiUpfront: tiSplit.totalTi,
+    // TI Phase A split — landlord share is funded by the allowance and never
+    // amortizes; provider share drives tiAmortAnnual above.
+    tiLandlordFunded: tiSplit.landlordFunded,
+    tiProviderFunded: tiSplit.providerFunded,
+    tiAllowanceTotal: tiSplit.allowanceTotal,
     tiAmortAnnual: tiAmort,
   };
 }

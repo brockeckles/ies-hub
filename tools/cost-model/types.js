@@ -173,6 +173,8 @@
  * @property {number} [dockDoors]
  * @property {number} [opDaysPerYear] — operating calendar; shared across channels
  * @property {Object} [rateOverrides] — per-key overrides for facility cost calc
+ * @property {number} [tiAllowancePsf] — landlord TI allowance, $ per SF (TI Phase A 2026-06-11). Market ~$15–25/SF on 5-yr industrial.
+ * @property {number} [tiAllowanceTotal] — explicit total allowance $; when > 0 wins over PSF × sqft
  */
 
 // ---- Shifts (Section 5) ----
@@ -241,7 +243,8 @@
  *   Phase 2b+ to flag which months the rental is active. Derived from the MLV
  *   peak-vs-steady delta when auto-gen fills this.
  * @property {number} quantity
- * @property {'lease'|'purchase'|'service'} [acquisition_type]
+ * @property {('capital'|'lease'|'ti'|'service'|'purchase')} [acquisition_type] — 4-way financing taxonomy (Asset Defaults Guidance 2026-04-20); 'purchase' = legacy alias for capital
+ * @property {('shell'|'non_shell')} [ti_classification] — TI lines only (TI Phase A): shell = base-building scope (typically landlord), non_shell = provider scope (hazmat, temp control, freezer). Default non_shell.
  * @property {number} [monthly_cost] — lease/service monthly
  * @property {number} [acquisition_cost] — purchase unit cost
  * @property {number} [monthly_maintenance]

@@ -12,7 +12,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260526-mfalift1';
-import * as calc from './calc.js?v=20260611-cm1';
+import * as calc from './calc.js?v=20260611-tia1';
 import * as api from './api.js?v=20260528-cogwriteback1';
 import * as scenarios from './calc.scenarios.js?v=20260611-cm1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
@@ -96,11 +96,11 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260611-dirty1';
+} from './operational-flow-render.js?v=20260611-tia1';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260611-cm1';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260611-cm1';
+import { computeHeaderKpis } from './header-kpis.js?v=20260611-tia1';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260611-tia1';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -3964,7 +3964,9 @@ function renderFacility() {
     <!-- Design policy inputs — drive the Equipment auto-generator per
          Asset Defaults Guidance (2026-04-20). Automation level gates
          conveyor; security tier gates CCTV / access control / guard shack;
-         fenced perimeter adds physical fencing as capital. -->
+         fenced perimeter adds physical fencing as capital. TI Phase A
+         (2026-06-11): landlord TI allowance splits TI funding — only the
+         provider share amortizes into facility rent. -->
     <div class="hub-card mt-4">
       <div class="text-subtitle mb-3">Design Policy</div>
       <div class="cm-narrow-form" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
@@ -3986,6 +3988,16 @@ function renderFacility() {
           <label class="hub-field__label" title="Linear feet of perimeter fencing. If > 0, auto-adds Capital fencing at ~$52/LF.">Fenced Perimeter (LF)</label>
           <input class="hub-input" type="number" value="${f.fencedPerimeterLf || 0}" placeholder="0" step="100" data-field="facility.fencedPerimeterLf" data-type="number" data-field-commit="change" />
           <div class="hub-field__hint">0 = no fencing.</div>
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Landlord TI allowance in $ per SF — build-out dollars the landlord funds. Only provider-funded TI (total TI − allowance) amortizes into rent (TI Phase A). Market: ~$15–25/SF on a 5-yr industrial lease.">Landlord TI Allowance ($/SF)</label>
+          <input class="hub-input" type="number" value="${f.tiAllowancePsf || 0}" placeholder="0" step="1" data-field="facility.tiAllowancePsf" data-type="number" data-field-commit="change" />
+          <div class="hub-field__hint">Don&#39;t leave $0 silently — market is $15–25/SF (5-yr industrial).</div>
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Explicit total allowance in dollars. When set (> 0), wins over $/SF × sqft.">TI Allowance Override ($)</label>
+          <input class="hub-input" type="number" value="${f.tiAllowanceTotal || ''}" placeholder="auto: $/SF × sqft" step="10000" data-field="facility.tiAllowanceTotal" data-type="number" data-field-commit="change" />
+          <div class="hub-field__hint">Blank = derive from $/SF.</div>
         </div>
       </div>
 
@@ -4074,7 +4086,7 @@ function renderFacilityCostCard() {
   const market = model.projectDetails?.market;
   const fr = (refData.facilityRates || []).find(r => r.market_id === market);
   const ur = (refData.utilityRates || []).find(r => r.market_id === market);
-  const tiAmort = calc.tiAmortAnnual(model.equipmentLines || [], model.projectDetails?.contractTerm || 5);
+  const tiAmort = calc.tiAmortAnnual(model.equipmentLines || [], model.projectDetails?.contractTerm || 5, model.facility || {});
   const bd = calc.facilityCostBreakdown(model.facility || {}, fr, ur, { tiAmort });
 
   if (bd.total === 0 && !market) {
@@ -4112,8 +4124,8 @@ function renderFacilityCostCard() {
             <td class="cm-num">${calc.formatCurrency(bd.maintenance)}</td>
           </tr>` : ''}
           ${bd.tiAmort > 0 ? `
-            <tr title="TI (Tenant Improvement) items from Equipment — dock levelers, office build-out, CCTV, etc. — amortize through rent over the contract term per Asset Defaults Guidance.">
-              <td>TI Amortization <span style="font-size:11px;color:var(--ies-gray-400);">(contract term)</span></td>
+            <tr title="TI (Tenant Improvement) items from Equipment — dock levelers, office build-out, CCTV, etc. — amortize through rent over the contract term per Asset Defaults Guidance. TI Phase A: only the provider-funded share (total TI − landlord allowance) amortizes; the landlord-funded share is the landlord's capital, recovered through base rent.">
+              <td>TI Amortization <span style="font-size:11px;color:var(--ies-gray-400);">(provider share, contract term)</span></td>
               <td class="cm-num">${((bd.tiAmort / ((model.facility?.totalSqft || 1))) || 0).toFixed(2)}</td>
               <td class="cm-num">${calc.formatCurrency(bd.tiAmort)}</td>
             </tr>
@@ -6673,7 +6685,7 @@ function renderPricing() {
   if (!_lastProjections) {
     try { ensureMonthlyBundle(); } catch (_) { /* best-effort */ }
   }
-  const tiAmort = calc.tiAmortAnnual(model.equipmentLines || [], contractYears);
+  const tiAmort = calc.tiAmortAnnual(model.equipmentLines || [], contractYears, model.facility || {});
   const facilityCost = calc.totalFacilityCost(model.facility || {}, fr, ur, { tiAmort });
 
   // Prep startup lines with annual_amort
@@ -7602,7 +7614,7 @@ function renderSummary() {
         ${renderMetricCard('Op Leverage', calc.formatPct(metrics.opLeveragePct), null, `(Facility + Overhead + Start-Up Amort) ÷ Y1 Total Cost. Y1 fixed-ish costs: Facility $${((p1.facility||0)/1000).toFixed(0)}K + Overhead $${((p1.overhead||0)/1000).toFixed(0)}K + Startup Amort $${((p1.startup||0)/1000).toFixed(0)}K. Y1 Total Cost $${((p1.totalCost||0)/1000).toFixed(0)}K. Higher = more sensitive to volume swings (less ability to flex).`)}
         ${renderMetricCard('Contract Value', calc.formatCurrency(metrics.contractValue, {compact: true}), null, `Sum of Revenue across the ${contractYears}-year horizon = Total Contract Value (TCV). Horizon horizon average = $${((metrics.contractValue / Math.max(1, contractYears))/1000).toFixed(0)}K/yr.`)}
         ${renderMetricCard('Total Investment', calc.formatCurrency(metrics.totalInvestment, {compact: true}), null, `Startup capital $${(summary.startupCapital/1000).toFixed(0)}K — equipment ($${(summary.equipmentCapital/1000).toFixed(0)}K) is amortized into opex over the contract term, not booked at Y0. EXCLUDES TI Upfront (rolled into facility rent via amortization). The Y0 outflow used as the anchor for MIRR/NPV/Payback.`)}
-        ${(summary.tiUpfront || 0) > 0 ? renderMetricCard('TI Upfront', calc.formatCurrency(summary.tiUpfront, {compact: true}), null, `Tenant Improvement outlay at Y0 (dock levelers, office build-out, CCTV, access control, etc.) — per Asset Defaults Guidance, TI does NOT hit Total Investment or D&A. Instead it amortizes over the ${(model.projectDetails?.contractTerm || 5)}-year contract at $${(((summary.tiAmortAnnual)||0)/1000).toFixed(0)}K/yr and shows as a line in Facility Cost.`) : ''}
+        ${(summary.tiUpfront || 0) > 0 ? renderMetricCard('TI Upfront', calc.formatCurrency(summary.tiUpfront, {compact: true}), null, `Tenant Improvement outlay at Y0 (dock levelers, office build-out, CCTV, access control, etc.) — per Asset Defaults Guidance, TI does NOT hit Total Investment or D&A. Landlord allowance funds ${calc.formatCurrency(summary.tiLandlordFunded || 0)}; the provider-funded ${calc.formatCurrency(summary.tiProviderFunded || 0)} amortizes over the ${(model.projectDetails?.contractTerm || 5)}-year contract at $${(((summary.tiAmortAnnual)||0)/1000).toFixed(0)}K/yr as a line in Facility Cost (TI Phase A).`) : ''}
       </div>
     </div>
     </div>

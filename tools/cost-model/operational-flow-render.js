@@ -37,7 +37,7 @@ import {
   ofpUomOut as _ofpUomOut,
 } from './ofp-helpers.js?v=20260511-port23';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
-import * as calc from './calc.js?v=20260611-cm1';
+import * as calc from './calc.js?v=20260611-tia1';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 
 // v0.10 — Helper extracted from _renderOfpArea so we can reuse it for
