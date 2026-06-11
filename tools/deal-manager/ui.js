@@ -11,8 +11,10 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import * as calc from './calc.js?v=20260610-straggler1';
 import * as api from './api.js?v=20260511-port2';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
-import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
+import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml } from '../../shared/escape.js?v=20260511-port12';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
+import { showToast } from '../../shared/toast.js?v=20260419-uC';
 
 // ============================================================
 // STATE
@@ -118,12 +120,14 @@ export async function mount(el) {
   financials = null;
   dosStages = [];
   allDeals = [];
-  // 2026-04-21 audit fix: no auto-loaded demo deal. Users now see an empty
-  // state with a "Load Sample Deal" button in the action rail, or can click
-  // "+ New Deal" to start a real multi-site analysis from scratch.
-  el.innerHTML = renderShell();
-  bindShellEvents();
-  renderContent();
+  // Scenario-landing adoption (2026-06-11): DM opens on the shared
+  // saved-scenarios landing hydrated from api.listDeals(). Pre-adoption
+  // allDeals was in-memory only — persisted deals never reappeared after
+  // a remount (the 2026-04-21 "Load Sample Deal" empty state hid the gap;
+  // the sample affordance moved into the landing empty state).
+  // Drag-to-combine (MUL-G1) is preserved on the landing rows.
+  el.__tcBound = false; // router may reuse the container across mounts
+  await renderDmLanding();
 
   // Multi-Site B4: when a linked CM is saved elsewhere in the app, re-pull
   // the fresh totals + cost breakdown for any site referencing it. Without
@@ -353,6 +357,10 @@ function bindShellEvents() {
 
 function rerenderShell() {
   if (!rootEl) return;
+  // Scenario-landing adoption: 'list' is no longer a chrome view — every
+  // back-to-list path (detail Back, combine save/move) funnels here and
+  // re-renders the shared landing instead.
+  if (isLandingView()) { renderDmLanding(); return; }
   // Drop previous content-area delegation before swapping innerHTML.
   rootEl.innerHTML = renderShell();
   bindShellEvents();
@@ -634,6 +642,140 @@ async function openCombinePreview(srcId, tgtId) {
 }
 
 // ============================================================
+// SHARED SCENARIO LANDING (adoption 2026-06-11)
+// ============================================================
+
+/**
+ * Map a deal_deals row (snake_case) to the camelCase Deal shape the rest
+ * of this module uses. Pre-adoption nothing ever read deals back from the
+ * DB — allDeals was in-memory only, so persisted deals never reappeared.
+ * @param {Object} r — deal_deals row
+ */
+function rowToDeal(r) {
+  return {
+    id: r.id,
+    dealName: r.deal_name || 'Untitled deal',
+    clientName: r.client_name || '',
+    dealOwner: r.deal_owner || '',
+    status: r.status || 'draft',
+    notes: r.notes || null,
+    contractTermYears: r.contract_term_years || 5,
+  };
+}
+
+/** Shared scenario landing — lists persisted deals from deal_deals. */
+async function renderDmLanding() {
+  if (!rootEl) return;
+  activeTab = 'list';
+  activeDeal = null;
+  await renderScenarioLanding(rootEl, {
+    toolName: 'Deal Manager',
+    toolKey: 'dm',
+    accent: 'var(--ies-blue)',
+    list: async () => {
+      const rows = await api.listDeals();
+      // Keep the module-level mirror hydrated — openDeal and the combine
+      // preview both resolve deals from allDeals.
+      allDeals = rows.map(rowToDeal);
+      return rows;
+    },
+    getId: (r) => r.id,
+    getName: (r) => r.deal_name || 'Untitled deal',
+    getUpdated: (r) => r.updated_at || r.created_at,
+    // Deals are PARENTS (cost-model sites link to them via deal_deals_id),
+    // so the CM-linkage column intentionally reads stand-alone.
+    getParent: () => ({}),
+    getSubtitle: (r) => {
+      const bits = [];
+      if (r.client_name) bits.push(r.client_name);
+      if (r.status) bits.push(String(r.status).replace(/_/g, ' '));
+      if (r.contract_term_years) bits.push(`${r.contract_term_years}yr term`);
+      return bits.join(' · ');
+    },
+    onNew: () => createNewDeal(),
+    onOpen: (row) => openDeal(String(row.id)),
+    onDelete: async (row) => {
+      await api.deleteDeal(row.id);
+      allDeals = allDeals.filter(x => String(x.id) !== String(row.id));
+    },
+    emptyStateHint: 'Group multiple site cost models into one client-level analysis — combined P&L, sensitivity, and deal pipeline tracking.',
+  });
+  _bindLandingCombineDnD();
+  _enhanceDmLandingEmptyState();
+}
+
+/**
+ * MUL-G1 preservation: drag-to-combine on the shared landing rows. The
+ * shared component renders .sl-row[data-sl-id] rows; we make them
+ * draggable and route drops through the existing openCombinePreview().
+ */
+function _bindLandingCombineDnD() {
+  if (!rootEl) return;
+  rootEl.querySelectorAll('.sl-row[data-sl-id]').forEach(card => {
+    const c = /** @type {HTMLElement} */ (card);
+    c.setAttribute('draggable', 'true');
+    c.addEventListener('dragstart', e => {
+      dragSourceDealId = c.dataset.slId || null;
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'link';
+        e.dataTransfer.setData('text/plain', dragSourceDealId || '');
+      }
+      c.style.opacity = '0.5';
+    });
+    c.addEventListener('dragend', () => {
+      dragSourceDealId = null;
+      c.style.opacity = '';
+      rootEl?.querySelectorAll('.sl-row').forEach(o => {
+        /** @type {HTMLElement} */ (o).style.outline = '';
+        /** @type {HTMLElement} */ (o).style.outlineOffset = '';
+      });
+    });
+    c.addEventListener('dragover', e => {
+      const tgt = c.dataset.slId;
+      if (!dragSourceDealId || dragSourceDealId === tgt) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'link';
+      c.style.outline = '2px dashed var(--ies-blue)';
+      c.style.outlineOffset = '-2px';
+    });
+    c.addEventListener('dragleave', () => {
+      c.style.outline = '';
+      c.style.outlineOffset = '';
+    });
+    c.addEventListener('drop', e => {
+      e.preventDefault();
+      const tgt = c.dataset.slId;
+      c.style.outline = '';
+      c.style.outlineOffset = '';
+      if (dragSourceDealId && tgt && dragSourceDealId !== tgt) {
+        openCombinePreview(dragSourceDealId, tgt);
+      }
+    });
+  });
+}
+
+/**
+ * Re-attach the "Load Sample Deal" affordance (2026-04-21 audit feature)
+ * to the shared landing's empty state — the chrome action rail that used
+ * to host it no longer renders on the landing.
+ */
+function _enhanceDmLandingEmptyState() {
+  if (!rootEl || allDeals.length > 0) return;
+  const newBtns = rootEl.querySelectorAll('[data-sl-action="new"]');
+  const anchor = newBtns[newBtns.length - 1];
+  if (!anchor || !anchor.parentElement) return;
+  const link = document.createElement('button');
+  link.type = 'button';
+  link.textContent = 'or load a sample deal';
+  link.setAttribute('style', 'display:block;margin:10px auto 0;background:none;border:none;cursor:pointer;font-size:12px;font-weight:600;color:var(--ies-gray-500);text-decoration:underline;');
+  link.addEventListener('click', () => {
+    allDeals = [{ ...calc.DEMO_DEAL, id: 'demo-deal-1' }];
+    openDeal('demo-deal-1');
+  });
+  anchor.parentElement.appendChild(link);
+}
+
+// ============================================================
 // DEAL LIST (TABLE VIEW — LANDING)
 // ============================================================
 
@@ -707,11 +849,29 @@ function renderDealList(el) {
   bindDragToCombine(el);
 }
 
-function createNewDeal() {
-  const id = 'deal-' + Date.now();
-  const newDeal = { id, dealName: 'New Deal', clientName: '', dealOwner: '', status: /** @type {const} */ ('draft'), contractTermYears: 5 };
-  allDeals.push(newDeal);
-  openDeal(id);
+async function createNewDeal() {
+  // Scenario-landing adoption (2026-06-11): deals persist at creation so
+  // the landing list is truthful across remounts. Pre-adoption new deals
+  // lived only in memory (and were lost on navigation) unless a combine
+  // happened to save them.
+  const name = await showPrompt('Name this deal:', 'New Deal');
+  if (name == null) return; // cancelled
+  const draft = {
+    dealName: String(name).trim() || 'New Deal',
+    clientName: '', dealOwner: '',
+    status: /** @type {const} */ ('draft'), contractTermYears: 5,
+  };
+  let deal = null;
+  try {
+    const saved = await api.saveDeal(draft);
+    deal = rowToDeal(saved);
+  } catch (err) {
+    console.warn('[DM] saveDeal failed — keeping deal in-memory only:', err);
+    showToast('Could not persist deal — working in-memory', 'error');
+    deal = { id: 'deal-' + Date.now(), ...draft };
+  }
+  allDeals.push(deal);
+  openDeal(String(deal.id));
 }
 
 /**
@@ -794,16 +954,23 @@ function buildDosStagesFromTemplates(bundle) {
 }
 
 async function openDeal(id) {
-  activeDeal = allDeals.find(d => d.id === id) || null;
+  // DB ids are numeric; landing/dataset ids arrive as strings.
+  activeDeal = allDeals.find(d => String(d.id) === String(id)) || null;
   if (!activeDeal) return;
 
-  // Demo deal gets seeded sites when explicitly loaded; real deals start
-  // with an empty site list (user adds sites via "+ Link Cost Model" or
-  // "+ Add Empty Site").
+  // Demo deal gets seeded sites when explicitly loaded. Real deals hydrate
+  // their persisted site links (scenario-landing adoption 2026-06-11 —
+  // this was hardcoded [] before, so a saved deal reopened empty even
+  // though cost_model_projects.deal_deals_id carried its sites).
   if (id === 'demo-deal-1') {
     sites = calc.DEMO_SITES.map(s => ({ ...s }));
   } else {
-    sites = [];
+    try {
+      sites = await api.listSites(id);
+    } catch (err) {
+      console.warn('[DM] listSites failed — opening with empty site list:', err);
+      sites = [];
+    }
   }
 
   financials = calc.computeDealFinancials(sites, activeDeal.contractTermYears || 5);

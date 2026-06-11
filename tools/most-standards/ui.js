@@ -10,6 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260610-life1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
 // Note: MOST intentionally opts out of run-state tracking. Its Quick Analysis
 // and Workflow tabs recompute inline on every render — the primary "Run"
 // button is a convenience trigger rather than a discrete compute step, so a
@@ -211,6 +212,68 @@ async function openTemplateInEditor(id) {
  */
 export async function mount(el) {
   rootEl = el;
+  // Scenario-landing adoption (2026-06-11): MOST now opens on the shared
+  // saved-scenarios landing like Fleet/COG/NetOpt/WSC. Saved analyses
+  // (most_analyses) are the tool's scenarios; the library/editor/analysis/
+  // workflow tabs live inside the editor experience entered via Open/New.
+  // Reset the chrome-bind guard in case the router reuses the container
+  // across mounts (stale closures would otherwise survive).
+  el.__tcBound = false;
+  el.__mostTplClickBound = false;
+  await renderMostLanding();
+}
+
+/** Shared scenario landing — lists saved analyses from most_analyses. */
+async function renderMostLanding() {
+  if (!rootEl) return;
+  await renderScenarioLanding(rootEl, {
+    toolName: 'MOST Labor Standards',
+    toolKey: 'most',
+    accent: 'var(--ies-navy)',
+    list: () => api.listAnalyses(),
+    getId: (r) => r.id,
+    getName: (r) => r.name || 'Untitled analysis',
+    getUpdated: (r) => r.updated_at || r.created_at,
+    getParent: (r) => ({ cmId: r.parent_cost_model_id }),
+    getSubtitle: (r) => {
+      const nLines = ((r.analysis_data && r.analysis_data.lines) || []).length;
+      const bits = [];
+      if (nLines) bits.push(`${nLines} line${nLines === 1 ? '' : 's'}`);
+      if (r.shift_hours) bits.push(`${r.shift_hours}h shift`);
+      if (r.hourly_rate) bits.push(`$${r.hourly_rate}/hr`);
+      return bits.join(' · ');
+    },
+    onNew: () => enterTool(null),
+    onOpen: (row) => enterTool(row),
+    onCopy: async (row) => {
+      await api.saveAnalysis({
+        name: `${row.name || 'Untitled'} (Copy)`,
+        pfd_pct: row.pfd_pct,
+        shift_hours: row.shift_hours,
+        operating_days: row.operating_days,
+        hourly_rate: row.hourly_rate,
+        allowance_profile_id: row.allowance_profile_id || null,
+        lines: (row.analysis_data && row.analysis_data.lines) || [],
+        productivity_pct: row.analysis_data ? (row.analysis_data.productivity_pct ?? null) : null,
+        rates_by_category: (row.analysis_data && row.analysis_data.rates_by_category) || null,
+        learning_curve_pct: row.analysis_data ? (row.analysis_data.learning_curve_pct ?? null) : null,
+      });
+    },
+    onDelete: async (row) => { await api.deleteAnalysis(row.id); },
+    onLink: async (row, cmId) => { await api.linkToCm(row.id, cmId); },
+    onUnlink: async (row) => { await api.unlinkFromCm(row.id); },
+    emptyStateHint: 'Build engineered labor standards from the BasicMOST activity library — compose templates, set volumes, and compute FTEs, headcount, and cost per shift.',
+  });
+}
+
+/**
+ * Enter the tool proper (library/editor/analysis/workflow shell).
+ * @param {Object|null} savedRow — most_analyses row to open on the Analysis
+ *   tab, or null for a fresh session landing on the Library tab.
+ */
+async function enterTool(savedRow) {
+  const el = rootEl;
+  if (!el) return;
   activeTab = 'library';
   selectedTemplate = null;
   selectedElements = [];
@@ -219,6 +282,18 @@ export async function mount(el) {
   filters = { search: '', processArea: '', laborCategory: '' };
   analysis = createEmptyAnalysis();
   workflow = createEmptyWorkflow();
+
+  // Opening a saved analysis from the landing: hydrate the Quick Analysis
+  // state from the row (same mapping the in-tool saved list uses) and land
+  // straight on the Analysis tab.
+  if (savedRow) {
+    try {
+      analysis = JSON.parse(JSON.stringify(analysisRowToScenario(savedRow).data));
+      activeTab = 'analysis';
+    } catch (err) {
+      console.warn('[MOST] Failed to hydrate saved analysis — opening fresh:', err);
+    }
+  }
 
   // Kick off async load; re-render when scenarios come back
   loadSavedScenarios().then(() => {
@@ -229,7 +304,9 @@ export async function mount(el) {
 
   // CM Chrome v3 ripple — chrome events route through bindToolChromeEvents.
   // Content-internal click delegation (template tile cards) survives shell
-  // re-renders by binding at the el (rootEl) level.
+  // re-renders by binding at the el (rootEl) level. Both binds are
+  // once-per-mount (guarded) — enterTool may run repeatedly via the
+  // landing, and the delegated handlers close over module state only.
   bindToolChromeEvents(el, {
     onPhase: (phase) => {
       if (!phase || phase === activeTab) return;
@@ -247,21 +324,26 @@ export async function mount(el) {
       refreshToolChromeActions(el, _buildMostChromeOpts());
     },
     onSection: () => {}, // MOST has no sub-sections
-    onBack: () => { window.location.hash = 'designtools'; },
+    onBack: () => { renderMostLanding(); },
     onAction: (id) => _handleMostAction(id),
     onPrimaryShortcut: (id) => _handleMostAction(id),
   });
 
   // Content-internal: click on a template tile to open it in the editor.
-  el.addEventListener('click', (e) => {
-    const target = /** @type {HTMLElement} */ (e.target);
-    if (!target) return;
-    const tileCard = target.closest('.most-tpl-card[data-action="select-template"]');
-    if (tileCard) {
-      const id = tileCard.getAttribute('data-id');
-      openTemplateInEditor(id);
-    }
-  });
+  // Guarded — enterTool re-runs on every landing → editor transition and
+  // rootEl persists, so an unguarded bind would stack handlers.
+  if (!el.__mostTplClickBound) {
+    el.__mostTplClickBound = true;
+    el.addEventListener('click', (e) => {
+      const target = /** @type {HTMLElement} */ (e.target);
+      if (!target) return;
+      const tileCard = target.closest('.most-tpl-card[data-action="select-template"]');
+      if (tileCard) {
+        const id = tileCard.getAttribute('data-id');
+        openTemplateInEditor(id);
+      }
+    });
+  }
 
   // Load ref data
   try {
@@ -305,7 +387,7 @@ function _buildMostChromeHandlers() {
       }
     },
     onSection: () => {},
-    onBack: () => { window.location.hash = 'designtools'; },
+    onBack: () => { renderMostLanding(); },
     onAction: (id) => _handleMostAction(id),
     onPrimaryShortcut: (id) => _handleMostAction(id),
   };
