@@ -24,6 +24,14 @@
  * @module tools/cost-model/calc.scenarios
  */
 
+// Engine-parity 2026-06-11: single wage-load (burden) default. MIRRORS
+// calc.js DEFAULT_WAGE_LOAD_PCT — kept literal here to avoid the
+// calc.js → calc.monthly.js → calc.scenarios.js import cycle; equality is
+// pinned by test-cm-engine-parity.mjs. Was 35: the monthly engine consumed
+// benefitLoadPct as its per-line burden fallback, so browser Y1 labor ran
+// 35%-burdened vs the legacy engine's 30%.
+const DEFAULT_WAGE_LOAD_PCT = 30;
+
 // ============================================================
 // TYPEDEFS
 // ============================================================
@@ -639,7 +647,7 @@ export function resolveCalcHeuristics(scenario, snapshots, overrides, projectCol
     laborPayableDays:     n(pick('labor_payable_days',      p.laborPayableDays  ?? 14),   14),
     preGoLiveMonths:      n(pick('pre_go_live_months',      p.preGoLiveMonths   ?? 0),    0),
     // Labor
-    benefitLoadPct:       n(pick('benefit_load_pct',        p.benefitLoad       ?? 35),   35),
+    benefitLoadPct:       n(pick('benefit_load_pct',        p.benefitLoad       ?? DEFAULT_WAGE_LOAD_PCT), DEFAULT_WAGE_LOAD_PCT),
     bonusPct:             n(pick('bonus_pct',               p.bonus             ?? 0),    0),
     overtimePct:          n(pick('overtime_pct',            p.overtime          ?? 5),    5),
     absenceAllowancePct:  n(pick('absence_allowance_pct',   p.absenceAllowance  ?? 12),   12),
@@ -896,7 +904,7 @@ export function simulateLaborVariance(laborLines, calcHeur, marketProfile, nTria
   if (!Array.isArray(laborLines) || laborLines.length === 0) {
     return { mean: 0, p10: 0, p50: 0, p90: 0, stddev: 0, nTrials: 0, trials: [] };
   }
-  const benefitLoadFallbackPct = calcHeur?.benefitLoadPct ?? 35;
+  const benefitLoadFallbackPct = calcHeur?.benefitLoadPct ?? DEFAULT_WAGE_LOAD_PCT;
   const trials = new Array(N);
   for (let t = 0; t < N; t++) {
     let yearTotal = 0;

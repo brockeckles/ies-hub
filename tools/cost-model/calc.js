@@ -14,7 +14,7 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260430-gp-fix2';
+import * as monthly from './calc.monthly.js?v=20260611-cm1';
 import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260430-hours-first';
 import {
   getAnnualVolume as _getAnnualVolume,
@@ -705,9 +705,12 @@ export function fte(line, opHours) {
  * FOUR different defaults across surfaces (engine 30 / labor table 32 /
  * monthly per-line 35 / buckets 0 — buckets fixed 2026-06-10 via
  * directLineAnnual routing). Every fallback now references this constant.
- * NOTE: resolveCalcHeuristics' benefit_load_pct heuristic (default 35) is the
- * MONTHLY engine's knob and part of the parked legacy-vs-monthly Y1
- * reconciliation — deliberately NOT collapsed into this constant here.
+ * 2026-06-11 (engine-parity): resolveCalcHeuristics' benefit_load_pct
+ * heuristic now mirrors this constant (was 35 — the last divergent burden
+ * fallback; the parked legacy-vs-monthly Y1 reconciliation is RESOLVED).
+ * The mirror in calc.scenarios.js is kept literal to avoid a
+ * calc.js → calc.monthly.js → calc.scenarios.js import cycle; equality is
+ * pinned by test-cm-engine-parity.mjs.
  */
 export const DEFAULT_WAGE_LOAD_PCT = 30;
 
@@ -1701,6 +1704,31 @@ const LEARNING_CURVE_FACTORS = {
 };
 
 /**
+ * Weighted-average Year-1 learning-curve productivity factor across labor
+ * lines (complexity_tier weighted by annual_hours). Returns 1.0 when no
+ * lines. Y1 labor cost multiplier is 1/factor (lower productivity → higher
+ * cost). Engine-parity 2026-06-11: shared by the legacy yearly path AND
+ * adaptYearlyToMonthlyParams so both engines apply the identical Y1
+ * learning multiplier — the monthly engine previously skipped learning
+ * entirely (its crew ramp models hiring, not productivity).
+ * @param {Array<{annual_hours?:number, complexity_tier?:string}>} laborLines
+ * @returns {number}
+ */
+export function computeYr1LearningFactor(laborLines) {
+  if (!Array.isArray(laborLines) || laborLines.length === 0) return 1.0;
+  let totalHours = 0;
+  let weightedFactor = 0;
+  for (const line of laborLines) {
+    const h = line.annual_hours || 0;
+    const tier = line.complexity_tier || 'medium';
+    const f = LEARNING_CURVE_FACTORS[tier] ?? 0.85;
+    totalHours += h;
+    weightedFactor += h * f;
+  }
+  return totalHours > 0 ? weightedFactor / totalHours : 1.0;
+}
+
+/**
  * Build yearly P&L projections with escalation, volume growth, and learning curve.
  * @param {Object} params
  * @param {number} params.years — contract term in years
@@ -1758,20 +1786,10 @@ export function buildYearlyProjections(params) {
   const facilityEscPct  = params.facilityEscPct  != null ? params.facilityEscPct  : costEscPct;
   const equipmentEscPct = params.equipmentEscPct != null ? params.equipmentEscPct : costEscPct;
 
-  // Learning curve: weighted avg productivity factor for Year 1
-  let yr1LearningFactor = 1.0;
-  if (laborLines.length > 0) {
-    let totalHours = 0;
-    let weightedFactor = 0;
-    for (const line of laborLines) {
-      const h = line.annual_hours || 0;
-      const tier = line.complexity_tier || 'medium';
-      const f = LEARNING_CURVE_FACTORS[tier] ?? 0.85;
-      totalHours += h;
-      weightedFactor += h * f;
-    }
-    yr1LearningFactor = totalHours > 0 ? weightedFactor / totalHours : 1.0;
-  }
+  // Learning curve: weighted avg productivity factor for Year 1 (shared
+  // helper — adaptYearlyToMonthlyParams passes the same factor to the
+  // monthly engine so Y1 labor ties across engines).
+  const yr1LearningFactor = computeYr1LearningFactor(laborLines);
 
   /** @type {import('./types.js?v=20260418-sK').YearlyProjection[]} */
   const projections = [];
@@ -4186,6 +4204,11 @@ export function adaptYearlyToMonthlyParams(p) {
     laborLines:          p.laborLines        || [],
     calcHeur:            p._calcHeur         || null,
     marketLaborProfile:  p.marketLaborProfile || null,
+    // Engine-parity 2026-06-11: Y1 learning-curve factor (complexity-tier
+    // weighted, identical helper to the legacy yearly path). The monthly
+    // engine applies 1/factor to year-1 labor; the crew ramp stays separate
+    // (crew size ≠ learning).
+    yr1_learning_factor: computeYr1LearningFactor(p.laborLines || []),
     // Phase A Labor Build-Up Logic additions (Brock 2026-04-20):
     wageLoadByYear:      p.wageLoadByYear    || null,
     shift2Premium:       Number(p.shift2Premium) || 0,

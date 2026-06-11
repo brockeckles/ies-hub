@@ -31,6 +31,7 @@ import {
 import {
   resolveCalcHeuristics,
 } from './tools/cost-model/calc.scenarios.js';
+import { rampFactorForMonth } from './tools/cost-model/calc.monthly.js';
 
 let passed = 0, failed = 0;
 const failures = [];
@@ -360,15 +361,14 @@ test('facilityCostBreakdown: returns all components + total', () => {
 //
 // CONCERN B FINDING (2026-04-30 PM): the annual path applies a Y1
 // learning-curve uplift to labor cost (learningMult = 1/yr1LearningFactor;
-// 1.176x for medium-complexity default) while the monthly path applies
-// no such uplift. Same fixture, ~21% divergence in Y1 labor cost depending
-// on which engine is active. Production always runs the monthly engine
-// (window.COST_MODEL_MONTHLY_ENGINE defaults true), so the learning curve
-// never fires in the actual UI — making it a 'ghost feature' and a
-// flag-flip footgun. The strategic resolution is parked for Brock:
-// either (a) remove learning curve from the annual path, or (b) add it
-// to the monthly path. Until then, lock both behaviors so neither can
-// silently drift further.
+// 1.176x for medium-complexity default) while the monthly path applied
+// no such uplift — a 'ghost feature' since production always runs the
+// monthly engine. RESOLVED 2026-06-11 (engine-parity): option (b) — the
+// monthly engine now applies the identical Y1 learning multiplier via
+// computeYr1LearningFactor passed through adaptYearlyToMonthlyParams.
+// Residual Y1 divergence between engines is the crew ramp ONLY (a
+// deliberate monthly-engine feature the legacy path never modeled).
+// See test-cm-engine-parity.mjs for the full cross-engine parity pins.
 
 function _learningTinyParams(extra = {}) {
   const summary = computeSummary({
@@ -418,11 +418,12 @@ test('Annual path: Y1 learning curve scales by complexity_tier (low/medium/high)
   }
 });
 
-test('Monthly path: Y1 labor does NOT include learning-curve uplift (ghost feature)', () => {
-  // CONCERN B regression lock. If a future refactor makes the monthly engine
-  // apply the learning-curve uplift, this test should be UPDATED to match
-  // (the divergence is intentional gap pending strategic decision; the test
-  // documents which engine is currently authoritative).
+test('Monthly path: Y1 labor DOES include learning-curve uplift (engine-parity 2026-06-11)', () => {
+  // CONCERN B RESOLVED. The monthly engine now applies the same
+  // complexity-tier Y1 learning multiplier as the legacy annual path
+  // (1/0.85 for the medium-tier fixture). Y1 sits ABOVE steady-state
+  // (learning dominates) but BELOW the pure-learning annual figure
+  // (the crew ramp discounts months 1-3 — a monthly-only feature).
   function periods() {
     const ps = [];
     for (let i = -3; i < 120; i++) {
@@ -439,23 +440,19 @@ test('Monthly path: Y1 labor does NOT include learning-curve uplift (ghost featu
     useMonthlyEngine: true, periods: periods(), ramp: RAMP, seasonality: FLAT,
   });
   const proj = buildYearlyProjections(params).projections;
-  // Monthly engine: Y1 labor < steady-state because of pre-go-live months,
-  // BUT no learning-curve uplift. Steady-state Y2 labor = baseLabor exactly.
+  // Steady-state Y2 labor = baseLabor exactly (learning is Y1-only).
   near(proj[1].labor, summary.laborCost, 1, 'Y2 monthly = steady-state base');
-  // Y1 < steady-state. Annual would have been 1.176×; monthly is some
-  // fraction depending on ramp shape.
-  assert(proj[0].labor < summary.laborCost,
-    `monthly Y1 must be LESS than steady-state — got ${proj[0].labor.toFixed(0)} vs ${summary.laborCost.toFixed(0)}`);
-  // Annual path would produce 1.176x; assert monthly is well below that.
   const annualY1 = summary.laborCost * (1 / 0.85);
-  assert(proj[0].labor < annualY1 * 0.95,
-    `monthly Y1 must diverge from annual Y1 by >5% (engine-path inconsistency)`);
+  assert(proj[0].labor > summary.laborCost,
+    `monthly Y1 must EXCEED steady-state (learning uplift) — got ${proj[0].labor.toFixed(0)} vs ${summary.laborCost.toFixed(0)}`);
+  assert(proj[0].labor < annualY1,
+    `monthly Y1 must sit below pure-learning annual Y1 (crew ramp discount) — got ${proj[0].labor.toFixed(0)} vs ${annualY1.toFixed(0)}`);
 });
 
-test('CONCERN B documented: annual vs monthly Y1 labor divergence', () => {
-  // Same fixture, both engine paths — explicitly compute the divergence
-  // so it appears in test output. Future me should see this number and
-  // remember why both engines exist + the strategic decision pending.
+test('CONCERN B RESOLVED: Y1 engine divergence is the crew ramp ONLY', () => {
+  // Same fixture, both engine paths. Post engine-parity (2026-06-11) the
+  // ONLY remaining Y1 difference is the monthly crew ramp (legacy never
+  // modeled it). Pin it exactly: annualY1 = monthlyY1 / avgRampFactor.
   function periods() {
     const ps = [];
     for (let i = -3; i < 120; i++) {
@@ -474,12 +471,21 @@ test('CONCERN B documented: annual vs monthly Y1 labor divergence', () => {
   });
   const annual = buildYearlyProjections(aP).projections;
   const monthly = buildYearlyProjections(mP).projections;
-  const divergencePct = ((annual[0].labor - monthly[0].labor) / monthly[0].labor) * 100;
-  // Lock current observed divergence ~21.5%. If this drifts substantially,
-  // someone changed one of the engines; check whether the gap closed
-  // intentionally (good) or introduced a different bug.
-  assert(divergencePct > 15 && divergencePct < 30,
-    `Y1 engine divergence drift: ${divergencePct.toFixed(1)}% (was ~21% on 2026-04-30)`);
+  // Fixture is flat across months (constant calendar_month + flat
+  // seasonality + zero esc/vol), so Y1 monthly labor = annual × avgRamp.
+  let avgRamp = 0;
+  for (let m = 1; m <= 12; m++) avgRamp += rampFactorForMonth(RAMP, m);
+  avgRamp /= 12;
+  near(monthly[0].labor, annual[0].labor * avgRamp, 0.001,
+    'monthly Y1 = annual Y1 × avg crew-ramp factor');
+  // And with a flat ramp the engines must tie exactly.
+  const FLATRAMP = { wk1_factor: 1, wk2_factor: 1, wk4_factor: 1, wk8_factor: 1, wk12_factor: 1 };
+  const { params: fP } = _learningTinyParams({
+    useMonthlyEngine: true, periods: periods(), ramp: FLATRAMP, seasonality: FLAT,
+  });
+  const flatMonthly = buildYearlyProjections(fP).projections;
+  near(flatMonthly[0].labor, annual[0].labor, 0.001, 'flat-ramp Y1 parity');
+  near(flatMonthly[1].labor, annual[1].labor, 0.001, 'Y2 parity');
 });
 
 // ============================================================

@@ -24,7 +24,7 @@
  * @module tools/cost-model/calc.monthly
  */
 
-import { monthlyEffectiveHours } from './calc.scenarios.js';
+import { monthlyEffectiveHours } from './calc.scenarios.js?v=20260611-cm1';
 
 // ============================================================
 // LABOR BUILD-UP HELPERS (inlined from calc.js to avoid cache-bust
@@ -403,6 +403,9 @@ export function buildMonthlyProjections(params) {
     shift2Premium = 0,        // fraction, e.g. 0.10 for 10%
     shift3Premium = 0,
     ptoPct = 0,               // fraction, perm headcount uplift
+    // Engine-parity 2026-06-11: Y1 learning-curve factor from
+    // adaptYearlyToMonthlyParams (computeYr1LearningFactor). 1.0 = none.
+    yr1_learning_factor = 1.0,
   } = params;
 
   // Slice the passed-in periods to only the contract window
@@ -482,6 +485,12 @@ export function buildMonthlyProjections(params) {
     const escFacilityMult  = Math.pow(1 + (facility_esc_pct  != null ? facility_esc_pct  : cost_esc_pct), yearIdx);
     const escEquipmentMult = Math.pow(1 + (equipment_esc_pct != null ? equipment_esc_pct : cost_esc_pct), yearIdx);
     const volMult      = Math.pow(1 + vol_growth_pct, yearIdx);
+    // Engine-parity 2026-06-11: Y1 learning curve (complexity-tier weighted,
+    // same factor as legacy buildYearlyProjections). Distinct from the crew
+    // ramp: ramp = smaller crew at go-live (cost DOWN, months 1-3 only);
+    // learning = lower year-1 productivity (cost UP, all 12 Y1 months).
+    const learningMult = (yearIdx === 0 && Number(yr1_learning_factor) > 0)
+      ? (1 / Number(yr1_learning_factor)) : 1.0;
 
     // ---- Revenue rows ----
     // Phase 1 simplification: if pricingBuckets are populated, route through
@@ -509,11 +518,16 @@ export function buildMonthlyProjections(params) {
       }
     } else {
       // Margin-driven fallback (matches existing buildYearlyProjections path)
+      // Engine-parity 2026-06-11: proxy now mirrors the expense rows —
+      // learning curve on Y1 labor, dedicated facility/equipment escalation,
+      // and the magic `0.3` overhead volume-elasticity hybrid removed (it
+      // was excised from BOTH engines' expense paths on 2026-04-21; this
+      // fallback was the straggler, inflating fallback revenue vs cost).
       const monthlyCost = (
-        base_labor_cost     * escLaborMult * volMult * rampLaborMult
-        + base_facility_cost * escCostMult
-        + base_equipment_cost * escCostMult
-        + base_overhead_cost  * escCostMult * Math.pow(1 + vol_growth_pct * 0.3, yearIdx)
+        base_labor_cost     * escLaborMult * volMult * rampLaborMult * learningMult
+        + base_facility_cost * escFacilityMult
+        + base_equipment_cost * escEquipmentMult
+        + base_overhead_cost  * escCostMult
         + base_vas_cost       * volMult
         + startup_amort
       ) / 12 * seasonalShare * 12; // unwind /12 vs *12 to keep it explicit
@@ -545,9 +559,9 @@ export function buildMonthlyProjections(params) {
         { calcHeur, marketLaborProfile, calendarMonth: p.calendar_month,
           seasonalShare, escLaborMult, volMult, rampLaborMult,
           yearIdx, wageLoadByYear, shift2Premium, shift3Premium, ptoPct }
-      );
+      ) * learningMult;
     } else {
-      monthlyLabor = base_labor_cost * escLaborMult * volMult * rampLaborMult / 12 * seasonalShare * 12;
+      monthlyLabor = base_labor_cost * escLaborMult * volMult * rampLaborMult * learningMult / 12 * seasonalShare * 12;
     }
     if (monthlyLabor > 0) {
       expenseRows.push({
