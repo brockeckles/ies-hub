@@ -3136,9 +3136,14 @@ export function autoGenerateIndirectLabor(state, opts = {}) {
   // orders, override-aware. Single-channel deals match the legacy filter on
   // isOutboundPrimary; multi-channel deals now correctly fold DTC + B2B.
   const annualOrders = _getAggregateDerived(state, 'orders');
-  if (annualOrders >= 500000) {
-    addRole('Customer Service Rep', Math.ceil(annualOrders / 500000), 18, 30,
-      { code: 'indirect.customer_service.per_500k_orders', label: '1 CS rep per 500K orders/yr', value: 500000, source: 'legacy', legacy_value: 500000 });
+  {
+    // Item 31 closure (2026-06-11): orders-per-CSR now resolves from the
+    // planning-ratios catalog (override > catalog > legacy 500K).
+    const r = pr('indirect.customer_service.per_500k_orders', 500000);
+    if (annualOrders >= r.value) {
+      addRole('Customer Service Rep', Math.ceil(annualOrders / r.value), 18, 30,
+        makeHeuristic('indirect.customer_service.per_500k_orders', r, 500000, '1 CS rep per N orders/yr (channel-aware aggregate)'));
+    }
   }
 
   // 7. Returns Processor: 1 per 100K return ORDERS/yr — channel-aware (Phase 3).
@@ -3150,9 +3155,16 @@ export function autoGenerateIndirectLabor(state, opts = {}) {
   // with 2% returns produced 1.44M return UNITS = 14 imaginary FTEs).
   // Each channel contributes orders × that channel's own returnsPercent.
   const estimatedReturnOrders = _getAggregateDerived(state, 'returnOrders');
-  if (estimatedReturnOrders >= 100000) {
-    addRole('Returns Processor', Math.ceil(estimatedReturnOrders / 100000), 17, 30,
-      { code: 'indirect.returns_processor.per_100k_return_orders', label: '1 processor per 100K return orders/yr (per-channel returns%)', value: 100000, source: 'channels', legacy_value: 100000 });
+  {
+    // Item 31 closure (2026-06-11): return-orders-per-processor from catalog.
+    const r = pr('indirect.returns_processor.per_100k_return_orders', 100000);
+    if (estimatedReturnOrders >= r.value) {
+      const h = makeHeuristic('indirect.returns_processor.per_100k_return_orders', r, 100000, '1 processor per N return orders/yr (per-channel returns%)');
+      // Preserve the channel-aware driver signal for the inspector when no
+      // catalog value is in play (legacy behavior surfaced 'channels').
+      if (h.source === 'legacy') h.source = 'channels';
+      addRole('Returns Processor', Math.ceil(estimatedReturnOrders / r.value), 17, 30, h);
+    }
   }
 
   // 8. IT Support: 0.5-2 based on FTE count
@@ -3164,9 +3176,13 @@ export function autoGenerateIndirectLabor(state, opts = {}) {
 
   // 9. Maintenance: 1 per 100K sqft
   const totalSqft = state.facility?.totalSqft || 0;
-  if (totalSqft >= 100000) {
-    addRole('Maintenance Technician', Math.ceil(totalSqft / 100000), 25, 30,
-      { code: 'indirect.maintenance.per_100k_sqft', label: '1 maintenance tech per 100K sqft', value: 100000, source: 'legacy', legacy_value: 100000 });
+  {
+    // Item 31 closure (2026-06-11): sqft-per-maintenance-tech from catalog.
+    const r = pr('indirect.maintenance.per_100k_sqft', 100000);
+    if (totalSqft >= r.value) {
+      addRole('Maintenance Technician', Math.ceil(totalSqft / r.value), 25, 30,
+        makeHeuristic('indirect.maintenance.per_100k_sqft', r, 100000, '1 maintenance tech per N sqft'));
+    }
   }
 
   // 10. Janitorial: 1 per 150K sqft (often outsourced, include as benchmark)
@@ -3330,6 +3346,19 @@ export function autoGenerateEquipment(state, opts = {}) {
     code, label, value, formula, driver, source,
     legacy_value: legacyValue != null ? legacyValue : value,
   });
+
+  // Item 31 closure (2026-06-11): equipment density ratios now resolve from
+  // the planning-ratios catalog (override > catalog > legacy constant),
+  // mirroring autoGenerateIndirectLabor's pr() contract.
+  const prMap = opts.planningRatiosMap || null;
+  const pr = (code, fallback) => {
+    if (!prMap) return { value: fallback, source: 'legacy', def: null };
+    const r = prMap[code];
+    if (!r || r.value === null || r.value === undefined) return { value: fallback, source: 'legacy', def: null };
+    const n = Number(r.value);
+    if (!Number.isFinite(n) || n <= 0) return { value: fallback, source: 'legacy', def: null };
+    return { value: n, source: r.source || 'catalog', def: r.def || null };
+  };
 
   // Phase 2d (2026-04-22): dedicated helper for rented_mhe sibling lines.
   // Always line_type='rented_mhe' with seasonal_months from the MLV delta.
@@ -3558,17 +3587,19 @@ export function autoGenerateEquipment(state, opts = {}) {
         '⌈totalHC ÷ 50⌉ (min 1)', 'totalHC = direct + indirect headcount'));
   if (sqft > 0) {
     // WiFi AP: ~$540/unit. Flipped from $100/mo lease.
+    const rWifi = pr('equipment.it.wifi_ap', 10000);
     addEquip('WiFi Access Point (warehouse)', 'IT',
-      Math.max(2, Math.ceil(sqft / 10000)),
-      0, 540, 0, sqft.toLocaleString() + ' sqft @ 1 per 10K sqft', 'capital', 5,
-      eqH('equipment.it.wifi_ap', 'WiFi AP per 10K sqft', 10000,
-          '⌈sqft ÷ 10,000⌉ (min 2)', 'totalSqft'));
-    // Network backbone — one 24-port PoE switch per 50K sqft.
+      Math.max(2, Math.ceil(sqft / rWifi.value)),
+      0, 540, 0, sqft.toLocaleString() + ' sqft @ 1 per ' + rWifi.value.toLocaleString() + ' sqft', 'capital', 5,
+      eqH('equipment.it.wifi_ap', 'WiFi AP sqft density', rWifi.value,
+          '⌈sqft ÷ ' + rWifi.value.toLocaleString() + '⌉ (min 2)', 'totalSqft', rWifi.source, 10000));
+    // Network backbone — one 24-port PoE switch per N sqft (catalog-driven).
+    const rSwitch = pr('equipment.it.network_switch', 50000);
     addEquip('Switch (24-port PoE)', 'IT',
-      Math.max(2, Math.ceil(sqft / 50000)),
-      0, 3024, 0, '1 per 50K sqft', 'capital', 7,
-      eqH('equipment.it.network_switch', '24-port PoE switch per 50K sqft', 50000,
-          '⌈sqft ÷ 50,000⌉ (min 2)', 'totalSqft'));
+      Math.max(2, Math.ceil(sqft / rSwitch.value)),
+      0, 3024, 0, '1 per ' + rSwitch.value.toLocaleString() + ' sqft', 'capital', 7,
+      eqH('equipment.it.network_switch', '24-port PoE switch sqft density', rSwitch.value,
+          '⌈sqft ÷ ' + rSwitch.value.toLocaleString() + '⌉ (min 2)', 'totalSqft', rSwitch.source, 50000));
   }
 
   // ────────────────────────────────────────────────────────────────
@@ -3628,11 +3659,12 @@ export function autoGenerateEquipment(state, opts = {}) {
       0, 20000, 0, 'Security Tier ' + securityTier, 'ti', 5,
       eqH('equipment.security.camera_headend', 'CCTV head-end (1 system)', 1,
           'Tier ≥2 → 1 head-end', `Security Tier ${securityTier}`));
-    const cameraCount = Math.max(4, Math.ceil(sqft / 30000));
+    const rCam = pr('equipment.security.cameras', 30000);
+    const cameraCount = Math.max(4, Math.ceil(sqft / rCam.value));
     addEquip('Security Cameras', 'Security', cameraCount,
-      0, 1562, 0, cameraCount + ' cameras (sqft / 30K)', 'ti', 5,
-      eqH('equipment.security.cameras', 'CCTV cameras per 30K sqft', 30000,
-          '⌈sqft ÷ 30,000⌉ (min 4)', 'totalSqft + Security Tier ≥2'));
+      0, 1562, 0, cameraCount + ' cameras (sqft / ' + rCam.value.toLocaleString() + ')', 'ti', 5,
+      eqH('equipment.security.cameras', 'CCTV camera sqft density', rCam.value,
+          '⌈sqft ÷ ' + rCam.value.toLocaleString() + '⌉ (min 4)', 'totalSqft + Security Tier ≥2', rCam.source, 30000));
   }
   if (securityTier >= 3) {
     // Access control — TI (default tier)

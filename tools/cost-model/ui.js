@@ -12,7 +12,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260526-mfalift1';
-import * as calc from './calc.js?v=20260611-tia2';
+import * as calc from './calc.js?v=20260611-tia3';
 import * as api from './api.js?v=20260528-cogwriteback1';
 import * as scenarios from './calc.scenarios.js?v=20260611-cm1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
@@ -96,11 +96,11 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260611-tia2';
+} from './operational-flow-render.js?v=20260611-tia3';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260611-tia2';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260611-tia2';
+import { computeHeaderKpis } from './header-kpis.js?v=20260611-tia3';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260611-tia3';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -10859,7 +10859,16 @@ async function handleAction(action, idx, btn) {
       // Falls back cleanly when labor lines don't have mhe_type.
       const mlvForAutoGen = _tryComputeMlvForEquipment();
       const _priorEqCount = (model.equipmentLines || []).length;
-      model.equipmentLines = calc.autoGenerateEquipment(model, { mlv: mlvForAutoGen });
+      // Item 31 closure (2026-06-11): equipment auto-gen consumes the same
+      // planning-ratios catalog as indirect labor (WiFi AP / switch / CCTV
+      // densities resolve override > catalog > legacy constants).
+      const eqPrMap = (isPlanningRatiosFlagOn() && planningRatiosCatalog.length)
+        ? planningRatios.resolvePlanningRatios(planningRatiosCatalog, planningRatioOverrides, {
+            vertical:         (model.projectDetails && (model.projectDetails.vertical || _legacyEnvToVertical(model.projectDetails.environment))) || null,
+            environment_type: (model.projectDetails && (model.projectDetails.storageEnvironment || _legacyEnvToStorage(model.projectDetails.environment))) || null,
+          })
+        : null;
+      model.equipmentLines = calc.autoGenerateEquipment(model, { mlv: mlvForAutoGen, planningRatiosMap: eqPrMap });
       model.equipmentLines.forEach(l => { if (!l.pricing_bucket) l.pricing_bucket = defaultBucketFor('equipment'); });
       showToast(
         _priorEqCount > 0
