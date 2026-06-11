@@ -92,7 +92,28 @@ export async function renderScenarioLanding(rootEl, opts) {
   });
 
   // ---- Event wiring ----
+  // 2026-06-11 stacking fix: this function re-runs on every landing visit,
+  // and the router reuses the same container element across tools — so the
+  // old per-render addEventListener stacked handlers with stale closures
+  // (double onOpen/onNew, cross-tool ghost handlers). Bind ONCE per element
+  // and read the latest render's context from rootEl.__slCtx instead.
+  rootEl.__slCtx = {
+    scenarios, costModelsById, opts, toolName,
+    getId, getName, getParent,
+    onOpen, onNew, onCopy, onDelete, onLink, onUnlink,
+  };
+  if (rootEl.__slBound) return;
+  rootEl.__slBound = true;
+
   rootEl.addEventListener('click', async (e) => {
+    // Shadow the outer bindings with the LIVE context — the handler body
+    // below is untouched and always acts on the most recent render.
+    const {
+      scenarios, costModelsById, opts, toolName,
+      getId, getName, getParent,
+      onOpen, onNew, onCopy, onDelete, onLink, onUnlink,
+    } = rootEl.__slCtx || {};
+    if (!onOpen) return; // context cleared / never rendered
     const t = /** @type {HTMLElement} */ (e.target);
 
     // + New Scenario

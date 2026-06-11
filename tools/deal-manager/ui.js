@@ -13,7 +13,7 @@ import * as api from './api.js?v=20260511-port2';
 import * as cmApi from '../cost-model/api.js?v=20260528-cogwriteback1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml } from '../../shared/escape.js?v=20260511-port12';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260418-sM';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260611-sl1';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 
 // ============================================================
