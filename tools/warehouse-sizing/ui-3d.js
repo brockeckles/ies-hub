@@ -1889,6 +1889,17 @@ function build3DScene(ctx) {
     scene3d = {
       dispose() {
         alive = false;
+        // 2026-06-11 (assessment Low-tier leftover): scene-graph geometry/
+        // material disposal. renderer.dispose() clears the program/VAO cache
+        // but does NOT free per-object GPU buffers — every rebuild (config
+        // edit, view switch) leaked ~50-200 geometries/materials until tab
+        // close. Traverse while the GL context is still alive. Mirrors the
+        // existing roomScene.traverse cleanup in the IBL setup.
+        scene.traverse((obj) => {
+          if (obj.geometry && typeof obj.geometry.dispose === 'function') obj.geometry.dispose();
+          const mats = Array.isArray(obj.material) ? obj.material : (obj.material ? [obj.material] : []);
+          for (const m of mats) if (typeof m.dispose === 'function') m.dispose();
+        });
         if (controls && typeof controls.dispose === 'function') controls.dispose();
         // Phase A.A2 — release the PMREM-built envmap + generator before
         // disposing the renderer so the GL context owning the textures is

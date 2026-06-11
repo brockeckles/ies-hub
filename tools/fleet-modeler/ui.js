@@ -14,6 +14,7 @@ import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260511-port11';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
+import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -601,8 +602,8 @@ function renderLanes(el) {
           <tbody>
             ${lanes.map((l, i) => `
               <tr style="border-bottom:1px solid var(--ies-gray-200);">
-                <td style="padding:6px;font-weight:600;">${l.origin}</td>
-                <td style="padding:6px;">${l.destination}</td>
+                <td style="padding:6px;font-weight:600;">${escapeHtml(l.origin)}</td>
+                <td style="padding:6px;">${escapeHtml(l.destination)}</td>
                 <td style="padding:6px;text-align:right;">${l.weeklyShipments}</td>
                 <td style="padding:6px;text-align:right;">${l.avgWeightLbs.toLocaleString()}</td>
                 <td style="padding:6px;text-align:right;">${l.avgCubeFt3.toLocaleString()}</td>
@@ -744,7 +745,7 @@ function renderVehiclesSubTab(el) {
             ${vehicles.map((v, i) => `
               <tr style="border-bottom:1px solid var(--ies-gray-200);${v.enabled ? '' : 'opacity:0.5;'}">
                 <td style="padding:6px;"><input type="checkbox" ${v.enabled ? 'checked' : ''} data-veh-toggle="${i}"></td>
-                <td style="padding:6px;font-weight:600;">${v.name}</td>
+                <td style="padding:6px;font-weight:600;">${escapeHtml(v.name)}</td>
                 <td style="padding:6px;text-align:right;">${v.maxPayloadLbs.toLocaleString()}</td>
                 <td style="padding:6px;text-align:right;">${v.maxCubeFt3.toLocaleString()}</td>
                 <td style="padding:6px;text-align:right;">${v.mpg}</td>
@@ -1193,8 +1194,8 @@ function renderResults(el) {
                 const lane = lanes.find(l => l.id === a.laneId);
                 return `
                   <tr style="border-bottom:1px solid var(--ies-gray-200);">
-                    <td style="padding:6px;font-weight:600;">${lane ? lane.origin + ' → ' + lane.destination : a.laneId}</td>
-                    <td style="padding:6px;">${a.vehicleName}</td>
+                    <td style="padding:6px;font-weight:600;">${escapeHtml(lane ? lane.origin + ' → ' + lane.destination : a.laneId)}</td>
+                    <td style="padding:6px;">${escapeHtml(a.vehicleName)}</td>
                     <td style="padding:6px;text-align:right;">${a.tripsPerWeek}</td>
                     <td style="padding:6px;text-align:right;">${a.roundTripMiles.toLocaleString()}</td>
                     <td style="padding:6px;text-align:right;">${Math.round(a.annualMiles).toLocaleString()}</td>
@@ -1534,7 +1535,7 @@ function renderHosWarnings(r) {
         ${v.map(x => {
           const lane = lanes.find(l => l.id === x.laneId);
           const laneStr = lane ? `${lane.origin} → ${lane.destination}` : x.laneId;
-          return `<li><strong>${laneStr}</strong> (${x.vehicleName}) — ${x.message}</li>`;
+          return `<li><strong>${escapeHtml(laneStr)}</strong> (${escapeHtml(x.vehicleName)}) — ${escapeHtml(x.message)}</li>`;
         }).join('')}
       </ul>
       <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-500);">Add team driving, split the route, or relax operating-days/HOS daily limit to clear.</div>
@@ -1807,12 +1808,12 @@ function initFleetMap() {
     const color = VEHICLE_COLORS[a?.vehicleName] || 'var(--ies-blue)';
     const weight = Math.max(1.5, Math.min(6, (lane.weeklyShipments || 1) / 5));
     const line = L.polyline([o, d], { color, weight, opacity: 0.7 }).addTo(mapInstance);
-    line.bindPopup(`<strong>${lane.origin} → ${lane.destination}</strong><br>${lane.weeklyShipments}/wk · ${lane.distanceMiles} mi<br>Vehicle: ${a?.vehicleName || '—'}`);
+    line.bindPopup(`<strong>${escapeHtml(lane.origin)} → ${escapeHtml(lane.destination)}</strong><br>${lane.weeklyShipments}/wk · ${lane.distanceMiles} mi<br>Vehicle: ${escapeHtml(a?.vehicleName || '—')}`);
     // Endpoint markers (small dots)
     [o, d].forEach((pt, idx) => {
       L.circleMarker(pt, { radius: 4, fillColor: color, color: '#fff', weight: 1.5, fillOpacity: 0.9 })
         .addTo(mapInstance)
-        .bindTooltip(idx === 0 ? lane.origin : lane.destination);
+        .bindTooltip(escapeHtml(idx === 0 ? lane.origin : lane.destination));
     });
   }
 

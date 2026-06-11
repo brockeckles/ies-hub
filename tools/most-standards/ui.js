@@ -9,6 +9,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260610-life1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
+import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
 // Note: MOST intentionally opts out of run-state tracking. Its Quick Analysis
 // and Workflow tabs recompute inline on every render — the primary "Run"
 // button is a convenience trigger rather than a discrete compute step, so a
@@ -824,7 +825,7 @@ function renderTemplateCard(t) {
   const tplTmu = getMostTplTmuTotal(t);
   return `
     <div class="most-tpl-card${isSelected ? ' selected' : ''}" data-action="select-template" data-id="${t.id}">
-      <div class="most-tpl-name">${tplName}</div>
+      <div class="most-tpl-name">${escapeHtml(tplName)}</div>
       <div class="most-tpl-meta">
         <span class="most-cat-badge most-cat-${t.labor_category || 'manual'}">${(t.labor_category || 'manual').toUpperCase()}</span>
         <span>${t.uom || 'each'}</span>
@@ -851,7 +852,7 @@ function renderTemplateDetail() {
     <div class="most-detail-panel">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
         <div>
-          <div style="font-size:18px; font-weight:800; color:var(--ies-navy);">${tplName}</div>
+          <div style="font-size:18px; font-weight:800; color:var(--ies-navy);">${escapeHtml(tplName)}</div>
           <div style="font-size:13px; color:var(--ies-gray-500); margin-top:4px;">
             ${t.process_area} · <span class="most-cat-badge most-cat-${t.labor_category}">${(t.labor_category || 'manual').toUpperCase()}</span> · ${t.uom || 'each'}
           </div>
@@ -859,7 +860,7 @@ function renderTemplateDetail() {
         <button class="cm-delete-btn" data-action="close-detail" style="font-size:16px;">✕</button>
       </div>
 
-      ${t.description ? `<div style="font-size:13px; color:var(--ies-gray-600); margin-bottom:16px;">${t.description}</div>` : ''}
+      ${t.description ? `<div style="font-size:13px; color:var(--ies-gray-600); margin-bottom:16px;">${escapeHtml(t.description)}</div>` : ''}
 
       <!-- KPIs -->
       <div class="hub-kpi-bar mb-4">
@@ -880,7 +881,7 @@ function renderTemplateDetail() {
             ${selectedElements.map(el => `
               <tr>
                 <td>${getMostElSequence(el)}</td>
-                <td>${getMostElName(el) || ''}</td>
+                <td>${escapeHtml(getMostElName(el) || '')}</td>
                 <td style="font-family:monospace; font-size:11px; color:var(--ies-gray-500);">${el.most_sequence || ''}</td>
                 <td class="cm-num">${getMostElTmu(el)}</td>
                 <td class="cm-num">${calc.formatTmu(getMostElTmu(el))}</td>
@@ -941,7 +942,7 @@ function renderEditor() {
             <tbody>
               ${templates.map(t => `
                 <tr class="most-row-hover">
-                  <td style="font-weight:600; color:var(--ies-navy);">${getMostTplName(t)}</td>
+                  <td style="font-weight:600; color:var(--ies-navy);">${escapeHtml(getMostTplName(t))}</td>
                   <td>${t.process_area || '—'}</td>
                   <td><span class="most-cat-badge most-cat-${t.labor_category || 'manual'}" style="font-size:10px;">${(t.labor_category || 'manual').toUpperCase()}</span></td>
                   <td class="cm-num">${calc.formatUph(getMostTplBaseUph(t))}</td>
@@ -982,7 +983,7 @@ function renderEditor() {
           <span style="color:var(--ies-gray-300);">/</span>
           <span>${t.id ? 'Edit' : 'New'}</span>
         </div>
-        <h3 class="most-editor-title">${t.id ? (getMostTplName(t) || 'Edit Template') : 'New Template'}</h3>
+        <h3 class="most-editor-title">${escapeHtml(t.id ? (getMostTplName(t) || 'Edit Template') : 'New Template')}</h3>
         <p class="most-editor-subtitle">${t.id ? 'Modify template details and elements' : 'Create a new MOST labor standards template'}</p>
       </div>
       <div class="most-editor-toolbar-actions">
@@ -997,7 +998,7 @@ function renderEditor() {
       <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:16px;">
         <div>
           <label class="cm-form-label">Activity Name *</label>
-          <input class="hub-input" id="edit-tpl-name" value="${getMostTplName(t) || ''}" placeholder="e.g., Case Pick" />
+          <input class="hub-input" id="edit-tpl-name" value="${escapeAttr(getMostTplName(t) || '')}" placeholder="e.g., Case Pick" />
         </div>
         <div>
           <label class="cm-form-label">Process Area *</label>
@@ -1018,11 +1019,11 @@ function renderEditor() {
         </div>
         <div>
           <label class="cm-form-label">Equipment Type</label>
-          <input class="hub-input" id="edit-tpl-equipment" value="${t.equipment_type || ''}" placeholder="e.g., RF Gun, Pick Cart" />
+          <input class="hub-input" id="edit-tpl-equipment" value="${escapeAttr(t.equipment_type || '')}" placeholder="e.g., RF Gun, Pick Cart" />
         </div>
         <div>
           <label class="cm-form-label">WMS Transaction</label>
-          <input class="hub-input" id="edit-tpl-wms" value="${t.wms_transaction || ''}" placeholder="e.g., PICK, PUTAWAY" />
+          <input class="hub-input" id="edit-tpl-wms" value="${escapeAttr(t.wms_transaction || '')}" placeholder="e.g., PICK, PUTAWAY" />
         </div>
       </div>
       <div style="margin-top:16px;">
@@ -1106,7 +1107,7 @@ function renderEditor() {
               <tr class="most-elem-row${isVar ? ' most-elem-row--variable' : ''}" draggable="true" data-elem-row="${i}">
                 <td style="text-align:center;cursor:grab;color:var(--ies-gray-400);user-select:none;font-size:14px;line-height:1;" title="Drag to reorder">⠿</td>
                 <td>${i + 1}</td>
-                <td><input class="hub-input" type="text" value="${getMostElName(el) || ''}" data-elem-idx="${i}" data-elem-field="element_name" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
+                <td><input class="hub-input" type="text" value="${escapeAttr(getMostElName(el) || '')}" data-elem-idx="${i}" data-elem-field="element_name" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
                 <td>
                   <input class="hub-input" type="text" value="${el.most_sequence || ''}" data-elem-idx="${i}" data-elem-field="most_sequence" style="width:100%; font-size:11px; padding:4px 6px; font-family:monospace;" />
                   ${(() => {
@@ -1117,12 +1118,12 @@ function renderEditor() {
                     if (!seq.trim()) return '';
                     const r = calc.parseMostSequence(seq);
                     if (!r.valid) {
-                      return `<div style="font-size:10px;color:#b91c1c;margin-top:2px;font-family:monospace;" title="${(r.errors || []).join(' | ')}">err</div>`;
+                      return `<div style="font-size:10px;color:#b91c1c;margin-top:2px;font-family:monospace;" title="${escapeAttr((r.errors || []).join(' | '))}">err</div>`;
                     }
                     const warn = (r.warnings || []).length > 0;
                     const color = warn ? '#92400e' : 'var(--ies-gray-500)';
                     const tip = warn ? r.warnings.join(' | ') : `Σ index=${r.indexSum}, model TMU=${r.modelTmu} (sum × 10).`;
-                    return `<div style="font-size:10px;color:${color};margin-top:2px;font-family:monospace;" title="${tip}">Σ${r.indexSum} → ${r.modelTmu} TMU${warn ? ' ⚠' : ''}</div>`;
+                    return `<div style="font-size:10px;color:${color};margin-top:2px;font-family:monospace;" title="${escapeAttr(tip)}">Σ${r.indexSum} → ${r.modelTmu} TMU${warn ? ' ⚠' : ''}</div>`;
                   })()}
                 </td>
                 <td>
@@ -1344,7 +1345,7 @@ function renderAnalysis() {
                 <option value="">— Manual —</option>
                 ${Object.entries(tplsByArea).map(([area, tpls]) =>
                   `<optgroup label="${area}">
-                    ${tpls.map(t => `<option value="${t.id}"${line.template_id === t.id ? ' selected' : ''}>${getMostTplName(t)}</option>`).join('')}
+                    ${tpls.map(t => `<option value="${t.id}"${line.template_id === t.id ? ' selected' : ''}>${escapeHtml(getMostTplName(t))}</option>`).join('')}
                   </optgroup>`
                 ).join('')}
               </select>
@@ -1354,8 +1355,8 @@ function renderAnalysis() {
             <td><input type="number" value="${line.base_uph || 0}" style="width:60px;" data-line="${i}" data-field="base_uph" data-type="number" /></td>
             <td class="cm-num">${calc.formatUph(line.adjusted_uph)}</td>
             <td style="text-align:center;"><input type="checkbox" data-line="${i}" data-field="is_variable" data-type="checkbox"${line.is_variable ? ' checked' : ''} title="Variable element — driver scales TMU per cycle" /></td>
-            <td><input type="text" value="${(line.variable_driver || '').replace(/"/g, '&quot;')}" style="width:100px;font-size:12px;" data-line="${i}" data-field="variable_driver" data-type="text" placeholder="${line.is_variable ? 'e.g. pallets/order' : '—'}"${!line.is_variable ? ' disabled' : ''} /></td>
-            <td><input type="text" value="${(line.variable_formula || '').replace(/"/g, '&quot;')}" style="width:140px;font-size:12px;" data-line="${i}" data-field="variable_formula" data-type="text" placeholder="${line.is_variable ? 'e.g. 3 + 0.5 × dist' : '—'}"${!line.is_variable ? ' disabled' : ''} /></td>
+            <td><input type="text" value="${escapeAttr(line.variable_driver || '')}" style="width:100px;font-size:12px;" data-line="${i}" data-field="variable_driver" data-type="text" placeholder="${line.is_variable ? 'e.g. pallets/order' : '—'}"${!line.is_variable ? ' disabled' : ''} /></td>
+            <td><input type="text" value="${escapeAttr(line.variable_formula || '')}" style="width:140px;font-size:12px;" data-line="${i}" data-field="variable_formula" data-type="text" placeholder="${line.is_variable ? 'e.g. 3 + 0.5 × dist' : '—'}"${!line.is_variable ? ' disabled' : ''} /></td>
             <td><input type="number" value="${line.daily_volume || 0}" style="width:70px;" data-line="${i}" data-field="daily_volume" data-type="number" /></td>
             <td class="cm-num">${line.hours_per_day.toFixed(1)}</td>
             <td class="cm-num">${calc.formatFte(line.fte)}</td>
@@ -1433,7 +1434,7 @@ function renderSavedScenarios() {
       <div id="most-scenarios-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:12px;">
         ${savedScenarios.map((scenario, idx) => `
           <div class="hub-card" style="padding:12px; background:var(--ies-gray-50);">
-            <div style="font-size:13px; font-weight:700; color:var(--ies-navy); margin-bottom:4px;">${scenario.name}</div>
+            <div style="font-size:13px; font-weight:700; color:var(--ies-navy); margin-bottom:4px;">${escapeHtml(scenario.name)}</div>
             <div style="font-size:11px; color:var(--ies-gray-500); margin-bottom:8px;">${scenario.timestamp}</div>
             <div style="font-size:11px; color:var(--ies-gray-600); margin-bottom:8px;">
               ${scenario.lines} line${scenario.lines !== 1 ? 's' : ''} · ${scenario.pfd}% PFD
@@ -1492,7 +1493,7 @@ function renderWorkflowComposer() {
     <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:20px;">
       <div>
         <label class="cm-form-label">Workflow Name</label>
-        <input class="hub-input" value="${workflow.name}" id="wf-name" data-wf="name" />
+        <input class="hub-input" value="${escapeAttr(workflow.name)}" id="wf-name" data-wf="name" />
       </div>
       <div>
         <label class="cm-form-label">Target Volume/Day</label>
@@ -1520,7 +1521,7 @@ function renderWorkflowComposer() {
                 <option value="">— Select Template —</option>
                 ${Object.entries(tplsByArea).map(([area, tpls]) =>
                   `<optgroup label="${area}">
-                    ${tpls.map(t => `<option value="${t.id}"${step.template_id === t.id ? ' selected' : ''}>${getMostTplName(t)}</option>`).join('')}
+                    ${tpls.map(t => `<option value="${t.id}"${step.template_id === t.id ? ' selected' : ''}>${escapeHtml(getMostTplName(t))}</option>`).join('')}
                   </optgroup>`
                 ).join('')}
               </select>
@@ -2124,7 +2125,7 @@ function renderAllowanceProfileRow(p, id, isNew) {
   const env = p.environment_type || 'ambient';
   const ENV_OPTIONS = ['ambient','cold','frozen','outdoor','clean_room'];
   return `
-    <td><input class="hub-input" type="text" value="${(p.profile_name || '').replace(/"/g,'&quot;')}" data-ap-id="${id}" data-ap-field="profile_name" style="width:100%;font-size:12px;padding:4px 6px;" /></td>
+    <td><input class="hub-input" type="text" value="${escapeAttr(p.profile_name || '')}" data-ap-id="${id}" data-ap-field="profile_name" style="width:100%;font-size:12px;padding:4px 6px;" /></td>
     <td>
       <select class="hub-select" data-ap-id="${id}" data-ap-field="environment_type" style="font-size:12px;padding:4px 6px;">
         ${ENV_OPTIONS.map(v => `<option value="${v}"${v === env ? ' selected' : ''}>${v}</option>`).join('')}

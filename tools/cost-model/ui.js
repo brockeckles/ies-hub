@@ -10650,7 +10650,13 @@ function _launchToTool(target) {
     // The hash-nav fallback preserves prior behavior if the dynamic import
     // throws (e.g., network blip).
     openToolInSlideOver({
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260514-shellextract',
+      // 2026-06-11: tag was stale (20260514-shellextract) vs the router's —
+      // the slide-over dynamically imported a SECOND module instance of WSC
+      // ui.js (browser caches ES modules per full URL), splitting module
+      // state. Invisible to the cache-bust guard because the './tools/...'
+      // path resolves module-relative in the scanner but page-relative at
+      // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260611-disp1',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {
