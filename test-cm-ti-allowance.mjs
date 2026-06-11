@@ -72,5 +72,39 @@ eq(summary.tiAllowanceTotal, 5000000, 'summary.tiAllowanceTotal');
 eq(summary.tiAmortAnnual,      60000, 'summary.tiAmortAnnual = provider share / term');
 eq(summary.facilityCost, 250000 * 6.6 + 60000, 'facilityCost = lease + provider amort only');
 
+
+// ── TI Phase B (Mode B rent credit) + Phase C (amort-years override) ──
+// Doc worked example: rent $0.55 gross / $0.05 credit / $0.50 net PSF/mo.
+const facB = { totalSqft: 250000, tiAllowancePsf: 20, tiRentCreditPsfMo: 0.05 };
+eq(calc.tiRentCreditAnnual(facB), 150000, 'Phase B: credit = 0.05 × 12 × 250k');
+eq(calc.tiRentCreditAnnual({ totalSqft: 250000 }), 0, 'Phase B: no credit field → 0');
+eq(calc.tiRentCreditAnnual({ totalSqft: 250000, ti_rent_credit_psf_mo: 0.05 }), 150000, 'Phase B: snake_case accepted');
+eq(calc.netStorageCost(1650000, facB), 1500000, 'Phase B: net = gross − credit');
+eq(calc.netStorageCost(100000, facB), 0, 'Phase B: net clamps at 0');
+
+const bdB = calc.facilityCostBreakdown(facB, { lease_rate_psf_yr: 6.6 }, undefined, { tiAmort: 60000 });
+eq(bdB.total, 1710000, 'Phase B: breakdown gross total unchanged');
+eq(bdB.tiRentCredit, 150000, 'Phase B: breakdown carries credit');
+eq(bdB.netTotal, 1560000, 'Phase B: breakdown netTotal = gross − credit');
+
+const sumB = calc.computeSummary({
+  laborLines: [], indirectLaborLines: [],
+  equipmentLines: tiLines.slice(0, 2),
+  facility: facB,
+  facilityRate: { lease_rate_psf_yr: 6.6 },
+  shifts: { shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5 },
+  overheadLines: [], vasLines: [], startupLines: [],
+  contractYears: 5, targetMarginPct: 16, annualOrders: 100000,
+});
+eq(sumB.tiRentCreditAnnual, 150000, 'Phase B: summary carries credit');
+eq(sumB.netFacilityCost, sumB.facilityCost - 150000, 'Phase B: summary net = gross − credit');
+eq(sumB.totalCost, sumB.laborCost + sumB.facilityCost + sumB.equipmentCost + (sumB.equipmentAmort || 0) + sumB.overheadCost + sumB.vasCost + sumB.startupAmort, 'Phase B: credit never feeds totalCost');
+
+// Phase C — amort-years override beats contract term
+const facC = { totalSqft: 250000, tiAllowancePsf: 20, tiAmortYears: 10 };
+eq(calc.tiAmortAnnual(tiLines, 5, facC), 30000, 'Phase C: $300k provider / 10-yr override = $30k/yr');
+eq(calc.tiAmortAnnual(tiLines, 5, { totalSqft: 250000, tiAllowancePsf: 20, ti_amort_years: 3 }), 100000, 'Phase C: snake_case override, 3-yr = $100k/yr');
+eq(calc.tiAmortAnnual(tiLines, 5, fac), 60000, 'Phase C: no override → contract term (regression)');
+
 console.log(`test-cm-ti-allowance: ${passed} passed, ${failed} failed.`);
 if (failed > 0) process.exit(1);

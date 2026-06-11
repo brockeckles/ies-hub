@@ -1524,10 +1524,17 @@ export function facilityCostBreakdown(facility, facilityRate, utilityRate, opts 
   const baseRent = lease + cam + tax + insurance;
   const maintenance = usingMaint ? baseRent * (maintPctOv / 100) : 0;
 
+  // TI Phase B — Mode B rent credit, informational. Gross total is the P&L
+  // figure; netTotal = market-equivalent rent for benchmarking quoted rent.
+  const tiRentCredit = Math.max(0, (Number(facility.tiRentCreditPsfMo ?? facility.ti_rent_credit_psf_mo) || 0) * 12 * sqft);
+  const grossTotal = lease + cam + tax + insurance + utility + tiAmort + maintenance;
+
   return {
     lease, cam, tax, insurance, utility, tiAmort, maintenance,
+    tiRentCredit,
+    netTotal: Math.max(0, grossTotal - tiRentCredit),
     overrideFlags: { rent: usingRentOv, util: usingUtilOv, maint: usingMaint },
-    total: lease + cam + tax + insurance + utility + tiAmort + maintenance,
+    total: grossTotal,
   };
 }
 
@@ -1571,6 +1578,34 @@ export function tiNetProviderCost(equipmentLines, facility) {
 }
 
 /**
+ * TI Phase B (2026-06-11) — Mode B rent credit. When the landlord funds TI
+ * and recoups it through ELEVATED rent, `tiRentCreditPsfMo` records the
+ * $/SF/month slice of quoted rent attributable to TI recovery. Gross rent
+ * stays in the P&L (it is the real cash cost); the credit feeds the
+ * net "market-equivalent rent" display so quoted rent can be benchmarked
+ * against market comps without the TI premium muddying the comparison.
+ * @param {import('./types.js?v=20260418-sK').FacilityConfig} [facility]
+ * @returns {number} annual rent credit in dollars
+ */
+export function tiRentCreditAnnual(facility) {
+  if (!facility) return 0;
+  const psfMo = Number(facility.tiRentCreditPsfMo ?? facility.ti_rent_credit_psf_mo) || 0;
+  const sqft  = Number(facility.totalSqft) || 0;
+  return Math.max(0, psfMo * 12 * sqft);
+}
+
+/**
+ * Net market-equivalent storage cost: gross facility cost minus the Mode B
+ * TI rent credit. Informational / benchmarking only — never feeds totalCost.
+ * @param {number} grossFacilityCost
+ * @param {import('./types.js?v=20260418-sK').FacilityConfig} [facility]
+ * @returns {number}
+ */
+export function netStorageCost(grossFacilityCost, facility) {
+  return Math.max(0, (Number(grossFacilityCost) || 0) - tiRentCreditAnnual(facility));
+}
+
+/**
  * Sum TI outlay by shell classification ('shell' = base-building scope,
  * typically landlord-funded; 'non_shell' = provider scope: hazmat rooms,
  * temp control, freezer build-out). Informational rollup — the funding
@@ -1600,7 +1635,11 @@ export function totalEquipmentTiByClass(lines, classification) {
  * @returns {number}
  */
 export function tiAmortAnnual(equipmentLines, contractYears, facility) {
-  const y = Math.max(1, Number(contractYears) || 5);
+  // TI Phase C (2026-06-11): explicit amort-period override for cases where
+  // the lease term ≠ amortization window (e.g., renewal-likely deals).
+  // Default remains the contract term per the doc ("usually equals lease term").
+  const override = Number(facility?.tiAmortYears ?? facility?.ti_amort_years);
+  const y = Math.max(1, (Number.isFinite(override) && override > 0) ? override : (Number(contractYears) || 5));
   const { providerFunded } = tiNetProviderCost(equipmentLines || [], facility);
   return providerFunded > 0 ? providerFunded / y : 0;
 }
@@ -1758,6 +1797,10 @@ export function computeSummary(params) {
     tiProviderFunded: tiSplit.providerFunded,
     tiAllowanceTotal: tiSplit.allowanceTotal,
     tiAmortAnnual: tiAmort,
+    // TI Phase B — Mode B rent credit (informational; gross rent stays in
+    // totalCost). netFacilityCost = market-equivalent rent for benchmarking.
+    tiRentCreditAnnual: tiRentCreditAnnual(params.facility),
+    netFacilityCost: netStorageCost(facilityCost, params.facility),
   };
 }
 

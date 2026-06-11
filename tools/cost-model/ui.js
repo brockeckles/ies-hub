@@ -12,7 +12,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260526-mfalift1';
-import * as calc from './calc.js?v=20260611-tia3';
+import * as calc from './calc.js?v=20260611-tia4';
 import * as api from './api.js?v=20260528-cogwriteback1';
 import * as scenarios from './calc.scenarios.js?v=20260611-cm1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
@@ -96,11 +96,11 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260611-tia3';
+} from './operational-flow-render.js?v=20260611-tia4';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260611-tia3';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260611-tia3';
+import { computeHeaderKpis } from './header-kpis.js?v=20260611-tia4';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260611-tia4';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -3999,6 +3999,16 @@ function renderFacility() {
           <input class="hub-input" type="number" value="${f.tiAllowanceTotal || ''}" placeholder="auto: $/SF × sqft" step="10000" data-field="facility.tiAllowanceTotal" data-type="number" data-field-commit="change" />
           <div class="hub-field__hint">Blank = derive from $/SF.</div>
         </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Mode B (TI Phase B): when the landlord funds TI and recoups it through elevated rent, enter the $/SF/month slice of quoted rent that is TI recovery. Gross rent stays in the P&L; this drives the net market-equivalent rent benchmark.">TI Rent Credit ($/SF/mo)</label>
+          <input class="hub-input" type="number" value="${f.tiRentCreditPsfMo || 0}" placeholder="0" step="0.01" data-field="facility.tiRentCreditPsfMo" data-type="number" data-field-commit="change" />
+          <div class="hub-field__hint">Mode B only — landlord-funded TI recovered via rent.</div>
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="TI Phase C: explicit amortization period for provider-funded TI. Blank = contract term (the usual case — amortize over the lease).">TI Amort Years (override)</label>
+          <input class="hub-input" type="number" value="${f.tiAmortYears || ''}" placeholder="auto: contract term" step="1" data-field="facility.tiAmortYears" data-type="number" data-field-commit="change" />
+          <div class="hub-field__hint">Blank = amortize over contract term.</div>
+        </div>
       </div>
 
       <!-- Security Tier comparison panel (Brock 2026-04-21 pm finance-review
@@ -4131,6 +4141,18 @@ function renderFacilityCostCard() {
             </tr>
           ` : ''}
           <tr class="cm-total-row"><td>Total</td><td></td><td class="cm-num">${calc.formatCurrency(bd.total)}</td></tr>
+          ${(bd.tiRentCredit || 0) > 0 ? `
+            <tr title="Mode B (TI Phase B): the slice of quoted rent attributable to landlord TI recovery. Informational — gross rent above is the P&L cost; net shows market-equivalent rent for benchmarking against comps.">
+              <td style="color:var(--ies-gray-500);">− TI Rent Credit <span style="font-size:11px;color:var(--ies-gray-400);">(Mode B, informational)</span></td>
+              <td class="cm-num" style="color:var(--ies-gray-500);">${((bd.tiRentCredit / ((model.facility?.totalSqft || 1))) || 0).toFixed(2)}</td>
+              <td class="cm-num" style="color:var(--ies-gray-500);">−${calc.formatCurrency(bd.tiRentCredit)}</td>
+            </tr>
+            <tr title="Gross facility cost minus Mode B TI rent credit — the market-equivalent rent.">
+              <td style="font-weight:600;">Net (market-equivalent)</td>
+              <td class="cm-num"></td>
+              <td class="cm-num" style="font-weight:600;">${calc.formatCurrency(bd.netTotal)}</td>
+            </tr>
+          ` : ''}
         </tbody>
       </table>
     </div>

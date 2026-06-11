@@ -175,6 +175,8 @@
  * @property {Object} [rateOverrides] — per-key overrides for facility cost calc
  * @property {number} [tiAllowancePsf] — landlord TI allowance, $ per SF (TI Phase A 2026-06-11). Market ~$15–25/SF on 5-yr industrial.
  * @property {number} [tiAllowanceTotal] — explicit total allowance $; when > 0 wins over PSF × sqft
+ * @property {number} [tiRentCreditPsfMo] — Mode B: $/SF/mo of quoted rent attributable to landlord TI recovery (TI Phase B). Informational; gross rent stays in P&L.
+ * @property {number} [tiAmortYears] — explicit TI amortization period override; default = contract term (TI Phase C)
  */
 
 // ---- Shifts (Section 5) ----
