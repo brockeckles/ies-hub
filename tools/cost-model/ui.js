@@ -9631,6 +9631,11 @@ const WHATIF_SLIDERS = [
   // + 3% UPH = flat real labor cost). Catalog default escalation.uph_yoy = 3%.
   { key: 'uph_yoy_pct',               label: 'UPH Productivity / yr',  group: 'Escalation',   min: 0,  max: 10, step: 0.25, unit: '%' },
   { key: 'facility_escalation_pct',   label: 'Facility Escalation',    group: 'Escalation',   min: 0,  max: 15, step: 0.25, unit: '%' },
+  // 2026-06-12: completeness — every YoY factor the engine resolves now has
+  // a visible slider. Equipment + general-cost escalation were adjustable
+  // only via heuristic overrides (equipment) or the Setup card (cost).
+  { key: 'equipment_escalation_pct',  label: 'Equipment Escalation',   group: 'Escalation',   min: 0,  max: 15, step: 0.25, unit: '%' },
+  { key: 'cost_escalation_pct',       label: 'Cost Escalation (general)', group: 'Escalation', min: 0,  max: 15, step: 0.25, unit: '%' },
 ];
 
 /**
@@ -9683,6 +9688,12 @@ function _whatIfProjectFallback(sliderKey) {
       return typeof fin.laborEscalation === 'number' ? fin.laborEscalation : null;
     case 'facility_escalation_pct':
       return typeof fin.facilityEscalation === 'number' ? fin.facilityEscalation : null;
+    case 'equipment_escalation_pct':
+      return typeof fin.equipmentEscalation === 'number' ? fin.equipmentEscalation : null;
+    case 'cost_escalation_pct':
+      // Setup → Financial card stores general cost escalation as annualEscalation
+      return typeof fin.costEscalation === 'number' ? fin.costEscalation
+           : typeof fin.annualEscalation === 'number' ? fin.annualEscalation : null;
     case 'dso_days':
       return typeof fin.dsoDays === 'number' ? fin.dsoDays : null;
     case 'dpo_days':
