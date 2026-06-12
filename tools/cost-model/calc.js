@@ -911,12 +911,75 @@ export function normalizeAcqType(v) {
 }
 
 /**
- * Total acquisition cost on a capital or TI equipment line (qty × unit cost).
+ * Phase 2 asset master (2026-06-12) — capital loading factor. Multiplies the
+ * base unit cost by 1 + (contingency% + freight% + tax% + allowances%)/100.
+ * All four default to 0, so legacy lines compute exactly as before.
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @returns {number} multiplier ≥ 0
+ */
+export function equipLoadingFactor(line) {
+  const pct = (Number(line?.contingency_pct) || 0) + (Number(line?.freight_pct) || 0)
+            + (Number(line?.tax_pct) || 0) + (Number(line?.allowances_pct) || 0);
+  return Math.max(0, 1 + pct / 100);
+}
+
+/**
+ * Loaded-cost breakdown for the Equipment "Advanced" panel:
+ * base + each loading component + loaded unit + line total.
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @returns {{ baseUnit:number, contingency:number, freight:number, tax:number,
+ *             allowances:number, loadedUnit:number, qty:number, total:number }}
+ */
+export function assetLoadedCostBreakdown(line) {
+  const baseUnit = Number(line?.acquisition_cost) || 0;
+  const qty = Number(line?.quantity) || 1;
+  const pc = (k) => baseUnit * ((Number(line?.[k]) || 0) / 100);
+  const contingency = pc('contingency_pct');
+  const freight     = pc('freight_pct');
+  const tax         = pc('tax_pct');
+  const allowances  = pc('allowances_pct');
+  const loadedUnit  = baseUnit + contingency + freight + tax + allowances;
+  return { baseUnit, contingency, freight, tax, allowances, loadedUnit, qty, total: loadedUnit * qty };
+}
+
+/**
+ * Residual (salvage) value for a capital line. Absolute `residual_value`
+ * wins; else `residual_pct` of the loaded total; else 0. Clamped to the
+ * loaded total so amortization never goes negative.
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @returns {number}
+ */
+export function equipResidualValue(line) {
+  const loaded = equipTotalAcq(line);
+  const abs = Number(line?.residual_value);
+  if (Number.isFinite(abs) && abs > 0) return Math.min(abs, loaded);
+  const pct = Number(line?.residual_pct);
+  if (Number.isFinite(pct) && pct > 0) return Math.min(loaded * pct / 100, loaded);
+  return 0;
+}
+
+/**
+ * Useful life in months. `useful_life_months` wins; falls back to
+ * `amort_years` × 12 (legacy field); defaults to 60 (5 years).
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @returns {number}
+ */
+export function equipLifeMonths(line) {
+  const m = Number(line?.useful_life_months);
+  if (Number.isFinite(m) && m > 0) return Math.round(m);
+  const y = Number(line?.amort_years);
+  return Math.max(1, Math.round((Number.isFinite(y) && y > 0 ? y : 5) * 12));
+}
+
+/**
+ * Total LOADED acquisition cost on a capital or TI equipment line
+ * (qty × unit cost × loading factor). Loading pcts default to 0, so this
+ * equals the legacy qty × unit cost unless the analyst sets them.
  * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
  * @returns {number}
  */
 export function equipTotalAcq(line) {
-  return (line.acquisition_cost || 0) * (line.quantity || 1);
+  return (line.acquisition_cost || 0) * (line.quantity || 1) * equipLoadingFactor(line);
 }
 
 /**
@@ -929,8 +992,8 @@ export function equipTotalAcq(line) {
 export function equipLineAmort(line) {
   if (normalizeAcqType(line.acquisition_type) !== 'capital') return 0;
   const total = equipTotalAcq(line);
-  const years = Math.max(1, line.amort_years || 5);
-  return total / years;
+  const years = equipLifeMonths(line) / 12;
+  return Math.max(0, total - equipResidualValue(line)) / years;
 }
 
 /**
@@ -998,14 +1061,13 @@ export function equipLineTableCost(line, peakOverflowByMonth) {
     // Display cost = maintenance + depreciation + seasonal uplift on maintenance rate
     const monthlyRate = (line.monthly_maintenance || 0);
     const maintenance = monthlyRate * 12 * qty;
-    const acqCost = (line.acquisition_cost || 0) * qty;
-    const years = Math.max(1, line.amort_years || 5);
     let seasonal = 0;
     if (hasOverflow) {
       const f = 1 + markupPct / 100;
       for (const u of peakOverflowByMonth) seasonal += (Number(u) || 0) * monthlyRate * f;
     }
-    return maintenance + acqCost / years + seasonal;
+    // Phase 2: depreciation via equipLineAmort (loaded cost − residual, life-months aware)
+    return maintenance + equipLineAmort(line) + seasonal;
   }
   if (type === 'ti') {
     // TI = 0 ongoing display cost; cost lives in facility rent.
@@ -1281,7 +1343,7 @@ export function totalEquipmentAmort(lines) {
 export function equipLine3WayRoi(line, peakOverflowByMonth, years = 5) {
   if (!line) return null;
   const qty = Math.max(1, parseInt(line.quantity) || 1);
-  const acqCost = parseFloat(line.acquisition_cost) || 0;
+  const acqCost = (parseFloat(line.acquisition_cost) || 0) * equipLoadingFactor(line);
   const amortYrs = Math.max(1, parseInt(line.amort_years) || 5);
   const maintMo = parseFloat(line.monthly_maintenance) || 0;
   let rentMo = parseFloat(line.monthly_cost) || 0;
@@ -1642,6 +1704,166 @@ export function tiAmortAnnual(equipmentLines, contractYears, facility) {
   const y = Math.max(1, (Number.isFinite(override) && override > 0) ? override : (Number(contractYears) || 5));
   const { providerFunded } = tiNetProviderCost(equipmentLines || [], facility);
   return providerFunded > 0 ? providerFunded / y : 0;
+}
+
+// ============================================================
+// PHASE 2 — ASSET MASTER / CAPITAL PLANNING (2026-06-12)
+// Roadmap §Phase 2: per-asset depreciation schedules, capital plan,
+// op-lease vs capital split, rack BOM costing.
+// ============================================================
+
+/**
+ * Build a monthly depreciation schedule for one asset.
+ * Straight-line: (loaded − residual) / life, final month absorbs rounding.
+ * Declining-balance: double-declining monthly rate (2/life) with
+ * straight-line switch (standard DDB-with-SL-crossover) and a residual
+ * floor; the schedule may end early once book value reaches residual.
+ * Either way the schedule sums to (loaded − residual) within rounding.
+ *
+ * @param {{ total_loaded_cost?:number, loadedCost?:number, residual_value?:number,
+ *           useful_life_months?:number, amort_method?:string }} asset
+ * @param {{ goLivePeriodIndex?:number }} [opts]
+ * @returns {Array<{ period_index:number, depreciation_amount:number,
+ *                   accumulated_depreciation:number, book_value:number }>}
+ */
+export function buildDepreciationSchedule(asset, opts = {}) {
+  const loaded = Number(asset?.total_loaded_cost ?? asset?.loadedCost) || 0;
+  if (loaded <= 0) return [];
+  const residual = Math.min(Math.max(0, Number(asset?.residual_value) || 0), loaded);
+  const life = Math.max(1, Math.round(Number(asset?.useful_life_months) || 60));
+  const method = asset?.amort_method === 'declining_balance' ? 'declining_balance' : 'straight_line';
+  const startIdx = Number.isFinite(Number(opts.goLivePeriodIndex)) ? Number(opts.goLivePeriodIndex) : 0;
+
+  const rows = [];
+  let book = loaded;
+  let acc = 0;
+  for (let m = 0; m < life; m++) {
+    let d;
+    if (method === 'straight_line') {
+      d = (loaded - residual) / life;
+    } else {
+      d = book * (2 / life);
+      const slRemaining = (book - residual) / (life - m);
+      if (slRemaining > d) d = slRemaining; // SL switch
+    }
+    if (book - d < residual) d = book - residual;     // residual floor
+    if (m === life - 1) d = book - residual;          // absorb rounding
+    d = Math.max(0, d);
+    acc += d;
+    book -= d;
+    rows.push({
+      period_index: startIdx + m,
+      depreciation_amount: d,
+      accumulated_depreciation: acc,
+      book_value: book,
+    });
+    if (book <= residual + 1e-9 && m < life - 1) break; // DDB fully depreciated early
+  }
+  return rows;
+}
+
+/**
+ * Convert equipment lines into asset-instance rows for persistence
+ * (cost_model_asset_instances). Capital + TI lines only — lease and service
+ * lines are pure opex with no balance-sheet asset. `_total_loaded_cost` is
+ * client-side convenience; the DB recomputes it via a generated column and
+ * the API layer must strip underscore-prefixed keys before insert.
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} equipmentLines
+ * @returns {Object[]}
+ */
+export function buildAssetInstances(equipmentLines) {
+  return (equipmentLines || []).filter(l => {
+    const t = normalizeAcqType(l?.acquisition_type);
+    return (t === 'capital' || t === 'ti') && (Number(l?.acquisition_cost) || 0) > 0;
+  }).map(l => ({
+    equipment_line_id: l.id != null ? String(l.id) : null,
+    name: l.equipment_name || l.name || 'Unnamed asset',
+    category: l.category || null,
+    quantity: Number(l.quantity) || 1,
+    unit_cost: Number(l.acquisition_cost) || 0,
+    contingency_pct: Number(l.contingency_pct) || 0,
+    freight_pct: Number(l.freight_pct) || 0,
+    tax_pct: Number(l.tax_pct) || 0,
+    allowances_pct: Number(l.allowances_pct) || 0,
+    financing_type: normalizeAcqType(l.acquisition_type),
+    amort_method: l.amort_method === 'declining_balance' ? 'declining_balance' : 'straight_line',
+    useful_life_months: equipLifeMonths(l),
+    residual_value: equipResidualValue(l),
+    _total_loaded_cost: equipTotalAcq(l),
+  }));
+}
+
+/**
+ * Capital plan: monthly capex / depreciation / book value series plus a
+ * capex-by-category rollup, distinguishing capital purchases (balance
+ * sheet, amortized to P&L) from operating leases (straight to opex).
+ * TI lines are excluded — they amortize via facility rent (tiAmortAnnual).
+ *
+ * Acceptance (Roadmap §Phase 2): operating leases never hit the capex
+ * line; capital purchases always do.
+ *
+ * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} equipmentLines
+ * @param {{ contractMonths?:number }} [opts]
+ * @returns {{ series: Array<{period_index:number, capex:number, depreciation:number,
+ *             book_value:number, lease_opex:number}>,
+ *             capexByCategory: Object<string, number>, totalCapex: number,
+ *             totalLeaseOpexMo: number }}
+ */
+export function computeCapital(equipmentLines, opts = {}) {
+  const months = Math.max(1, Math.round(Number(opts.contractMonths) || 60));
+  const series = Array.from({ length: months }, (_, m) => ({
+    period_index: m, capex: 0, depreciation: 0, book_value: 0, lease_opex: 0,
+  }));
+  const capexByCategory = {};
+  let totalCapex = 0;
+  let totalLeaseOpexMo = 0;
+
+  for (const line of (equipmentLines || [])) {
+    const t = normalizeAcqType(line?.acquisition_type);
+    const qty = Number(line?.quantity) || 1;
+    if (t === 'lease' || t === 'service') {
+      const mo = ((Number(line?.monthly_cost) || 0) + (Number(line?.monthly_maintenance) || 0)) * qty;
+      totalLeaseOpexMo += mo;
+      for (const s of series) s.lease_opex += mo;
+      continue;
+    }
+    if (t !== 'capital') continue; // TI → facility rent, not the equipment capital plan
+    const loaded = equipTotalAcq(line);
+    if (loaded <= 0) continue;
+    totalCapex += loaded;
+    series[0].capex += loaded;
+    const cat = line.category || 'Uncategorized';
+    capexByCategory[cat] = (capexByCategory[cat] || 0) + loaded;
+
+    const sched = buildDepreciationSchedule({
+      total_loaded_cost: loaded,
+      residual_value: equipResidualValue(line),
+      useful_life_months: equipLifeMonths(line),
+      amort_method: line.amort_method,
+    });
+    const lastBook = sched.length ? sched[sched.length - 1].book_value : loaded;
+    for (let m = 0; m < months; m++) {
+      if (m < sched.length) {
+        series[m].depreciation += sched[m].depreciation_amount;
+        series[m].book_value += sched[m].book_value;
+      } else {
+        series[m].book_value += lastBook;
+      }
+    }
+  }
+  return { series, capexByCategory, totalCapex, totalLeaseOpexMo };
+}
+
+/**
+ * Total cost of a rack profile BOM. Takes the joined rows of
+ * ref_rack_profile_components × ref_rack_components and sums qty × unit
+ * cost. Pure — the API layer fetches; this prices.
+ * @param {Array<{qty:number, unit_cost:number}>} componentRows
+ * @returns {number}
+ */
+export function rackProfileCost(componentRows) {
+  return (componentRows || []).reduce(
+    (s, r) => s + (Number(r?.qty) || 0) * (Number(r?.unit_cost) || 0), 0);
 }
 
 // ============================================================

@@ -702,8 +702,133 @@ export async function persistMonthlyFacts(projectId, bundle) {
   } catch (err) {
     console.warn('[CM] refresh_pnl_for_project failed:', err);
   }
+  // Phase 2 (2026-06-12): fact_labor_monthly reads expense_monthly, so it
+  // needs a refresh on every monthly-facts rewrite. Fire-and-forget.
+  try {
+    await db.rpc('refresh_cost_model_facts');
+  } catch (err) {
+    console.warn('[CM] refresh_cost_model_facts failed:', err);
+  }
 
   return { wrote: { revenue: revRows.length, expense: expRows.length, cashflow: cfRows.length } };
+}
+
+// ============================================================
+// PHASE 2 — ASSET MASTER / CAPITAL PLANNING (2026-06-12)
+// ============================================================
+
+/**
+ * Persist asset instances + per-asset depreciation schedules for a project.
+ * Same delete-then-insert atomic-rewrite strategy as persistMonthlyFacts.
+ *
+ * @param {number} projectId
+ * @param {Object[]} instances — rows from calc.buildAssetInstances(). Keys
+ *   starting with '_' are client-side convenience and are stripped (the DB
+ *   recomputes loaded costs via generated columns).
+ * @param {(asset: Object, opts: Object) => Object[]} scheduleBuilder —
+ *   calc.buildDepreciationSchedule, injected to keep api.js calc-free.
+ * @returns {Promise<{ wrote: { instances: number, scheduleRows: number } }>}
+ */
+export async function persistCapitalFacts(projectId, instances, scheduleBuilder) {
+  // Clear prior state (schedules first — FK to instances)
+  await db.from('cost_model_depreciation_schedules').delete().eq('project_id', projectId);
+  await db.from('cost_model_asset_instances').delete().eq('project_id', projectId);
+
+  if (!instances || !instances.length) return { wrote: { instances: 0, scheduleRows: 0 } };
+
+  const periods = await fetchRefPeriods();
+  const idxToId = new Map(periods.map(p => [p.period_index, p.id]));
+  const goLiveId = idxToId.get(0) || null;
+
+  const rows = instances.map(inst => {
+    const clean = {};
+    for (const [k, v] of Object.entries(inst)) {
+      if (!k.startsWith('_')) clean[k] = v;
+    }
+    return { ...clean, project_id: projectId, go_live_period_id: goLiveId };
+  });
+
+  const { data, error } = await db.from('cost_model_asset_instances')
+    .insert(rows)
+    .select('id, total_loaded_cost, residual_value, useful_life_months, amort_method');
+  if (error) {
+    console.warn('[CM] asset_instances insert failed:', error);
+    return { wrote: { instances: 0, scheduleRows: 0 } };
+  }
+
+  const schedRows = [];
+  for (const a of (data || [])) {
+    const sched = scheduleBuilder(a, { goLivePeriodIndex: 0 });
+    for (const r of sched) {
+      const pid = idxToId.get(r.period_index);
+      if (pid == null) continue; // beyond the ref_periods axis
+      schedRows.push({
+        project_id: projectId,
+        asset_instance_id: a.id,
+        period_id: pid,
+        depreciation_amount: r.depreciation_amount,
+        accumulated_depreciation: r.accumulated_depreciation,
+        book_value: r.book_value,
+      });
+    }
+  }
+  if (schedRows.length) {
+    const { error: schedErr } = await db.from('cost_model_depreciation_schedules').insert(schedRows);
+    if (schedErr) console.warn('[CM] depreciation_schedules insert failed:', schedErr);
+  }
+
+  try {
+    await db.rpc('refresh_cost_model_facts');
+  } catch (err) {
+    console.warn('[CM] refresh_cost_model_facts failed:', err);
+  }
+
+  return { wrote: { instances: data.length, scheduleRows: schedRows.length } };
+}
+
+/**
+ * Monthly labor facts for a project (fact_labor_monthly via scoped RPC —
+ * MVs are not exposed through PostgREST, matching get_pnl_monthly).
+ * @param {number} projectId
+ * @returns {Promise<Object[]>}
+ */
+export async function fetchLaborMonthly(projectId) {
+  const { data, error } = await db.rpc('get_labor_monthly', { p_project_id: projectId });
+  if (error) { console.warn('[CM] get_labor_monthly failed:', error); return []; }
+  return data || [];
+}
+
+/**
+ * Monthly capital facts for a project (fact_capital_monthly via scoped RPC).
+ * @param {number} projectId
+ * @returns {Promise<Object[]>}
+ */
+export async function fetchCapitalMonthly(projectId) {
+  const { data, error } = await db.rpc('get_capital_monthly', { p_project_id: projectId });
+  if (error) { console.warn('[CM] get_capital_monthly failed:', error); return []; }
+  return data || [];
+}
+
+/**
+ * Rack profiles + their component BOMs, joined client-side ready for
+ * calc.rackProfileCost. Returns [{ id, profile_name, notes, components:
+ * [{ component_type, description, qty, unit_cost, source_citation }] }].
+ * @returns {Promise<Object[]>}
+ */
+export async function fetchRackProfiles() {
+  const [profiles, links, comps] = await Promise.all([
+    db.from('ref_rack_profiles').select('*').order('profile_name'),
+    db.from('ref_rack_profile_components').select('*'),
+    db.from('ref_rack_components').select('*'),
+  ]);
+  if (profiles.error) { console.warn('[CM] fetchRackProfiles failed:', profiles.error); return []; }
+  const compById = new Map((comps.data || []).map(c => [c.id, c]));
+  return (profiles.data || []).map(p => ({
+    ...p,
+    components: (links.data || [])
+      .filter(l => l.profile_id === p.id)
+      .map(l => ({ ...(compById.get(l.component_id) || {}), qty: l.qty })),
+  }));
 }
 
 /**

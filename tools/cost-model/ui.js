@@ -12,8 +12,8 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260526-mfalift1';
-import * as calc from './calc.js?v=20260611-tia4';
-import * as api from './api.js?v=20260528-cogwriteback1';
+import * as calc from './calc.js?v=20260612-am1';
+import * as api from './api.js?v=20260612-am1';
 import * as scenarios from './calc.scenarios.js?v=20260611-cm1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260511-port8';
@@ -6061,6 +6061,116 @@ Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th
     })()}
 
     <button class="cm-add-row-btn" data-action="add-equipment">+ Add Equipment Line</button>
+
+    ${renderCapitalPlanCard(lines)}
+  `;
+}
+
+/**
+ * Phase 2 asset master (2026-06-12) — Capital Loading editor + Capital Plan.
+ * Loading editor: per capital/TI line, contingency / freight / tax /
+ * allowances %, residual $, life (months), amort method — with a live
+ * loaded-cost breakdown (Roadmap §Phase 2 "Advanced panel").
+ * Capital Plan: computeCapital() rollup — loaded capex by category, monthly
+ * depreciation, lease-vs-capital split, year-end book values.
+ */
+function renderCapitalPlanCard(lines) {
+  const capIdx = (lines || [])
+    .map((l, i) => ({ l, i }))
+    .filter(({ l }) => {
+      const t = calc.normalizeAcqType(l.acquisition_type);
+      return t === 'capital' || t === 'ti';
+    });
+  if (capIdx.length === 0) return '';
+
+  const contractYrs = Math.max(1, parseInt(model.projectDetails?.contractTerm) || 5);
+  const cap = calc.computeCapital(lines, { contractMonths: contractYrs * 12 });
+  const fmtC = v => calc.formatCurrency(v, { compact: true });
+
+  const loadingRows = capIdx.map(({ l, i }) => {
+    const bd = calc.assetLoadedCostBreakdown(l);
+    const isTi = calc.normalizeAcqType(l.acquisition_type) === 'ti';
+    const loadedTip = `Base ${fmtC(bd.baseUnit)} + cont ${fmtC(bd.contingency)} + frt ${fmtC(bd.freight)} + tax ${fmtC(bd.tax)} + allow ${fmtC(bd.allowances)} = ${fmtC(bd.loadedUnit)}/unit × ${bd.qty}`;
+    return `
+      <tr>
+        <td>${escapeAttr(l.equipment_name || '(unnamed)')}${isTi ? ' <span style="font-size:10px;color:#d97706;font-weight:700;">TI</span>' : ''}</td>
+        <td class="hub-num"><input class="hub-input hub-num" type="number" min="0" step="0.5" value="${l.contingency_pct ?? 0}" data-array="equipmentLines" data-idx="${i}" data-field="contingency_pct" data-type="number" /></td>
+        <td class="hub-num"><input class="hub-input hub-num" type="number" min="0" step="0.5" value="${l.freight_pct ?? 0}" data-array="equipmentLines" data-idx="${i}" data-field="freight_pct" data-type="number" /></td>
+        <td class="hub-num"><input class="hub-input hub-num" type="number" min="0" step="0.5" value="${l.tax_pct ?? 0}" data-array="equipmentLines" data-idx="${i}" data-field="tax_pct" data-type="number" /></td>
+        <td class="hub-num"><input class="hub-input hub-num" type="number" min="0" step="0.5" value="${l.allowances_pct ?? 0}" data-array="equipmentLines" data-idx="${i}" data-field="allowances_pct" data-type="number" /></td>
+        <td class="hub-num"><input class="hub-input hub-num" type="number" min="0" step="100" value="${l.residual_value ?? 0}" data-array="equipmentLines" data-idx="${i}" data-field="residual_value" data-type="number" ${isTi ? 'disabled title="TI assets stay with the building — no residual"' : ''} /></td>
+        <td class="hub-num"><input class="hub-input hub-num" type="number" min="1" step="12" value="${l.useful_life_months ?? calc.equipLifeMonths(l)}" data-array="equipmentLines" data-idx="${i}" data-field="useful_life_months" data-type="number" ${isTi ? 'disabled title="TI amortizes via facility rent over the lease term"' : ''} /></td>
+        <td>
+          <select class="hub-input" data-array="equipmentLines" data-idx="${i}" data-field="amort_method" ${isTi ? 'disabled' : ''}>
+            <option value="straight_line"${(l.amort_method || 'straight_line') === 'straight_line' ? ' selected' : ''}>Straight-line</option>
+            <option value="declining_balance"${l.amort_method === 'declining_balance' ? ' selected' : ''}>Declining bal.</option>
+          </select>
+        </td>
+        <td class="hub-num" title="${escapeAttr(loadedTip)}"><strong>${fmtC(bd.total)}</strong></td>
+      </tr>`;
+  }).join('');
+
+  const catRows = Object.entries(cap.capexByCategory)
+    .sort((a, b) => b[1] - a[1])
+    .map(([cat, v]) => `<tr><td>${escapeAttr(cat)}</td><td class="hub-num">${fmtC(v)}</td><td class="hub-num">${cap.totalCapex > 0 ? (100 * v / cap.totalCapex).toFixed(1) : '0.0'}%</td></tr>`)
+    .join('');
+
+  const yearEnds = [];
+  for (let y = 1; y <= contractYrs; y++) {
+    const m = Math.min(y * 12 - 1, cap.series.length - 1);
+    yearEnds.push(`<div style="text-align:center;"><div style="font-size:10px;color:var(--ies-gray-400);font-weight:700;">EOY ${y}</div><div style="font-size:13px;font-weight:700;color:var(--ies-blue);">${fmtC(cap.series[m].book_value)}</div></div>`);
+  }
+
+  return `
+    <details class="cm-card" style="margin-top:16px;padding:14px 16px;">
+      <summary style="cursor:pointer;font-weight:700;color:var(--ies-blue);font-size:13px;">
+        ⚙ Capital Plan — loaded costs, depreciation &amp; book value
+        <span style="font-weight:400;color:var(--ies-gray-500);font-size:12px;margin-left:8px;">
+          ${fmtC(cap.totalCapex)} loaded capex · ${fmtC(cap.series[0]?.depreciation || 0)}/mo depreciation · ${fmtC(cap.totalLeaseOpexMo)}/mo operating leases
+        </span>
+      </summary>
+      <div style="margin-top:12px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);margin-bottom:6px;">Capital Loading (capital + TI lines)</div>
+        <div class="cm-table-scroll">
+          <table class="hub-datatable hub-datatable--dense" style="width:100%;font-size:12px;">
+            <thead>
+              <tr>
+                <th style="text-align:left;">Line</th>
+                <th class="hub-num" title="Contingency % of base unit cost">Cont %</th>
+                <th class="hub-num" title="Freight % of base unit cost">Frt %</th>
+                <th class="hub-num" title="Sales/use tax % of base unit cost">Tax %</th>
+                <th class="hub-num" title="Install / allowances % of base unit cost">Allow %</th>
+                <th class="hub-num" title="Salvage value at end of life (absolute $, whole line)">Residual $</th>
+                <th class="hub-num" title="Useful life in months (drives depreciation)">Life (mo)</th>
+                <th title="Straight-line or double-declining balance with SL switch">Method</th>
+                <th class="hub-num" title="Loaded line total — hover for the base + loading breakdown">Loaded Total</th>
+              </tr>
+            </thead>
+            <tbody>${loadingRows}</tbody>
+          </table>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px;">
+          <div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);margin-bottom:6px;">Capex by Category (loaded)</div>
+            <table class="hub-datatable hub-datatable--dense" style="width:100%;font-size:12px;">
+              <thead><tr><th style="text-align:left;">Category</th><th class="hub-num">Capex</th><th class="hub-num">Share</th></tr></thead>
+              <tbody>${catRows || '<tr><td colspan="3" style="color:var(--ies-gray-400);">No capital purchases — all lines lease/service/TI.</td></tr>'}</tbody>
+            </table>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);margin-bottom:6px;">Book Value Roll-Forward (year-end)</div>
+            <div style="display:grid;grid-template-columns:repeat(${Math.min(contractYrs, 5)},1fr);gap:8px;padding:8px;border:1px solid var(--ies-gray-200, #e5e7eb);border-radius:8px;">
+              ${yearEnds.slice(0, 5).join('')}
+            </div>
+            <div style="font-size:11px;color:var(--ies-gray-400);margin-top:8px;line-height:1.5;">
+              Operating leases (${fmtC(cap.totalLeaseOpexMo)}/mo) flow straight to opex and never hit capex.
+              TI lines amortize via facility rent, not the equipment capital plan.
+              Per-asset schedules persist to the database on save.
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
   `;
 }
 
@@ -11682,6 +11792,12 @@ async function handleSave() {
           .then(({ wrote }) => ({}))
           .catch(err => { console.warn('[CM] persistMonthlyFacts failed:', err);  });
       }
+    }
+    // Phase 2 (2026-06-12): persist asset instances + depreciation schedules
+    // (capital + TI lines). Fire-and-forget — never blocks the save.
+    if (model.id) {
+      api.persistCapitalFacts(model.id, calc.buildAssetInstances(model.equipmentLines || []), calc.buildDepreciationSchedule)
+        .catch(err => { console.warn('[CM] persistCapitalFacts failed:', err); });
     }
     // 2026-04-30 PM (PL1): return success so callers (notably the Approve
     // handler) can gate follow-up work on whether the save actually landed.
