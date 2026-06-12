@@ -12,13 +12,13 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260526-mfalift1';
-import * as calc from './calc.js?v=20260612-mix1';
+import * as calc from './calc.js?v=20260612-mix2';
 import * as api from './api.js?v=20260612-am1';
-import * as scenarios from './calc.scenarios.js?v=20260612-mix1';
+import * as scenarios from './calc.scenarios.js?v=20260612-mix2';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260511-port8';
 import { renderImplementation } from './render-implementation.js?v=20260511-port9';
-import * as monthlyCalc from './calc.monthly.js?v=20260612-mix1';
+import * as monthlyCalc from './calc.monthly.js?v=20260612-mix2';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
@@ -11272,7 +11272,10 @@ async function handleAction(action, idx, btn) {
       break;
     case 'auto-gen-overhead': {
       const _priorOhCount = (model.overheadLines || []).length;
-      model.overheadLines = calc.autoGenerateOverhead(model);
+      // Phase 4f: hand the generator the market labor profile so HR/PPE
+      // replacement-hire lines use market turnover instead of the 43% hardcode.
+      model.overheadLines = calc.autoGenerateOverhead(
+        currentMarketLaborProfile ? { ...model, marketLaborProfile: currentMarketLaborProfile } : model);
       model.overheadLines.forEach(l => { if (!l.pricing_bucket) l.pricing_bucket = defaultBucketFor('overhead'); });
       showToast(
         _priorOhCount > 0

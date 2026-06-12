@@ -14,8 +14,8 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260612-mix1';
-import { permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260612-mix1';
+import * as monthly from './calc.monthly.js?v=20260612-mix2';
+import { permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260612-mix2';
 import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260430-hours-first';
 import {
   getAnnualVolume as _getAnnualVolume,
@@ -2142,18 +2142,41 @@ const LEARNING_CURVE_FACTORS = {
  * @param {Array<{annual_hours?:number, complexity_tier?:string}>} laborLines
  * @returns {number}
  */
-export function computeYr1LearningFactor(laborLines) {
+export function computeYr1LearningFactor(laborLines, factors) {
   if (!Array.isArray(laborLines) || laborLines.length === 0) return 1.0;
+  const F = factors || LEARNING_CURVE_FACTORS;
   let totalHours = 0;
   let weightedFactor = 0;
   for (const line of laborLines) {
     const h = line.annual_hours || 0;
     const tier = line.complexity_tier || 'medium';
-    const f = LEARNING_CURVE_FACTORS[tier] ?? 0.85;
+    const f = F[tier] ?? F.medium ?? 0.85;
     totalHours += h;
     weightedFactor += h * f;
   }
   return totalHours > 0 ? weightedFactor / totalHours : 1.0;
+}
+
+/**
+ * Phase 4f (2026-06-12): tier→factor map from resolved heuristics. The
+ * catalog keys learning_curve_y1_{low,med,high}_pct (95/85/75 defaults =
+ * the former hardcoded LEARNING_CURVE_FACTORS) make the learning curve
+ * analyst-editable via heuristic overrides. Returns null when calcHeur
+ * doesn't carry the keys (legacy callers → constants).
+ * @param {Object|null} calcHeur
+ * @returns {{low:number, medium:number, high:number}|null}
+ */
+export function learningFactorsFromCalcHeur(calcHeur) {
+  if (!calcHeur || calcHeur.learningCurveY1MedPct == null) return null;
+  const f = (v, d) => {
+    const x = Number(v);
+    return (Number.isFinite(x) && x > 0 && x <= 100) ? x / 100 : d;
+  };
+  return {
+    low:    f(calcHeur.learningCurveY1LowPct,  0.95),
+    medium: f(calcHeur.learningCurveY1MedPct,  0.85),
+    high:   f(calcHeur.learningCurveY1HighPct, 0.75),
+  };
 }
 
 /**
@@ -2218,7 +2241,8 @@ export function buildYearlyProjections(params) {
   // Learning curve: weighted avg productivity factor for Year 1 (shared
   // helper — adaptYearlyToMonthlyParams passes the same factor to the
   // monthly engine so Y1 labor ties across engines).
-  const yr1LearningFactor = computeYr1LearningFactor(laborLines);
+  const yr1LearningFactor = computeYr1LearningFactor(laborLines,
+    learningFactorsFromCalcHeur(params._calcHeur));
 
   /** @type {import('./types.js?v=20260612-mix1').YearlyProjection[]} */
   const projections = [];
@@ -4098,7 +4122,14 @@ export function autoGenerateOverhead(state) {
   const totalIndirectHC = (state.indirectLaborLines || []).reduce((s, l) => s + (l.headcount || 0), 0);
   const totalHC = Math.ceil(totalDirectFtes) + totalIndirectHC;
   const sqft = state.facility?.totalSqft || 0;
-  const turnoverPct = 0.43;
+  // Phase 4f (2026-06-12): turnover from the market labor profile when the
+  // caller supplies one (state.marketLaborProfile — ui.js passes the
+  // project's current market profile). 43% fallback = former hardcode
+  // (BLS JOLTS NAICS 48-49 separations ballpark).
+  const _mktTurnover = Number(state.marketLaborProfile?.turnover_pct_annual);
+  const turnoverPct = (Number.isFinite(_mktTurnover) && _mktTurnover > 0)
+    ? _mktTurnover / 100 : 0.43;
+  const turnoverLabel = `totalHC + ${Math.round(turnoverPct * 100)}% turnover${(Number.isFinite(_mktTurnover) && _mktTurnover > 0) ? ' (market profile)' : ''}`;
   const annualHires = Math.ceil(totalHC * turnoverPct);
 
   // Phase 5.3 — auto-gen overhead now stamps `_heuristic` metadata onto
@@ -4141,13 +4172,13 @@ export function autoGenerateOverhead(state) {
     addOh('IT / WMS Licensing', 'BY WMS, RF mgmt, networking, printers, telecom', totalHC * 2500, 'annual', '',
       ohH('overhead.it_licensing.per_hc', 'IT / WMS licensing per headcount', 2500, 'totalHC × $2,500/yr', 'totalHC'));
     addOh('HR & Recruiting', 'Payroll, benefits, onboarding + replacement hires', (totalHC * 2500) + (annualHires * 4700), 'annual', '',
-      ohH('overhead.hr_recruiting.per_hc', 'HR / recruiting per HC + replacement hires', 2500, '(totalHC × $2,500) + (annualHires × $4,700)', 'totalHC + 43% turnover'));
+      ohH('overhead.hr_recruiting.per_hc', 'HR / recruiting per HC + replacement hires', 2500, '(totalHC × $2,500) + (annualHires × $4,700)', turnoverLabel));
     addOh('Workers Comp Insurance', 'Workers comp premiums, warehouse risk class', totalHC * 1250, 'annual', '',
       ohH('overhead.wc_insurance.per_hc', 'Workers comp premium per HC', 1250, 'totalHC × $1,250/yr', 'totalHC'));
     addOh('Safety & Compliance', 'OSHA compliance, training, safety supplies', totalHC * 800, 'annual', '',
       ohH('overhead.safety_compliance.per_hc', 'OSHA / safety compliance per HC', 800, 'totalHC × $800/yr', 'totalHC'));
     addOh('Uniforms & PPE', 'Safety vests, gloves, boots, hard hats, eye protection', (totalHC + annualHires) * 400, 'annual', '',
-      ohH('overhead.ppe.per_hc', 'Uniforms / PPE per HC + replacement hires', 400, '(totalHC + annualHires) × $400/yr', 'totalHC + 43% turnover'));
+      ohH('overhead.ppe.per_hc', 'Uniforms / PPE per HC + replacement hires', 400, '(totalHC + annualHires) × $400/yr', turnoverLabel));
   }
 
   // PER-UNIT SCALERS — channel-aware (Phase 3 of volumes-as-nucleus).
@@ -4712,7 +4743,7 @@ export function adaptYearlyToMonthlyParams(p) {
     // weighted, identical helper to the legacy yearly path). The monthly
     // engine applies 1/factor to year-1 labor; the crew ramp stays separate
     // (crew size ≠ learning).
-    yr1_learning_factor: computeYr1LearningFactor(p.laborLines || []),
+    yr1_learning_factor: computeYr1LearningFactor(p.laborLines || [], learningFactorsFromCalcHeur(p._calcHeur)),
     // Phase A Labor Build-Up Logic additions (Brock 2026-04-20):
     wageLoadByYear:      p.wageLoadByYear    || null,
     shift2Premium:       Number(p.shift2Premium) || 0,

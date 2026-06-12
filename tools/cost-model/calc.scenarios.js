@@ -762,6 +762,14 @@ export function resolveCalcHeuristics(scenario, snapshots, overrides, projectCol
     // What-If "shift N pp of perm hours to temp" lever (transient-first).
     tempMarkupPct:        n(pick('temp_markup_pct',         p.tempMarkup        ?? DEFAULT_TEMP_MARKUP_PCT), DEFAULT_TEMP_MARKUP_PCT),
     tempShareDeltaPp:     n(pick('temp_share_delta_pp',     0),                           0),
+    // 2026-06-12 Phase 4f: Y1 learning-curve productivity factors by
+    // complexity tier (were hardcoded LEARNING_CURVE_FACTORS in calc.js —
+    // roadmap Phase 4 wanted these data-driven/analyst-editable; the
+    // heuristics catalog is the hub's override-able home for that, not
+    // ref_allowance_profiles, which models facility ENVIRONMENT ramp).
+    learningCurveY1LowPct:  n(pick('learning_curve_y1_low_pct',  95), 95),
+    learningCurveY1MedPct:  n(pick('learning_curve_y1_med_pct',  85), 85),
+    learningCurveY1HighPct: n(pick('learning_curve_y1_high_pct', 75), 75),
     // 2026-06-12: UPH productivity growth (escalation.uph_yoy). IES policy
     // default 3% (assumes active MOST engineered-standards program);
     // adjustable per project via What-If slider / heuristic override.
