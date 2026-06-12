@@ -208,6 +208,12 @@
  * @property {number} [benefits_per_hour]
  * @property {string} [uom]
  * @property {string} [complexity_tier] — 'low' | 'medium' | 'high'
+ * @property {string} [employment_type] — 'permanent' | 'temp_agency' | 'contractor' (Phase 4a)
+ * @property {number} [temp_agency_markup_pct] — agency markup on base wage; temp lines: whole line; permanent lines: the temp share when retention_mix_pct < 100 (Phase 4a/4e)
+ * @property {number} [retention_mix_pct] — Phase 4e: % of hours staffed permanent (default 100); remainder priced as temp agency (markup, no wage load, no PTO)
+ * @property {number} [performance_variance_pct] — Monte Carlo σ for the sensitivity card
+ * @property {number[]} [monthly_overtime_profile] — 12 monthly OT % values (Phase 4b)
+ * @property {number[]} [monthly_absence_profile] — 12 monthly absence % values (Phase 4b)
  * @property {string} [volume_line_id]
  * @property {string} [mhe_equipment_id]
  * @property {string} [it_equipment_id]

@@ -14,7 +14,8 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260612-uph1';
+import * as monthly from './calc.monthly.js?v=20260612-mix1';
+import { permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260612-mix1';
 import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260430-hours-first';
 import {
   getAnnualVolume as _getAnnualVolume,
@@ -145,7 +146,7 @@ export function achievedMargin(revenue, cost) {
  * uplift / hours reduction (see `ptoHeadcountUplift` / `holidayUplift`), not
  * here.
  *
- * @param {import('./types.js?v=20260418-sK').ShiftConfig} [shifts] — ignored
+ * @param {import('./types.js?v=20260612-mix1').ShiftConfig} [shifts] — ignored
  * @returns {number} 2080
  */
 export function operatingHours(shifts) {
@@ -170,7 +171,7 @@ export const ANNUAL_PAID_HOURS_PER_FTE = 2080;
  * to drive the two blue tiles is faulty. Right tile should be
  * [2080 − PTO hours − holiday hours]."
  *
- * @param {import('./types.js?v=20260418-sK').ShiftConfig} [shifts] — ignored
+ * @param {import('./types.js?v=20260612-mix1').ShiftConfig} [shifts] — ignored
  * @param {{ ptoPct?: number, holidayPct?: number }} [projectAssumptions]
  * @returns {number}
  */
@@ -433,7 +434,7 @@ export function wageLoadFracForLine(line, year, opts = {}) {
  * functions (directLineAnnual, fullyLoadedRate, monthlyLaborCost, etc.)
  * flow through, so flipping employment_type automatically re-prices.
  *
- * @param {import('./types.js?v=20260418-sK').DirectLaborLine | import('./types.js?v=20260418-sK').IndirectLaborLine} line
+ * @param {import('./types.js?v=20260612-mix1').DirectLaborLine | import('./types.js?v=20260612-mix1').IndirectLaborLine} line
  * @returns {number}
  */
 export function effectiveHourlyRate(line) {
@@ -459,21 +460,42 @@ export function effectiveHourlyRate(line) {
  *
  * For temp-agency lines, wage_load resolves to 0 (rate already loaded).
  *
- * @param {import('./types.js?v=20260418-sK').DirectLaborLine | import('./types.js?v=20260418-sK').IndirectLaborLine} line
+ * @param {import('./types.js?v=20260612-mix1').DirectLaborLine | import('./types.js?v=20260612-mix1').IndirectLaborLine} line
  * @param {Object} [opts]
  * @param {number} [opts.benefitLoadFallback] — default wage-load fraction if line has no burden_pct (legacy alias retained)
  * @param {number[]} [opts.wageLoadByYear]
  * @param {number} [opts.year]
  * @returns {number}
  */
-export function fullyLoadedRate(line, opts = {}) {
-  const rate = effectiveHourlyRate(line);
+
+/**
+ * Phase 4e (2026-06-12): blended loaded rate for a line, honoring
+ * retention_mix_pct (perm/temp split within a line). Resolves wage load
+ * exactly as before, then blends via the shared calc.scenarios helpers.
+ * opts: { year, wageLoadByYear, benefitLoadFallback, includeBenefits,
+ *         marketTempPremiumPct, defaultTempMarkupPct, tempShareDeltaPp }
+ */
+function _blendedLoadedRate(line, opts = {}) {
   const wageLoadFrac = wageLoadFracForLine(line, opts.year ?? 1, {
     wageLoadByYear: opts.wageLoadByYear,
     defaultWageLoadFrac: opts.benefitLoadFallback ?? (DEFAULT_WAGE_LOAD_PCT / 100),
   });
-  const benefitsPerHr = line.benefits_per_hour || 0;
-  return rate * (1 + wageLoadFrac) + benefitsPerHr;
+  return blendLoadedRate({
+    baseRate: Number(line.hourly_rate) || 0,
+    wageLoadFrac,
+    benefitsPerHr: opts.includeBenefits === false ? 0 : (Number(line.benefits_per_hour) || 0),
+    mixFrac: permMixFracForLine(line, { tempShareDeltaPp: opts.tempShareDeltaPp }),
+    tempMarkupFrac: tempMarkupFracForLine(line, {
+      marketTempPremiumPct: opts.marketTempPremiumPct,
+      defaultTempMarkupPct: opts.defaultTempMarkupPct,
+    }),
+  });
+}
+
+export function fullyLoadedRate(line, opts = {}) {
+  // Phase 4e: routed through the retention blend. mix=100 (default) and
+  // pure-temp lines reproduce the previous math exactly.
+  return _blendedLoadedRate(line, opts);
 }
 
 /**
@@ -481,7 +503,7 @@ export function fullyLoadedRate(line, opts = {}) {
  * Includes shift differential, OT (for hourly-nonexempt only), and
  * year-specific wage load.
  *
- * @param {import('./types.js?v=20260418-sK').DirectLaborLine} line
+ * @param {import('./types.js?v=20260612-mix1').DirectLaborLine} line
  * @param {Object} [opts]
  * @param {number} [opts.otPct] — overtime % (0-based), applied at 1.5× rate
  * @param {number} [opts.benefitLoadFallback] — fallback wage-load fraction
@@ -493,18 +515,14 @@ export function fullyLoadedRate(line, opts = {}) {
  */
 export function directLineAnnual(line, opts = {}) {
   const hours = line.annual_hours || 0;
-  const rate = effectiveHourlyRate(line);
-  const year = opts.year ?? 1;
-  const wageLoadFrac = wageLoadFracForLine(line, year, {
-    wageLoadByYear: opts.wageLoadByYear,
-    defaultWageLoadFrac: opts.benefitLoadFallback ?? (DEFAULT_WAGE_LOAD_PCT / 100),
-  });
   // OT only applies to hourly-nonexempt lines. pay_type default 'hourly'.
   const otEligible = (line.pay_type || 'hourly') === 'hourly';
   const otMult = otEligible ? (1 + (opts.otPct || 0) * 0.5) : 1.0;
   // Shift differential pulls fraction fields OR legacy shift_num integer.
   const shiftMult = shiftDifferentialMultForLine(line, opts);
-  const effectiveRate = rate * (1 + wageLoadFrac) * otMult * shiftMult;
+  // Phase 4e: retention blend (historically this path excluded
+  // benefits_per_hour — preserved).
+  const effectiveRate = _blendedLoadedRate(line, { ...opts, includeBenefits: false }) * otMult * shiftMult;
   return hours * effectiveRate;
 }
 
@@ -539,19 +557,24 @@ function shiftDifferentialMultForLine(line, opts) {
  * Per-line burden_pct still wins when present (supports line-level
  * override for high-burden roles).
  *
- * @param {import('./types.js?v=20260418-sK').DirectLaborLine} line
+ * @param {import('./types.js?v=20260612-mix1').DirectLaborLine} line
  * @param {{ defaultBurdenPct?: number, wageLoadByYear?: number[], year?: number }} [costing]
  * @returns {number}
  */
 export function directLineAnnualSimple(line, costing) {
   const hours = line.annual_hours || 0;
-  const rate = effectiveHourlyRate(line);
   const c = costing || {};
-  const wageLoadFrac = wageLoadFracForLine(line, c.year ?? 1, {
+  // Phase 4e: retention blend (no benefits_per_hour in the Simple path —
+  // preserved).
+  return hours * _blendedLoadedRate(line, {
+    year: c.year ?? 1,
     wageLoadByYear: c.wageLoadByYear,
-    defaultWageLoadFrac: (c.defaultBurdenPct ?? DEFAULT_WAGE_LOAD_PCT) / 100,
+    benefitLoadFallback: (c.defaultBurdenPct ?? DEFAULT_WAGE_LOAD_PCT) / 100,
+    includeBenefits: false,
+    marketTempPremiumPct: c.marketTempPremiumPct,
+    defaultTempMarkupPct: c.defaultTempMarkupPct,
+    tempShareDeltaPp: c.tempShareDeltaPp,
   });
-  return hours * rate * (1 + wageLoadFrac);
 }
 
 /**
@@ -567,7 +590,7 @@ export function directLineAnnualSimple(line, costing) {
  * - Shift differential
  * - OT for hourly-nonexempt (salary exempt skipped)
  *
- * @param {import('./types.js?v=20260418-sK').IndirectLaborLine} line
+ * @param {import('./types.js?v=20260612-mix1').IndirectLaborLine} line
  * @param {Object} opts
  * @param {number} opts.operatingHours — annual operating hours
  * @param {number} [opts.bonusPct]
@@ -609,7 +632,7 @@ export function indirectLineAnnual(line, opts) {
  * burden_pct + benefit_load_pct). Line-level burden_pct still wins when
  * present — management roles can carry different loads than warehouse.
  *
- * @param {import('./types.js?v=20260418-sK').IndirectLaborLine} line
+ * @param {import('./types.js?v=20260612-mix1').IndirectLaborLine} line
  * @param {number} opHours
  * @param {{ defaultBurdenPct?: number, wageLoadByYear?: number[], year?: number }} [costing]
  * @returns {number}
@@ -645,7 +668,7 @@ export function indirectLineAnnualSimple(line, opHours, costing) {
 /**
  * Breakdown version — used by UI to show baseline vs seasonal uplift
  * sub-totals side-by-side.
- * @param {import('./types.js?v=20260418-sK').IndirectLaborLine} line
+ * @param {import('./types.js?v=20260612-mix1').IndirectLaborLine} line
  * @param {number} opHours
  * @param {Object} [costing]
  * @returns {{ baseline: number, seasonal: number, total: number }}
@@ -673,7 +696,7 @@ export function indirectLineAnnualBreakdown(line, opHours, costing) {
 
 /**
  * FTE calculation: annual_hours / operatingHours.
- * @param {import('./types.js?v=20260418-sK').DirectLaborLine} line
+ * @param {import('./types.js?v=20260612-mix1').DirectLaborLine} line
  * @param {number} opHours — annual operating hours
  * @returns {number}
  */
@@ -688,8 +711,8 @@ export function fte(line, opHours) {
 
 /**
  * Total annual labor cost (direct + indirect).
- * @param {import('./types.js?v=20260418-sK').DirectLaborLine[]} directLines
- * @param {import('./types.js?v=20260418-sK').IndirectLaborLine[]} indirectLines
+ * @param {import('./types.js?v=20260612-mix1').DirectLaborLine[]} directLines
+ * @param {import('./types.js?v=20260612-mix1').IndirectLaborLine[]} indirectLines
  * @param {Object} opts
  * @param {number} opts.operatingHours
  * @param {number} [opts.otPct]
@@ -727,8 +750,8 @@ export function totalLaborCost(directLines, indirectLines, opts) {
 
 /**
  * Total FTEs (direct + indirect headcount).
- * @param {import('./types.js?v=20260418-sK').DirectLaborLine[]} directLines
- * @param {import('./types.js?v=20260418-sK').IndirectLaborLine[]} indirectLines
+ * @param {import('./types.js?v=20260612-mix1').DirectLaborLine[]} directLines
+ * @param {import('./types.js?v=20260612-mix1').IndirectLaborLine[]} indirectLines
  * @param {number} opHours
  * @returns {number}
  */
@@ -768,7 +791,7 @@ export function totalFtes(directLines, indirectLines, opHours) {
  * FTE curve ÷ shifts. That avoids duplicating the seasonal curve on every
  * line and keeps the single source of truth in the MLV.
  *
- * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine} line
  * @param {number[]} [peakOverflowByMonth] — 12 non-negative month values
  * @returns {number}
  */
@@ -853,7 +876,7 @@ export function _normalizeSeasonalMonths(raw) {
  * sub-totals. Used by the UI to render the two numbers side-by-side so
  * the cost of seasonal flex is explicit, not buried in the total.
  *
- * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine} line
  * @param {number[]} [peakOverflowByMonth]
  * @returns {{ baseline: number, seasonal: number, total: number }}
  */
@@ -914,7 +937,7 @@ export function normalizeAcqType(v) {
  * Phase 2 asset master (2026-06-12) — capital loading factor. Multiplies the
  * base unit cost by 1 + (contingency% + freight% + tax% + allowances%)/100.
  * All four default to 0, so legacy lines compute exactly as before.
- * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine} line
  * @returns {number} multiplier ≥ 0
  */
 export function equipLoadingFactor(line) {
@@ -926,7 +949,7 @@ export function equipLoadingFactor(line) {
 /**
  * Loaded-cost breakdown for the Equipment "Advanced" panel:
  * base + each loading component + loaded unit + line total.
- * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine} line
  * @returns {{ baseUnit:number, contingency:number, freight:number, tax:number,
  *             allowances:number, loadedUnit:number, qty:number, total:number }}
  */
@@ -946,7 +969,7 @@ export function assetLoadedCostBreakdown(line) {
  * Residual (salvage) value for a capital line. Absolute `residual_value`
  * wins; else `residual_pct` of the loaded total; else 0. Clamped to the
  * loaded total so amortization never goes negative.
- * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine} line
  * @returns {number}
  */
 export function equipResidualValue(line) {
@@ -961,7 +984,7 @@ export function equipResidualValue(line) {
 /**
  * Useful life in months. `useful_life_months` wins; falls back to
  * `amort_years` × 12 (legacy field); defaults to 60 (5 years).
- * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine} line
  * @returns {number}
  */
 export function equipLifeMonths(line) {
@@ -975,7 +998,7 @@ export function equipLifeMonths(line) {
  * Total LOADED acquisition cost on a capital or TI equipment line
  * (qty × unit cost × loading factor). Loading pcts default to 0, so this
  * equals the legacy qty × unit cost unless the analyst sets them.
- * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine} line
  * @returns {number}
  */
 export function equipTotalAcq(line) {
@@ -986,7 +1009,7 @@ export function equipTotalAcq(line) {
  * Annual depreciation for a CAPITAL equipment line. TI items amortize via
  * facility rent (not on the equipment line), service items have no capital,
  * and lease items expense monthly — none of those produce equipment amort.
- * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine} line
  * @returns {number}
  */
 export function equipLineAmort(line) {
@@ -1005,7 +1028,7 @@ export function equipLineAmort(line) {
  *
  * `tiUpfront` surfaces the Y0 TI outlay so a Summary-level "TI Upfront"
  * rollup can show the build-out cost without folding it into opex.
- * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine} line
  * @returns {{ annual: number, capital: number, amort: number, leaseMo: number, maintAnnual: number, tiUpfront: number, serviceMo: number, type: string }}
  */
 export function equipLineSummary(line) {
@@ -1027,7 +1050,7 @@ export function equipLineSummary(line) {
  * Horizon sum of one-time TI capital outlays — the Y0 cash that flows into
  * facility build-out. Exposed so the Summary can show a "TI Upfront" card
  * without mixing TI into opex or into capital-equipment totals.
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} lines
  * @returns {number}
  */
 export function totalEquipmentTiUpfront(lines) {
@@ -1039,7 +1062,7 @@ export function totalEquipmentTiUpfront(lines) {
 /**
  * Annual cost displayed in the equipment table row.
  * Includes amortization for purchase items (different from equipLineAnnual).
- * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine} line
  * @returns {number}
  */
 export function equipLineTableCost(line, peakOverflowByMonth) {
@@ -1104,7 +1127,7 @@ export function equipLineTableCost(line, peakOverflowByMonth) {
  * When a Monthly Labor View summary is supplied, each line's seasonal
  * uplift is computed from its matching MHE/IT type curve.
  *
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} lines
  * @param {Object} [opts]
  * @param {Object} [opts.mlv] — full computeMonthlyLaborView() result ({months, summary})
  * @param {number} [opts.shiftsPerDay=1]
@@ -1120,7 +1143,7 @@ export function totalEquipmentCost(lines, opts = {}) {
  * UI uses this to show "Seasonal Uplift: $X" next to the headline total
  * so the cost of seasonal flex is explicit.
  *
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} lines
  * @param {Object} [opts]
  * @returns {{ baseline: number, seasonal: number, total: number }}
  */
@@ -1147,7 +1170,7 @@ export function totalEquipmentCostBreakdown(lines, opts = {}) {
  * Returns an array aligned to the lines array — `overflowByLine[i]` is
  * either `null` (no match, no seasonal uplift) or a 12-element array.
  *
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} lines
  * @param {Object} opts
  * @returns {Array<number[]|null>}
  */
@@ -1221,14 +1244,14 @@ export function equipmentOverflowByLine(lines, opts = {}) {
 
 /**
  * Total capital investment (purchase equipment only).
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} lines
  * @returns {number}
  */
 /**
  * Phase 2e (2026-04-22): subset of totalEquipmentCost attributable to
  * `rented_mhe` lines only. Drives the "Peak Rentals" sub-slice annotation
  * in the Summary Cost Breakdown. Zero-cost when no rentals exist.
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} lines
  * @returns {number}
  */
 export function totalRentedMheCost(lines) {
@@ -1250,7 +1273,7 @@ export function totalRentedMheCost(lines) {
  * than a smoothed /12 spread. Sum across months equals totalEquipmentCost
  * + totalEquipmentAmort (capital amort included since 2026-06-10).
  *
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} lines
  * @returns {number[]} length-12 array, index 0 = January
  */
 export function computeEquipmentMonthlySeries(lines) {
@@ -1291,7 +1314,7 @@ export function totalEquipmentCapital(lines) {
 
 /**
  * Total annual equipment amortization (purchase equipment only).
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} lines
  * @returns {number}
  */
 export function totalEquipmentAmort(lines) {
@@ -1325,7 +1348,7 @@ export function totalEquipmentAmort(lines) {
  *     break_even = annual_own_per_unit / monthly_rent_per_unit
  *   If break_even > 12, "Always Own". If break_even < 0.5, "Always Rent".
  *
- * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine} line
  * @param {Array<number>|null} peakOverflowByMonth — qty above baseline by month (from MLV)
  * @param {number} [years=5] — comparison horizon (default = typical contract length)
  * @returns {{
@@ -1403,7 +1426,7 @@ export function equipLine3WayRoi(line, peakOverflowByMonth, years = 5) {
  * EQ-1 — Roll up 3-way ROI across all MHE lines. Aggregates totals and
  * reports per-strategy savings vs the current line_type configuration.
  *
- * @param {Array<import('./types.js?v=20260418-sK').EquipmentLine>} lines
+ * @param {Array<import('./types.js?v=20260612-mix1').EquipmentLine>} lines
  * @param {{ peakOverflowByLine?: Array<Array<number>|null>, years?: number }} [opts]
  */
 export function totalEquipment3WayRoi(lines, opts = {}) {
@@ -1452,7 +1475,7 @@ export function equipmentCapitalByType(lines) {
 
 /**
  * Annual cost for an overhead line (handles monthly vs annual cost_type).
- * @param {import('./types.js?v=20260418-sK').OverheadLine} line
+ * @param {import('./types.js?v=20260612-mix1').OverheadLine} line
  * @returns {number}
  */
 export function overheadLineAnnual(line) {
@@ -1464,7 +1487,7 @@ export function overheadLineAnnual(line) {
 
 /**
  * Total annual overhead cost.
- * @param {import('./types.js?v=20260418-sK').OverheadLine[]} lines
+ * @param {import('./types.js?v=20260612-mix1').OverheadLine[]} lines
  * @returns {number}
  */
 export function totalOverheadCost(lines) {
@@ -1478,7 +1501,7 @@ export function totalOverheadCost(lines) {
 /**
  * Annual cost for a VAS line.
  * Uses total_cost override if set, otherwise rate × volume.
- * @param {import('./types.js?v=20260418-sK').VASLine} line
+ * @param {import('./types.js?v=20260612-mix1').VASLine} line
  * @returns {number}
  */
 export function vasLineAnnual(line) {
@@ -1488,7 +1511,7 @@ export function vasLineAnnual(line) {
 
 /**
  * Total annual VAS cost.
- * @param {import('./types.js?v=20260418-sK').VASLine[]} lines
+ * @param {import('./types.js?v=20260612-mix1').VASLine[]} lines
  * @returns {number}
  */
 export function totalVasCost(lines) {
@@ -1511,9 +1534,9 @@ export function totalVasCost(lines) {
  * as an additional line. Callers that don't supply tiAmort get the
  * classic lease+cam+tax+insurance+utility sum (backward compat).
  *
- * @param {import('./types.js?v=20260418-sK').FacilityConfig} facility
- * @param {import('./types.js?v=20260418-sK').FacilityRate} [facilityRate]
- * @param {import('./types.js?v=20260418-sK').UtilityRate} [utilityRate]
+ * @param {import('./types.js?v=20260612-mix1').FacilityConfig} facility
+ * @param {import('./types.js?v=20260612-mix1').FacilityRate} [facilityRate]
+ * @param {import('./types.js?v=20260612-mix1').UtilityRate} [utilityRate]
  * @param {Object} [opts]
  * @param {number} [opts.tiAmort] — annual TI amortization (fold into facility)
  * @returns {number}
@@ -1536,9 +1559,9 @@ export function totalFacilityCost(facility, facilityRate, utilityRate, opts = {}
 /**
  * Facility cost breakdown by component. tiAmort exposed so the UI can
  * surface "TI Amortization" as a distinct line under rent.
- * @param {import('./types.js?v=20260418-sK').FacilityConfig} facility
- * @param {import('./types.js?v=20260418-sK').FacilityRate} [facilityRate]
- * @param {import('./types.js?v=20260418-sK').UtilityRate} [utilityRate]
+ * @param {import('./types.js?v=20260612-mix1').FacilityConfig} facility
+ * @param {import('./types.js?v=20260612-mix1').FacilityRate} [facilityRate]
+ * @param {import('./types.js?v=20260612-mix1').UtilityRate} [utilityRate]
  * @param {Object} [opts]
  * @param {number} [opts.tiAmort] — annual TI amortization
  * @returns {{ lease: number, cam: number, tax: number, insurance: number, utility: number, tiAmort: number, total: number }}
@@ -1609,7 +1632,7 @@ export function facilityCostBreakdown(facility, facilityRate, utilityRate, opts 
  * Per TI Handling doc: a silent $0 allowance is on the "common mistakes"
  * list — market default is ~$15–25/SF on a 5-yr industrial lease. The UI
  * surfaces this hint; the engine just computes what it's given.
- * @param {import('./types.js?v=20260418-sK').FacilityConfig} [facility]
+ * @param {import('./types.js?v=20260612-mix1').FacilityConfig} [facility]
  * @returns {number}
  */
 export function tiAllowanceTotal(facility) {
@@ -1628,8 +1651,8 @@ export function tiAllowanceTotal(facility) {
  *   providerFunded = max(0, total TI − landlordFunded)
  * Only the provider share amortizes into facility rent — the landlord share
  * is the landlord's capital, already recovered through base rent.
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} equipmentLines
- * @param {import('./types.js?v=20260418-sK').FacilityConfig} [facility]
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} equipmentLines
+ * @param {import('./types.js?v=20260612-mix1').FacilityConfig} [facility]
  * @returns {{ totalTi:number, allowanceTotal:number, landlordFunded:number, providerFunded:number }}
  */
 export function tiNetProviderCost(equipmentLines, facility) {
@@ -1646,7 +1669,7 @@ export function tiNetProviderCost(equipmentLines, facility) {
  * stays in the P&L (it is the real cash cost); the credit feeds the
  * net "market-equivalent rent" display so quoted rent can be benchmarked
  * against market comps without the TI premium muddying the comparison.
- * @param {import('./types.js?v=20260418-sK').FacilityConfig} [facility]
+ * @param {import('./types.js?v=20260612-mix1').FacilityConfig} [facility]
  * @returns {number} annual rent credit in dollars
  */
 export function tiRentCreditAnnual(facility) {
@@ -1660,7 +1683,7 @@ export function tiRentCreditAnnual(facility) {
  * Net market-equivalent storage cost: gross facility cost minus the Mode B
  * TI rent credit. Informational / benchmarking only — never feeds totalCost.
  * @param {number} grossFacilityCost
- * @param {import('./types.js?v=20260418-sK').FacilityConfig} [facility]
+ * @param {import('./types.js?v=20260612-mix1').FacilityConfig} [facility]
  * @returns {number}
  */
 export function netStorageCost(grossFacilityCost, facility) {
@@ -1673,7 +1696,7 @@ export function netStorageCost(grossFacilityCost, facility) {
  * temp control, freezer build-out). Informational rollup — the funding
  * split itself is allowance-driven via `tiNetProviderCost`. Lines without
  * a ti_classification default to 'non_shell'.
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} lines
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} lines
  * @param {('shell'|'non_shell')} classification
  * @returns {number}
  */
@@ -1691,9 +1714,9 @@ export function totalEquipmentTiByClass(lines, classification) {
  * PROVIDER-FUNDED share (total TI − landlord allowance) amortizes.
  * Omitting `facility` preserves the legacy behavior (full TI amortizes —
  * equivalent to a $0 allowance). Returns 0 when nothing to amortize.
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} equipmentLines
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} equipmentLines
  * @param {number} contractYears
- * @param {import('./types.js?v=20260418-sK').FacilityConfig} [facility]
+ * @param {import('./types.js?v=20260612-mix1').FacilityConfig} [facility]
  * @returns {number}
  */
 export function tiAmortAnnual(equipmentLines, contractYears, facility) {
@@ -1768,7 +1791,7 @@ export function buildDepreciationSchedule(asset, opts = {}) {
  * lines are pure opex with no balance-sheet asset. `_total_loaded_cost` is
  * client-side convenience; the DB recomputes it via a generated column and
  * the API layer must strip underscore-prefixed keys before insert.
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} equipmentLines
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} equipmentLines
  * @returns {Object[]}
  */
 export function buildAssetInstances(equipmentLines) {
@@ -1802,7 +1825,7 @@ export function buildAssetInstances(equipmentLines) {
  * Acceptance (Roadmap §Phase 2): operating leases never hit the capex
  * line; capital purchases always do.
  *
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} equipmentLines
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} equipmentLines
  * @param {{ contractMonths?:number }} [opts]
  * @returns {{ series: Array<{period_index:number, capex:number, depreciation:number,
  *             book_value:number, lease_opex:number}>,
@@ -1946,7 +1969,7 @@ export function houseAssumptionsDrift(pinned, currentRows) {
  * (reference Part I §9 sub-branch: as-incurred startup lines are zero-margin
  * pass-through, not capitalized + amortized).
  *
- * @param {import('./types.js?v=20260418-sK').StartupLine[]} lines
+ * @param {import('./types.js?v=20260612-mix1').StartupLine[]} lines
  * @param {number} contractYears
  * @returns {number}
  */
@@ -1962,7 +1985,7 @@ export function totalStartupAmort(lines, contractYears) {
  * Total startup capital (one-time costs). Skips `as_incurred` lines — those
  * are billed-as-incurred, not capitalized.
  *
- * @param {import('./types.js?v=20260418-sK').StartupLine[]} lines
+ * @param {import('./types.js?v=20260612-mix1').StartupLine[]} lines
  * @returns {number}
  */
 export function totalStartupCapital(lines) {
@@ -1977,7 +2000,7 @@ export function totalStartupCapital(lines) {
  * where `billing_type === 'as_incurred'`. These flow through the P&L as
  * revenue = expense (zero margin), not amortized.
  *
- * @param {import('./types.js?v=20260418-sK').StartupLine[]} lines
+ * @param {import('./types.js?v=20260612-mix1').StartupLine[]} lines
  * @returns {number}
  */
 export function totalStartupAsIncurred(lines) {
@@ -1993,21 +2016,21 @@ export function totalStartupAsIncurred(lines) {
 /**
  * Compute full cost summary from all model data.
  * @param {Object} params
- * @param {import('./types.js?v=20260418-sK').DirectLaborLine[]} params.laborLines
- * @param {import('./types.js?v=20260418-sK').IndirectLaborLine[]} params.indirectLaborLines
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} params.equipmentLines
- * @param {import('./types.js?v=20260418-sK').OverheadLine[]} params.overheadLines
- * @param {import('./types.js?v=20260418-sK').VASLine[]} params.vasLines
- * @param {import('./types.js?v=20260418-sK').StartupLine[]} params.startupLines
- * @param {import('./types.js?v=20260418-sK').FacilityConfig} params.facility
- * @param {import('./types.js?v=20260418-sK').ShiftConfig} params.shifts
- * @param {import('./types.js?v=20260418-sK').FacilityRate} [params.facilityRate]
- * @param {import('./types.js?v=20260418-sK').UtilityRate} [params.utilityRate]
+ * @param {import('./types.js?v=20260612-mix1').DirectLaborLine[]} params.laborLines
+ * @param {import('./types.js?v=20260612-mix1').IndirectLaborLine[]} params.indirectLaborLines
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} params.equipmentLines
+ * @param {import('./types.js?v=20260612-mix1').OverheadLine[]} params.overheadLines
+ * @param {import('./types.js?v=20260612-mix1').VASLine[]} params.vasLines
+ * @param {import('./types.js?v=20260612-mix1').StartupLine[]} params.startupLines
+ * @param {import('./types.js?v=20260612-mix1').FacilityConfig} params.facility
+ * @param {import('./types.js?v=20260612-mix1').ShiftConfig} params.shifts
+ * @param {import('./types.js?v=20260612-mix1').FacilityRate} [params.facilityRate]
+ * @param {import('./types.js?v=20260612-mix1').UtilityRate} [params.utilityRate]
  * @param {number} params.contractYears
  * @param {number} params.targetMarginPct
  * @param {number} params.annualOrders
  * @param {Object} [params.laborOpts] — otPct, bonusPct, benefitLoadFallback
- * @returns {import('./types.js?v=20260418-sK').CostSummary}
+ * @returns {import('./types.js?v=20260612-mix1').CostSummary}
  */
 export function computeSummary(params) {
   const opHrs = operatingHours(params.shifts);
@@ -2150,8 +2173,8 @@ export function computeYr1LearningFactor(laborLines) {
  * @param {number} [params.laborEscPct] — annual labor escalation (0-based fraction)
  * @param {number} [params.uphYoyPct] — annual UPH productivity growth (0-based fraction); offsets labor escalation as a divisor (2026-06-12, escalation.uph_yoy)
  * @param {number} [params.costEscPct] — annual cost escalation (0-based fraction)
- * @param {import('./types.js?v=20260418-sK').DirectLaborLine[]} [params.laborLines] — for learning curve calc
- * @returns {{ projections: import('./types.js?v=20260418-sK').YearlyProjection[], startupCapital: number }}
+ * @param {import('./types.js?v=20260612-mix1').DirectLaborLine[]} [params.laborLines] — for learning curve calc
+ * @returns {{ projections: import('./types.js?v=20260612-mix1').YearlyProjection[], startupCapital: number }}
  */
 export function buildYearlyProjections(params) {
   // Phase 1 routing: when the monthly engine flag is on AND we have the
@@ -2197,7 +2220,7 @@ export function buildYearlyProjections(params) {
   // monthly engine so Y1 labor ties across engines).
   const yr1LearningFactor = computeYr1LearningFactor(laborLines);
 
-  /** @type {import('./types.js?v=20260418-sK').YearlyProjection[]} */
+  /** @type {import('./types.js?v=20260612-mix1').YearlyProjection[]} */
   const projections = [];
   let cumFcfRun = 0;
 
@@ -2304,14 +2327,14 @@ export function buildYearlyProjections(params) {
 
 /**
  * Compute all 12 financial metrics from yearly projections.
- * @param {import('./types.js?v=20260418-sK').YearlyProjection[]} projections
+ * @param {import('./types.js?v=20260612-mix1').YearlyProjection[]} projections
  * @param {Object} opts
  * @param {number} opts.startupCapital
  * @param {number} opts.discountRatePct — e.g. 10 for 10%
  * @param {number} opts.reinvestRatePct — e.g. 8 for 8%
  * @param {number} opts.totalFtes
  * @param {number} [opts.fixedCost] — annual fixed cost (for operating leverage)
- * @returns {import('./types.js?v=20260418-sK').FinancialMetrics}
+ * @returns {import('./types.js?v=20260612-mix1').FinancialMetrics}
  */
 export function computeFinancialMetrics(projections, opts) {
   const years = projections.length;
@@ -2517,7 +2540,7 @@ export function computeFinancialMetrics(projections, opts) {
   };
 }
 
-/** @returns {import('./types.js?v=20260418-sK').FinancialMetrics} */
+/** @returns {import('./types.js?v=20260612-mix1').FinancialMetrics} */
 function emptyMetrics() {
   return {
     grossMarginPct: 0, ebitdaMarginPct: 0, ebitMarginPct: 0,
@@ -2638,13 +2661,13 @@ export function autoAssignBuckets(model, opts = {}) {
 /**
  * Compute cost allocated to each pricing bucket.
  * @param {Object} params
- * @param {import('./types.js?v=20260418-sK').PricingBucket[]} params.buckets
- * @param {import('./types.js?v=20260418-sK').DirectLaborLine[]} params.laborLines
- * @param {import('./types.js?v=20260418-sK').IndirectLaborLine[]} params.indirectLaborLines
- * @param {import('./types.js?v=20260418-sK').EquipmentLine[]} params.equipmentLines
- * @param {import('./types.js?v=20260418-sK').OverheadLine[]} params.overheadLines
- * @param {import('./types.js?v=20260418-sK').VASLine[]} params.vasLines
- * @param {import('./types.js?v=20260418-sK').StartupLine[]} params.startupLines
+ * @param {import('./types.js?v=20260612-mix1').PricingBucket[]} params.buckets
+ * @param {import('./types.js?v=20260612-mix1').DirectLaborLine[]} params.laborLines
+ * @param {import('./types.js?v=20260612-mix1').IndirectLaborLine[]} params.indirectLaborLines
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} params.equipmentLines
+ * @param {import('./types.js?v=20260612-mix1').OverheadLine[]} params.overheadLines
+ * @param {import('./types.js?v=20260612-mix1').VASLine[]} params.vasLines
+ * @param {import('./types.js?v=20260612-mix1').StartupLine[]} params.startupLines
  * @param {number} params.facilityCost — pre-computed facility annual cost
  * @param {number} params.operatingHours
  * @param {Object} [params.laborOpts] — engine labor opts (otPct, shift premiums,
@@ -3068,7 +3091,7 @@ const TI_CANDIDATE_EXCLUSIONS = /fence|fencing|\bgate\b|guard\s*(shack|booth|hou
  * and is probably misclassified as capital / lease / purchase. Lines already
  * financed as 'ti' or 'service' never flag. Category 'Dock' or 'Office' is a
  * strong signal on its own; otherwise the name must match a TI pattern.
- * @param {import('./types.js?v=20260418-sK').EquipmentLine} line
+ * @param {import('./types.js?v=20260612-mix1').EquipmentLine} line
  * @returns {boolean}
  */
 export function isTiCandidate(line) {
@@ -3084,13 +3107,13 @@ export function isTiCandidate(line) {
 
 /**
  * Validate a cost model and return warnings.
- * @param {import('./types.js?v=20260418-sK').CostModelData} model
+ * @param {import('./types.js?v=20260612-mix1').CostModelData} model
  * @param {Object} [opts]
  * @param {number} [opts.operatingHours]
- * @returns {import('./types.js?v=20260418-sK').ValidationWarning[]}
+ * @returns {import('./types.js?v=20260612-mix1').ValidationWarning[]}
  */
 export function validateModel(model, opts = {}) {
-  /** @type {import('./types.js?v=20260418-sK').ValidationWarning[]} */
+  /** @type {import('./types.js?v=20260612-mix1').ValidationWarning[]} */
   const warnings = [];
   const pd = model.projectDetails || {};
   const fin = model.financial || {};
@@ -3358,7 +3381,7 @@ export { formatCurrency, formatPct, formatNumber } from '../../shared/format.js'
  * @param {Object} state — { laborLines, indirectLaborLines, facility, shifts, financial }
  * @param {Object} [opts]
  * @param {Object<string, {value: any, source: string}>} [opts.planningRatiosMap]
- * @returns {import('./types.js?v=20260418-sK').IndirectLaborLine[]}
+ * @returns {import('./types.js?v=20260612-mix1').IndirectLaborLine[]}
  */
 export function autoGenerateIndirectLabor(state, opts = {}) {
   const lines = [];
@@ -3552,7 +3575,7 @@ export function autoGenerateIndirectLabor(state, opts = {}) {
 /**
  * Auto-generate equipment lines based on labor, facility, and volume.
  * @param {Object} state
- * @returns {import('./types.js?v=20260418-sK').EquipmentLine[]}
+ * @returns {import('./types.js?v=20260612-mix1').EquipmentLine[]}
  */
 export function autoGenerateEquipment(state, opts = {}) {
   const lines = [];
@@ -4063,7 +4086,7 @@ export function autoGenerateEquipment(state, opts = {}) {
 /**
  * Auto-generate overhead lines based on sqft, HC, and volume.
  * @param {Object} state
- * @returns {import('./types.js?v=20260418-sK').OverheadLine[]}
+ * @returns {import('./types.js?v=20260612-mix1').OverheadLine[]}
  */
 export function autoGenerateOverhead(state) {
   const lines = [];
@@ -4154,7 +4177,7 @@ export function autoGenerateOverhead(state) {
 /**
  * Auto-generate startup/capital lines.
  * @param {Object} state
- * @returns {import('./types.js?v=20260418-sK').StartupLine[]}
+ * @returns {import('./types.js?v=20260612-mix1').StartupLine[]}
  */
 export function autoGenerateStartup(state) {
   const lines = [];
@@ -4281,7 +4304,7 @@ export function autoGenerateStartup(state) {
 /**
  * Generate 10 industry benchmark checks.
  * @param {Object} state
- * @param {import('./types.js?v=20260418-sK').CostSummary} summary
+ * @param {import('./types.js?v=20260612-mix1').CostSummary} summary
  * @returns {Array<{ type: 'ok'|'warn'|'info', title: string, detail: string }>}
  */
 /**

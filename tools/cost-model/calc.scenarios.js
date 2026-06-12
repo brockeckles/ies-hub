@@ -33,6 +33,109 @@
 const DEFAULT_WAGE_LOAD_PCT = 30;
 
 // ============================================================
+// PHASE 4e — TEMP/PERM RETENTION MIX (2026-06-12)
+// ============================================================
+// A `permanent` direct-labor line may carry `retention_mix_pct` — the share
+// of its hours staffed by retained (permanent) employees. The remainder is
+// staffed by temp-agency labor priced at base × (1 + markup), with NO wage
+// load (per Brock 2026-04-20: the agency markup IS the full employer load).
+// Lives here (leaf module) so calc.js AND calc.monthly.js import ONE
+// implementation — parity by construction, no Local duplicates.
+
+/**
+ * Permanent share of a line's hours, as a fraction 0..1.
+ *  - temp_agency lines → 0 (wholly temp; mix is ignored)
+ *  - contractor lines  → 1 (mix N/A — contractors aren't agency temps)
+ *  - permanent lines   → retention_mix_pct/100, default 1 (100% permanent,
+ *    so existing models reprice nowhere)
+ * opts.tempShareDeltaPp (What-If lever) shifts the mix toward temp by N
+ * percentage points (negative = more permanent), clamped to 0..100.
+ *
+ * @param {{employment_type?:string, retention_mix_pct?:number}} line
+ * @param {{tempShareDeltaPp?:number}} [opts]
+ * @returns {number} fraction 0..1
+ */
+export function permMixFracForLine(line, opts = {}) {
+  const empType = (line && line.employment_type) || 'permanent';
+  if (empType === 'temp_agency') return 0;
+  if (empType === 'contractor') return 1;
+  const v = Number(line && line.retention_mix_pct);
+  let mixPct = (Number.isFinite(v)) ? Math.max(0, Math.min(100, v)) : 100;
+  const delta = Number(opts && opts.tempShareDeltaPp) || 0;
+  if (delta !== 0 && mixPct > 0) {
+    // The lever only perturbs lines that participate in the mix system —
+    // a 100%-perm line with no explicit retention_mix_pct set still shifts
+    // (that's the point of the what-if), but pure-temp lines (mix 0) don't.
+    mixPct = Math.max(0, Math.min(100, mixPct - delta));
+  }
+  return mixPct / 100;
+}
+
+/**
+ * Agency markup fraction for the TEMP share of a line.
+ * Resolution:
+ *  - pure temp_agency line → its own temp_agency_markup_pct, nothing else
+ *    (preserves shipped Phase 4a pricing — no fallback repricing)
+ *  - mixed permanent line  → line value (>0) → market profile
+ *    temp_cost_premium_pct → calcHeur tempMarkupPct default
+ *
+ * @param {{employment_type?:string, temp_agency_markup_pct?:number}} line
+ * @param {{marketTempPremiumPct?:number, defaultTempMarkupPct?:number}} [opts]
+ * @returns {number} fraction (0.38 = +38%)
+ */
+export function tempMarkupFracForLine(line, opts = {}) {
+  const lineV = Number(line && line.temp_agency_markup_pct);
+  const isPureTemp = ((line && line.employment_type) || 'permanent') === 'temp_agency';
+  if (isPureTemp) return (Number.isFinite(lineV) && lineV > 0) ? lineV / 100 : 0;
+  if (Number.isFinite(lineV) && lineV > 0) return lineV / 100;
+  const mkt = Number(opts && opts.marketTempPremiumPct);
+  if (Number.isFinite(mkt) && mkt > 0) return mkt / 100;
+  const def = Number(opts && opts.defaultTempMarkupPct);
+  if (Number.isFinite(def) && def > 0) return def / 100;
+  // Mixed lines always land on the house default — a 0-markup temp share
+  // would price temps BELOW loaded perm (base wage, no load), which is
+  // never the real economics. Display paths (no calcHeur in scope) thus
+  // price identically to the engines.
+  return DEFAULT_TEMP_MARKUP_PCT / 100;
+}
+
+/**
+ * House default agency markup (heuristics §2.3 contractual wage load).
+ * Mirrored as the `temp_markup_pct` heuristic default in
+ * resolveCalcHeuristics — keep the two in sync.
+ */
+export const DEFAULT_TEMP_MARKUP_PCT = 38;
+
+/**
+ * Blend perm + temp loaded hourly rates for a line.
+ * permLoaded = base × (1 + wageLoadFrac) + benefitsPerHr   [× permPtoMult]
+ * tempLoaded = base × (1 + tempMarkupFrac) + benefitsPerHr [no load, no PTO]
+ * Invariants pinned by tests:
+ *  - mix=1 → exactly the legacy permanent rate
+ *  - mix=0 → exactly the Phase 4a pure-temp rate (same markup)
+ * benefitsPerHr rides both shares so those invariants hold both directions
+ * (it is a rare legacy field; document, don't special-case).
+ *
+ * @param {Object} args
+ * @param {number} args.baseRate
+ * @param {number} args.wageLoadFrac    resolved by the calling engine
+ * @param {number} args.benefitsPerHr
+ * @param {number} args.mixFrac         from permMixFracForLine
+ * @param {number} args.tempMarkupFrac  from tempMarkupFracForLine
+ * @param {number} [args.permPtoMult=1] PTO headcount uplift, perm share only
+ * @returns {number} blended loaded hourly rate
+ */
+export function blendLoadedRate({ baseRate, wageLoadFrac, benefitsPerHr, mixFrac, tempMarkupFrac, permPtoMult = 1 }) {
+  const b = Number(baseRate) || 0;
+  const ben = Number(benefitsPerHr) || 0;
+  const mix = Math.max(0, Math.min(1, Number(mixFrac) ?? 1));
+  const permLoaded = (b * (1 + (Number(wageLoadFrac) || 0)) + ben) * (Number(permPtoMult) || 1);
+  if (mix >= 1) return permLoaded;
+  const tempLoaded = b * (1 + (Number(tempMarkupFrac) || 0)) + ben;
+  return mix * permLoaded + (1 - mix) * tempLoaded;
+}
+
+// ============================================================
 // TYPEDEFS
 // ============================================================
 
@@ -654,6 +757,11 @@ export function resolveCalcHeuristics(scenario, snapshots, overrides, projectCol
     shift2PremiumPct:     n(pick('shift_2_premium_pct',     p.shift2Premium     ?? 10),   10),
     shift3PremiumPct:     n(pick('shift_3_premium_pct',     p.shift3Premium     ?? 15),   15),
     laborEscPct:          n(pick('labor_escalation_pct',    p.laborEscalation   ?? 3),    3),
+    // 2026-06-12 Phase 4e: agency markup default for the temp share of
+    // mixed lines (heuristics §2.3 contractual wage load — 38%) + the
+    // What-If "shift N pp of perm hours to temp" lever (transient-first).
+    tempMarkupPct:        n(pick('temp_markup_pct',         p.tempMarkup        ?? DEFAULT_TEMP_MARKUP_PCT), DEFAULT_TEMP_MARKUP_PCT),
+    tempShareDeltaPp:     n(pick('temp_share_delta_pp',     0),                           0),
     // 2026-06-12: UPH productivity growth (escalation.uph_yoy). IES policy
     // default 3% (assumes active MOST engineered-standards program);
     // adjustable per project via What-If slider / heuristic override.
@@ -920,12 +1028,22 @@ export function simulateLaborVariance(laborLines, calcHeur, marketProfile, nTria
       // Floor at 30% to avoid extreme blowups from long-tail draws.
       const prodFactor = Math.max(0.3, 1 + shock);
       const shockedHours = (Number(line.annual_hours) || 0) / prodFactor;
-      // Loaded-rate math (matches computeMonthlyLaborFromLines)
+      // Loaded-rate math (matches computeMonthlyLaborFromLines).
+      // 2026-06-12 Phase 4e: routed through the shared blend helpers. This
+      // also fixes a divergence — temp lines with no burden_pct were getting
+      // the fallback burden ON TOP of their markup here (both engines price
+      // temp with zero wage load per the 2026-04-20 convention).
       const baseRate = Number(line.hourly_rate) || 0;
-      const markup = line.employment_type === 'temp_agency' ? (Number(line.temp_agency_markup_pct) || 0) / 100 : 0;
-      const effBase = baseRate * (1 + markup);
-      const burden = line.burden_pct != null ? Number(line.burden_pct) / 100 : benefitLoadFallbackPct / 100;
-      const loadedRate = effBase * (1 + burden) + (Number(line.benefits_per_hour) || 0);
+      const isTempLn = (line.employment_type || 'permanent') === 'temp_agency';
+      const burden = isTempLn ? 0
+        : (line.burden_pct != null ? Number(line.burden_pct) / 100 : benefitLoadFallbackPct / 100);
+      const loadedRate = blendLoadedRate({
+        baseRate,
+        wageLoadFrac: burden,
+        benefitsPerHr: Number(line.benefits_per_hour) || 0,
+        mixFrac: permMixFracForLine(line, { tempShareDeltaPp: calcHeur?.tempShareDeltaPp }),
+        tempMarkupFrac: tempMarkupFracForLine(line, { marketTempPremiumPct: marketProfile?.temp_cost_premium_pct, defaultTempMarkupPct: calcHeur?.tempMarkupPct }),
+      });
       // Apply avg OT / absence from profile (or fallback) to net hours
       const avgOT = avgMonthlyProfilePct(line, calcHeur, marketProfile, 'ot');
       const avgAbs = avgMonthlyProfilePct(line, calcHeur, marketProfile, 'absence');

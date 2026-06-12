@@ -12,13 +12,13 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260526-mfalift1';
-import * as calc from './calc.js?v=20260612-ha1';
+import * as calc from './calc.js?v=20260612-mix1';
 import * as api from './api.js?v=20260612-am1';
-import * as scenarios from './calc.scenarios.js?v=20260612-uph1';
+import * as scenarios from './calc.scenarios.js?v=20260612-mix1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260511-port8';
 import { renderImplementation } from './render-implementation.js?v=20260511-port9';
-import * as monthlyCalc from './calc.monthly.js?v=20260612-uph1';
+import * as monthlyCalc from './calc.monthly.js?v=20260612-mix1';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
@@ -130,7 +130,7 @@ import { computeWhatIfPreview } from './what-if-preview.js?v=20260611-tia4';
 // STATE — tool-local reactive state
 // ============================================================
 
-/** @type {import('./types.js?v=20260418-sK').CostModelData} */
+/** @type {import('./types.js?v=20260612-mix1').CostModelData} */
 let model = createEmptyModel();
 
 /**
@@ -4834,7 +4834,7 @@ function renderLaborV1() {
     <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Pick a <strong>Position</strong> (rate / employment / markup pull from Labor Factors) · Volume from Volumes tab · MHE and IT/Device separate</span></div>
     <table class="cm-grid-table">
       <thead>
-        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th style="min-width:150px;" title="Pick a role from the Labor Factors catalog. Rate/employment/markup pull from the position — edit those centrally.">Position</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th>Markup %</th><th title="Productivity variance for Monte Carlo sensitivity">Var %</th><th class="cm-num">Annual Cost</th><th title="Monthly OT/absence seasonality">Seasonality</th><th></th></tr>
+        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th style="min-width:150px;" title="Pick a role from the Labor Factors catalog. Rate/employment/markup pull from the position — edit those centrally.">Position</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th title="Phase 4e: % of this line's hours staffed by permanent employees. The remainder is temp-agency at the markup (line value, else market profile, else heuristic default 38%). Permanent lines only.">Perm %</th><th>Markup %</th><th title="Productivity variance for Monte Carlo sensitivity">Var %</th><th class="cm-num">Annual Cost</th><th title="Monthly OT/absence seasonality">Seasonality</th><th></th></tr>
       </thead>
       <tbody>
         ${lines.map((l, i) => `
@@ -4883,9 +4883,14 @@ function renderLaborV1() {
               </select>
             </td>
             <td>
+              <input type="number" value="${l.retention_mix_pct ?? 100}" style="width:55px;" step="5" min="0" max="100"
+                data-array="laborLines" data-idx="${i}" data-field="retention_mix_pct" data-type="number"
+                ${(l.employment_type || 'permanent') !== 'permanent' ? 'disabled title="Mix applies to Permanent lines only"' : 'title="% of hours staffed permanent; remainder priced as temp agency"'} />
+            </td>
+            <td>
               <input type="number" value="${l.temp_agency_markup_pct || 0}" style="width:55px;" step="1" min="0" max="100"
                 data-array="laborLines" data-idx="${i}" data-field="temp_agency_markup_pct" data-type="number"
-                ${(l.employment_type || 'permanent') !== 'temp_agency' ? 'disabled title="Only applies to Temp Agency lines"' : ''} />
+                ${(l.employment_type || 'permanent') === 'contractor' ? 'disabled title="N/A for contractors"' : 'title="Agency markup. Temp lines: on the whole line. Permanent lines: on the temp share when Perm % < 100 (0 = inherit market/heuristic default)."'} />
             </td>
             <td>
               <input type="number" value="${l.performance_variance_pct || 0}" style="width:50px;" step="1" min="0" max="50"
@@ -4901,7 +4906,7 @@ function renderLaborV1() {
             <td><button class="cm-delete-btn" data-action="delete-labor" data-idx="${i}">Del</button></td>
           </tr>
         `).join('')}
-        <tr class="cm-total-row"><td colspan="12">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td colspan="2"></td></tr>
+        <tr class="cm-total-row"><td colspan="13">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td colspan="2"></td></tr>
       </tbody>
     </table>
     <button class="cm-add-row-btn" data-action="add-labor">+ Add Labor Line</button>
@@ -5558,6 +5563,11 @@ function renderLaborMasterItem(l, i, opHrs, lc, totalDirectCost = 0) {
   const activityLabel = l.activity_name || '(unnamed activity)';
   const hasSeasonality = Array.isArray(l.monthly_overtime_profile) || Array.isArray(l.monthly_absence_profile);
   const hasVariance = (l.performance_variance_pct || 0) > 0;
+  // Phase 4e: perm/temp retention mix badge (permanent lines only).
+  const mixPct = (l.employment_type || 'permanent') === 'permanent' ? (l.retention_mix_pct ?? 100) : 100;
+  const mixChip = mixPct < 100
+    ? `<span class="hub-chip hub-chip--info" title="Retention mix: ${mixPct}% permanent / ${100 - mixPct}% temp agency">${mixPct}/${100 - mixPct} P/T</span>`
+    : '';
 
   // NEW: share-of-total direct labor. Brock ask — helps the team focus on
   // the big activities driving labor. Shown as a compact pill + a thin
@@ -5598,6 +5608,7 @@ function renderLaborMasterItem(l, i, opHrs, lc, totalDirectCost = 0) {
         ${bucketChip}
         ${shiftChip}
         <span>${fte.toFixed(1)} FTE · ${(l.base_uph || 0).toLocaleString()} UPH</span>
+        ${mixChip}
         ${hasSeasonality ? `<span class="hub-chip hub-chip--info" title="Has monthly OT/absence seasonality">📊</span>` : ''}
         ${hasVariance ? `<span class="hub-chip hub-chip--warn" title="Variance ±${l.performance_variance_pct}%">±${l.performance_variance_pct}%</span>` : ''}
       </div>
@@ -5760,9 +5771,14 @@ function renderLaborDetailPane(lines, opHrs, lc) {
             </select>
           </div>
           <div class="hub-field">
-            <label class="hub-field__label" title="Agency markup over base wage. Only applies to Temp Agency lines.">Temp Markup %</label>
-            <input class="hub-input hub-num" type="number" step="1" min="0" max="100" value="${l.temp_agency_markup_pct || 0}" data-array="laborLines" data-idx="${i}" data-field="temp_agency_markup_pct" data-type="number" ${!isTemp ? 'disabled' : ''} />
-            ${!isTemp ? '<div class="hub-field__hint">(Temp Agency only)</div>' : ''}
+            <label class="hub-field__label" title="Phase 4e: % of this line's hours staffed by permanent employees; the remainder is priced as temp agency (markup, no wage load). Permanent lines only.">Perm Mix %</label>
+            <input class="hub-input hub-num" type="number" step="5" min="0" max="100" value="${l.retention_mix_pct ?? 100}" data-array="laborLines" data-idx="${i}" data-field="retention_mix_pct" data-type="number" ${empType !== 'permanent' ? 'disabled' : ''} />
+            ${empType !== 'permanent' ? '<div class="hub-field__hint">(Permanent only)</div>' : `<div class="hub-field__hint">${(l.retention_mix_pct ?? 100) < 100 ? `${100 - (l.retention_mix_pct ?? 100)}% temp at markup` : '100% permanent'}</div>`}
+          </div>
+          <div class="hub-field">
+            <label class="hub-field__label" title="Agency markup over base wage. Temp Agency lines: whole line. Permanent lines with Perm Mix < 100: the temp share (0 = inherit market profile / heuristic default 38%).">Temp Markup %</label>
+            <input class="hub-input hub-num" type="number" step="1" min="0" max="100" value="${l.temp_agency_markup_pct || 0}" data-array="laborLines" data-idx="${i}" data-field="temp_agency_markup_pct" data-type="number" ${empType === 'contractor' ? 'disabled' : ''} />
+            ${empType === 'contractor' ? '<div class="hub-field__hint">(N/A for contractors)</div>' : ''}
           </div>
           <div class="hub-field">
             <label class="hub-field__label" title="Productivity variance (% std dev) fed into the Monte Carlo sensitivity card in Summary.">Variance %</label>
@@ -9699,6 +9715,12 @@ const WHATIF_SLIDERS = [
   // was silently quiet on real projects. Manage benefit load on the
   // Labor Factors card instead — it's a single source of truth now.
   { key: 'overtime_pct',              label: 'Overtime %',             group: 'Labor',        min: 0,  max: 30, step: 0.5, unit: '%' },
+  // 2026-06-12 Phase 4e: retention-mix levers. Temp Agency Markup feeds the
+  // temp share of mixed lines (line value still wins when set); Temp Share
+  // Shift moves N pp of every permanent line's hours to temp (negative =
+  // more permanent) — the "what if we flex more temps in peak" lever.
+  { key: 'temp_markup_pct',           label: 'Temp Agency Markup',     group: 'Labor',        min: 0,  max: 75, step: 1, unit: '%' },
+  { key: 'temp_share_delta_pp',       label: 'Temp Share Shift',       group: 'Labor',        min: -50, max: 50, step: 1, unit: 'pp' },
   { key: 'absence_allowance_pct',     label: 'Absence %',              group: 'Labor',        min: 0,  max: 25, step: 0.5, unit: '%' },
   // Brock 2026-04-20: direct-labor productivity (% to MOST engineered
   // standard). 100% = pure engineered. Typical trained op: 85–95%.
@@ -9784,6 +9806,8 @@ function _whatIfProjectFallback(sliderKey) {
 
 /** Fallback defaults for sliders not represented in the heuristics catalog. */
 const WHATIF_FALLBACK_DEFAULTS = {
+  temp_markup_pct: 38,                 // heuristics §2.3 contractual wage load
+  temp_share_delta_pp: 0,              // 0 = use each line's own retention mix
   uph_yoy_pct: 3,                      // escalation.uph_yoy catalog default (IES policy)
   direct_labor_productivity_pct: 100,  // 100% = pure MOST engineered (no drag)
   pricing_discount_pct: 0,             // M4: 0 = no discount (recommended rates)

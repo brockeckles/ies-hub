@@ -24,7 +24,7 @@
  * @module tools/cost-model/calc.monthly
  */
 
-import { monthlyEffectiveHours } from './calc.scenarios.js?v=20260612-uph1';
+import { monthlyEffectiveHours, permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260612-mix1';
 
 // ============================================================
 // LABOR BUILD-UP HELPERS (inlined from calc.js to avoid cache-bust
@@ -314,26 +314,31 @@ export function computeMonthlyLaborFromLines(laborLines, ctx) {
   let total = 0;
   for (const line of laborLines) {
     const hours = monthlyEffectiveHours(line, monthIdx, calcHeur, marketLaborProfile);
-    // Phase 4a: employment-type markup folded into effective base rate
     const baseRate = Number(line.hourly_rate) || 0;
-    const empType = line.employment_type || 'permanent';
-    const isTemp = empType === 'temp_agency';
-    const markupFrac = isTemp
-      ? (Number(line.temp_agency_markup_pct) || 0) / 100
-      : 0;
-    const effectiveBase = baseRate * (1 + markupFrac);
     // Consolidated wage load (zero for temp lines — already loaded).
     const wageLoadFrac = wageLoadFracForLineLocal(line, year, {
       wageLoadByYear,
       defaultWageLoadFrac: fallbackWageLoadFrac,
     });
-    const benefitsPerHr = Number(line.benefits_per_hour) || 0;
-    const loadedRate = effectiveBase * (1 + wageLoadFrac) + benefitsPerHr;
+    // Phase 4e (2026-06-12): perm/temp retention blend via the shared
+    // calc.scenarios helpers (one implementation, both engines).
+    //   perm share → wage load + PTO uplift; temp share → agency markup,
+    //   no load, no PTO (Phase 4a convention). mix=1 and mix=0 reproduce
+    //   the prior permanent / pure-temp math exactly — pinned by tests.
+    const loadedRate = blendLoadedRate({
+      baseRate,
+      wageLoadFrac,
+      benefitsPerHr: Number(line.benefits_per_hour) || 0,
+      mixFrac: permMixFracForLine(line, { tempShareDeltaPp: calcHeur?.tempShareDeltaPp }),
+      tempMarkupFrac: tempMarkupFracForLine(line, {
+        marketTempPremiumPct: marketLaborProfile?.temp_cost_premium_pct,
+        defaultTempMarkupPct: calcHeur?.tempMarkupPct,
+      }),
+      permPtoMult: ptoHcUplift,
+    });
     // Shift differential (dead code in legacy engine — now wired).
     const shiftMult = shiftDifferentialMultLocal(line, { shift2Premium, shift3Premium });
-    // PTO uplift applies to permanent only (temp doesn't accrue PTO).
-    const ptoMult = isTemp ? 1 : ptoHcUplift;
-    total += hours * loadedRate * shiftMult * ptoMult;
+    total += hours * loadedRate * shiftMult;
   }
   return total * seasonalMult
               * (Number(rampLaborMult) || 1)
