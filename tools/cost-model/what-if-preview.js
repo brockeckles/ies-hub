@@ -18,7 +18,7 @@
  * single what-if slider value (or full whatIfTransient when called
  * without an arg).
  */
-import * as calc from './calc.js?v=20260612-uph1';
+import * as calc from './calc.js?v=20260612-ha1';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 
 /**

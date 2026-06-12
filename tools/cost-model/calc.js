@@ -1867,6 +1867,77 @@ export function rackProfileCost(componentRows) {
 }
 
 // ============================================================
+// HOUSE ASSUMPTIONS — pricing_assumptions pinning (2026-06-12)
+// Corporate out-year escalation guidance (pricing_assumptions table) is
+// PINNED into each project at creation/first save. Later guidance changes
+// never alter an existing project — analysts see the drift and adopt the
+// new guidance only by explicit action. (Brock 2026-06-12: "if the
+// original deal modeled 3% but we later adjusted corporate guidance to
+// 5%, the 3% for that specific project should remain intact.")
+// ============================================================
+
+/**
+ * Snapshot pricing_assumptions rows into a project-pinnable shape.
+ * @param {Object[]} rows — live pricing_assumptions rows
+ * @param {string} [asOf] — pin date (YYYY-MM-DD); defaults to today
+ * @returns {{ pinnedAt: string, rows: Object[] }}
+ */
+export function pinHouseAssumptions(rows, asOf) {
+  const clean = (rows || []).map(r => ({
+    scope: r.scope ?? null,
+    scope_key: r.scope_key ?? null,
+    metric: r.metric ?? null,
+    year_1_pct: Number(r.year_1_pct) || 0,
+    year_2_pct: Number(r.year_2_pct) || 0,
+    year_3_pct: Number(r.year_3_pct) || 0,
+    year_4_pct: Number(r.year_4_pct) || 0,
+    year_5_pct: Number(r.year_5_pct) || 0,
+    effective_date: r.effective_date ?? null,
+    notes: r.notes ?? null,
+  }));
+  return { pinnedAt: asOf || new Date().toISOString().slice(0, 10), rows: clean };
+}
+
+/**
+ * Map pinned house guidance onto the project's escalation defaults.
+ * hourly-wage Y1 → financial.laborEscalation; global capex Y1 →
+ * financial.annualEscalation (general cost). Only used when SEEDING a
+ * brand-new model — never re-applied to existing projects.
+ * @param {{ rows: Object[] }} pinned
+ * @returns {{ laborEscalation?: number, annualEscalation?: number }}
+ */
+export function houseGuidanceSeeds(pinned) {
+  const rows = pinned?.rows || [];
+  const find = (scope, metric, key) => rows.find(r =>
+    r.scope === scope && r.metric === metric && (key === undefined || r.scope_key === key));
+  const wage  = find('labor_category', 'wage', 'hourly') || find('global', 'wage', null) || find('global', 'wage');
+  const capex = find('global', 'capex', null) || find('global', 'capex');
+  const out = {};
+  if (wage  && Number.isFinite(wage.year_1_pct))  out.laborEscalation  = wage.year_1_pct;
+  if (capex && Number.isFinite(capex.year_1_pct)) out.annualEscalation = capex.year_1_pct;
+  return out;
+}
+
+/**
+ * Compare a project's pinned house assumptions against live guidance.
+ * @param {{ rows: Object[] }} pinned
+ * @param {Object[]} currentRows — live pricing_assumptions
+ * @returns {{ rows: Object[], anyDrift: boolean }} each row gains
+ *   { current, changed, missing }
+ */
+export function houseAssumptionsDrift(pinned, currentRows) {
+  const keyOf = r => `${r.scope}|${r.scope_key ?? ''}|${r.metric}`;
+  const cur = new Map((currentRows || []).map(r => [keyOf(r), r]));
+  const rows = (pinned?.rows || []).map(r => {
+    const c = cur.get(keyOf(r)) || null;
+    const changed = !!c && [1, 2, 3, 4, 5].some(i =>
+      Number(c[`year_${i}_pct`]) !== Number(r[`year_${i}_pct`]));
+    return { ...r, current: c, changed, missing: !c };
+  });
+  return { rows, anyDrift: rows.some(r => r.changed || r.missing) };
+}
+
+// ============================================================
 // STARTUP / CAPITAL
 // ============================================================
 

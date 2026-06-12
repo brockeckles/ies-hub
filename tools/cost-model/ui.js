@@ -12,7 +12,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260526-mfalift1';
-import * as calc from './calc.js?v=20260612-uph1';
+import * as calc from './calc.js?v=20260612-ha1';
 import * as api from './api.js?v=20260612-am1';
 import * as scenarios from './calc.scenarios.js?v=20260612-uph1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
@@ -3311,7 +3311,86 @@ function renderSetup() {
       </div>
     </div>
     ` : ''}
+
+    ${renderHouseAssumptionsCard()}
   `;
+}
+
+/**
+ * House Assumptions card (2026-06-12) — read-only view of the corporate
+ * pricing_assumptions guidance PINNED to this project. Pinned at model
+ * creation (new models also seed their escalation defaults from it) or
+ * first save (legacy models). Later guidance changes show as drift; the
+ * project's pinned values stay intact unless the analyst explicitly adopts.
+ */
+function renderHouseAssumptionsCard() {
+  const live = refData?.pricingAssumptions || [];
+  const pinned = model.houseAssumptions;
+  if (!pinned && live.length === 0) return '';
+
+  const fmtY = r => [1, 2, 3, 4, 5].map(i => {
+    const v = Number(r[`year_${i}_pct`]);
+    return Number.isFinite(v) ? v.toFixed(2) : '—';
+  });
+  const scopeLabel = r => r.scope === 'global' ? 'Global'
+    : r.scope === 'labor_category' ? `Labor · ${r.scope_key || ''}`
+    : r.scope === 'equipment_category' ? `Equip · ${r.scope_key || ''}`
+    : `${r.scope || ''} · ${r.scope_key || ''}`;
+
+  if (!pinned) {
+    return `
+    <div class="cm-card" style="margin-top:16px;padding:14px 16px;">
+      <div style="font-weight:700;color:var(--ies-blue);font-size:13px;">🏛 House Assumptions (corporate out-year guidance)</div>
+      <div style="font-size:12px;color:var(--ies-gray-500);margin-top:6px;">
+        Current corporate guidance will be <b>pinned to this project on first save</b> —
+        after that, later guidance changes never alter this project's assumptions.
+      </div>
+    </div>`;
+  }
+
+  const drift = calc.houseAssumptionsDrift(pinned, live);
+  const rows = drift.rows.map(r => {
+    const y = fmtY(r);
+    const curY = r.current ? fmtY(r.current) : null;
+    return `
+      <tr${r.changed ? ' style="background:rgba(217,119,6,0.05);"' : ''}>
+        <td>${escapeAttr(scopeLabel(r))}</td>
+        <td>${escapeAttr(r.metric || '')}</td>
+        ${y.map((v, i) => `<td class="hub-num"${r.changed && curY && curY[i] !== v ? ` title="current guidance: ${curY[i]}%" style="color:#d97706;font-weight:700;"` : ''}>${v}</td>`).join('')}
+        <td style="font-size:11px;color:var(--ies-gray-400);max-width:220px;">${escapeAttr(r.notes || '')}</td>
+      </tr>`;
+  }).join('');
+
+  return `
+    <div class="cm-card" style="margin-top:16px;padding:14px 16px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+        <div>
+          <div style="font-weight:700;color:var(--ies-blue);font-size:13px;">🏛 House Assumptions (corporate out-year guidance)</div>
+          <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">
+            Pinned to this project <b>${escapeAttr(pinned.pinnedAt || '')}</b> — read-only.
+            Later corporate guidance changes never alter this project.
+            ${drift.anyDrift
+              ? '<span style="color:#d97706;font-weight:700;"> ⚠ Current guidance has changed since this project was pinned.</span>'
+              : '<span style="color:#10b981;font-weight:700;"> ✓ Matches current guidance.</span>'}
+          </div>
+        </div>
+        ${drift.anyDrift ? `<button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="adopt-house-guidance" title="Re-pin this project to today's corporate guidance. Escalation inputs are not changed.">Adopt current guidance</button>` : ''}
+      </div>
+      <div class="cm-table-scroll" style="margin-top:10px;">
+        <table class="hub-datatable hub-datatable--dense" style="width:100%;font-size:12px;">
+          <thead>
+            <tr><th style="text-align:left;">Scope</th><th style="text-align:left;">Metric</th>
+            <th class="hub-num">Y1 %</th><th class="hub-num">Y2 %</th><th class="hub-num">Y3 %</th><th class="hub-num">Y4 %</th><th class="hub-num">Y5 %</th>
+            <th style="text-align:left;">Source / Notes</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div style="font-size:11px;color:var(--ies-gray-400);margin-top:8px;">
+        New models seed Labor Escalation + Cost Escalation defaults from the hourly-wage and global-capex Y1 rows at creation.
+        Per-deal escalation stays adjustable via Setup + What-If sliders — this card records the corporate view this deal was priced against.
+      </div>
+    </div>`;
 }
 
 // ============================================================
@@ -10983,6 +11062,19 @@ async function handleAction(action, idx, btn) {
       );
       break;
     }
+    case 'adopt-house-guidance': {
+      const live = refData?.pricingAssumptions || [];
+      if (!live.length) { showToast('No live guidance loaded', 'error'); return; }
+      showConfirm(
+        'Adopt current corporate guidance? This re-pins the house assumptions shown on this project to today\u2019s values. Your escalation inputs (sliders / Setup card) are NOT changed \u2014 adjust those separately if needed.',
+        () => {
+          model.houseAssumptions = calc.pinHouseAssumptions(live);
+          _markCmDirty();
+          renderSection();
+          showToast('House assumptions re-pinned to current guidance', 'success');
+        });
+      return;
+    }
     case 'add-equipment':
       // Phase 2a (2026-04-22): new blank rows default to owned_mhe since the
       // default category is 'MHE'. Users re-classify via the Line Type column.
@@ -11773,6 +11865,9 @@ async function openEquipmentCatalog() {
 async function handleNew() {
   if (getIsDirty() && !(await showConfirm('You have unsaved changes. Start a new model?', { okLabel: 'Start new' }))) return;
   model = setModel(createEmptyModel());
+  // House assumptions: pin current corporate guidance + seed escalation
+  // defaults — this project keeps these values even if guidance changes.
+  ensureHouseAssumptions(true);
   resetDirty();
   // CM-SAVE-1 — Reset save-state on a brand-new model.
   setSavedMeta(null, null);
@@ -11781,8 +11876,34 @@ async function handleNew() {
   navigateSection('setup');
 }
 
+/**
+ * House assumptions (2026-06-12): pin corporate pricing_assumptions into the
+ * project on creation (seeded defaults) or first save (reference only, for
+ * pre-existing projects). Pinned guidance NEVER changes after that except
+ * via the explicit "Adopt current guidance" action on the Setup card.
+ * @param {boolean} seedDefaults — also seed financial escalation defaults
+ *   (new models only)
+ * @returns {boolean} true if a pin happened
+ */
+function ensureHouseAssumptions(seedDefaults) {
+  if (model.houseAssumptions) return false;
+  const live = refData?.pricingAssumptions;
+  if (!Array.isArray(live) || live.length === 0) return false;
+  model.houseAssumptions = calc.pinHouseAssumptions(live);
+  if (seedDefaults) {
+    const seeds = calc.houseGuidanceSeeds(model.houseAssumptions);
+    model.financial = model.financial || {};
+    if (seeds.laborEscalation  != null) model.financial.laborEscalation  = seeds.laborEscalation;
+    if (seeds.annualEscalation != null) model.financial.annualEscalation = seeds.annualEscalation;
+  }
+  return true;
+}
+
 async function handleSave() {
   try {
+    // Lazy pin for projects that predate house-assumption pinning — captures
+    // the guidance in force NOW as their baseline (reference only, no reseed).
+    ensureHouseAssumptions(false);
     if (model.id) {
       await api.updateModel(model.id, model);
     } else {
