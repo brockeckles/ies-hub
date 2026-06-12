@@ -12,13 +12,13 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260526-mfalift1';
-import * as calc from './calc.js?v=20260612-am1';
+import * as calc from './calc.js?v=20260612-uph1';
 import * as api from './api.js?v=20260612-am1';
-import * as scenarios from './calc.scenarios.js?v=20260611-cm1';
+import * as scenarios from './calc.scenarios.js?v=20260612-uph1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260511-port8';
 import { renderImplementation } from './render-implementation.js?v=20260511-port9';
-import * as monthlyCalc from './calc.monthly.js?v=20260611-cm1';
+import * as monthlyCalc from './calc.monthly.js?v=20260612-uph1';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
@@ -9627,6 +9627,9 @@ const WHATIF_SLIDERS = [
   // more hours = more $). Matches the MOST productivity_pct concept.
   { key: 'direct_labor_productivity_pct', label: 'Direct Labor Productivity', group: 'Labor', min: 70, max: 110, step: 0.5, unit: '%' },
   { key: 'labor_escalation_pct',      label: 'Labor Escalation / yr',  group: 'Escalation',   min: 0,  max: 15, step: 0.25, unit: '%' },
+  // 2026-06-12: UPH productivity growth — divides labor escalation (3% wage
+  // + 3% UPH = flat real labor cost). Catalog default escalation.uph_yoy = 3%.
+  { key: 'uph_yoy_pct',               label: 'UPH Productivity / yr',  group: 'Escalation',   min: 0,  max: 10, step: 0.25, unit: '%' },
   { key: 'facility_escalation_pct',   label: 'Facility Escalation',    group: 'Escalation',   min: 0,  max: 15, step: 0.25, unit: '%' },
 ];
 
@@ -9691,6 +9694,7 @@ function _whatIfProjectFallback(sliderKey) {
 
 /** Fallback defaults for sliders not represented in the heuristics catalog. */
 const WHATIF_FALLBACK_DEFAULTS = {
+  uph_yoy_pct: 3,                      // escalation.uph_yoy catalog default (IES policy)
   direct_labor_productivity_pct: 100,  // 100% = pure MOST engineered (no drag)
   pricing_discount_pct: 0,             // M4: 0 = no discount (recommended rates)
 };

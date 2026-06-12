@@ -14,7 +14,7 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260611-cm1';
+import * as monthly from './calc.monthly.js?v=20260612-uph1';
 import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260430-hours-first';
 import {
   getAnnualVolume as _getAnnualVolume,
@@ -2077,6 +2077,7 @@ export function computeYr1LearningFactor(laborLines) {
  * @param {number} params.marginPct — target margin (0-based fraction, e.g. 0.12)
  * @param {number} [params.volGrowthPct] — annual volume growth (0-based fraction)
  * @param {number} [params.laborEscPct] — annual labor escalation (0-based fraction)
+ * @param {number} [params.uphYoyPct] — annual UPH productivity growth (0-based fraction); offsets labor escalation as a divisor (2026-06-12, escalation.uph_yoy)
  * @param {number} [params.costEscPct] — annual cost escalation (0-based fraction)
  * @param {import('./types.js?v=20260418-sK').DirectLaborLine[]} [params.laborLines] — for learning curve calc
  * @returns {{ projections: import('./types.js?v=20260418-sK').YearlyProjection[], startupCapital: number }}
@@ -2106,7 +2107,7 @@ export function buildYearlyProjections(params) {
     years, baseLaborCost, baseFacilityCost, baseEquipmentCost,
     baseOverheadCost, baseVasCost, startupAmort, startupCapital,
     baseOrders, marginPct,
-    volGrowthPct = 0, laborEscPct = 0, costEscPct = 0.03,
+    volGrowthPct = 0, laborEscPct = 0, uphYoyPct = 0, costEscPct = 0.03,
     laborLines = [],
     // Phase 0: per-project tax rate (was hardcoded 25%). Falls back to 25
     // if the model didn't carry one from cost_model_projects.tax_rate_pct.
@@ -2131,7 +2132,9 @@ export function buildYearlyProjections(params) {
 
   for (let yr = 1; yr <= years; yr++) {
     const volMult = Math.pow(1 + volGrowthPct, yr - 1);
-    const laborMult = Math.pow(1 + laborEscPct, yr - 1);
+    // 2026-06-12: UPH productivity growth offsets wage escalation — labor
+    // cost = base × (1+wage)^n / (1+uph)^n. Default 0 preserves legacy.
+    const laborMult = Math.pow(1 + laborEscPct, yr - 1) / Math.pow(1 + Math.max(0, uphYoyPct), yr - 1);
     const costMult = Math.pow(1 + costEscPct, yr - 1);
     const facilityMult  = Math.pow(1 + facilityEscPct,  yr - 1);
     const equipmentMult = Math.pow(1 + equipmentEscPct, yr - 1);
@@ -4589,6 +4592,7 @@ export function adaptYearlyToMonthlyParams(p) {
     margin_pct:          p.marginPct,
     vol_growth_pct:      p.volGrowthPct || 0,
     labor_esc_pct:       p.laborEscPct  || 0,
+    uph_yoy_pct:         p.uphYoyPct    || 0,
     cost_esc_pct:        p.costEscPct   || 0,
     // 2026-04-21 audit: pass facility + equipment escalation separately so
     // the monthly engine can honor What-If slider overrides (was dead before).

@@ -654,6 +654,10 @@ export function resolveCalcHeuristics(scenario, snapshots, overrides, projectCol
     shift2PremiumPct:     n(pick('shift_2_premium_pct',     p.shift2Premium     ?? 10),   10),
     shift3PremiumPct:     n(pick('shift_3_premium_pct',     p.shift3Premium     ?? 15),   15),
     laborEscPct:          n(pick('labor_escalation_pct',    p.laborEscalation   ?? 3),    3),
+    // 2026-06-12: UPH productivity growth (escalation.uph_yoy). IES policy
+    // default 3% (assumes active MOST engineered-standards program);
+    // adjustable per project via What-If slider / heuristic override.
+    uphYoyPct:            n(pick('uph_yoy_pct',              p.uphYoy            ?? 3),    3),
     // Ramp + Seasonality
     rampWeeksLow:         n(pick('ramp_weeks_low',          p.rampWeeksLow      ?? 2),    2),
     rampWeeksMed:         n(pick('ramp_weeks_med',          p.rampWeeksMed      ?? 4),    4),
@@ -1008,6 +1012,7 @@ export function buildProjectionParams(ctx) {
     marginPct:         (calcHeur.targetMarginPct || 0) / 100,
     volGrowthPct:      calcHeur.volGrowthPct      / 100,
     laborEscPct:       calcHeur.laborEscPct       / 100,
+    uphYoyPct:         (calcHeur.uphYoyPct ?? 3)  / 100,
     costEscPct:        calcHeur.costEscPct        / 100,
     facilityEscPct:    calcHeur.facilityEscPct    / 100,
     equipmentEscPct:   calcHeur.equipmentEscPct   / 100,

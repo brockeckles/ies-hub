@@ -24,7 +24,7 @@
  * @module tools/cost-model/calc.monthly
  */
 
-import { monthlyEffectiveHours } from './calc.scenarios.js?v=20260611-cm1';
+import { monthlyEffectiveHours } from './calc.scenarios.js?v=20260612-uph1';
 
 // ============================================================
 // LABOR BUILD-UP HELPERS (inlined from calc.js to avoid cache-bust
@@ -368,6 +368,7 @@ export function buildMonthlyProjections(params) {
     margin_pct = 0,
     vol_growth_pct = 0,
     labor_esc_pct = 0,
+    uph_yoy_pct = 0,
     cost_esc_pct = 0,
     // 2026-04-21 audit: facility + equipment escalation were folded into
     // cost_esc_pct. What-If Facility Escalation slider was silently dead.
@@ -480,7 +481,10 @@ export function buildMonthlyProjections(params) {
     // This makes opex GROW over ramp months (matching the design intent).
     const rampLaborMult = rampMult;
     const seasonalShare = sProfile.monthly_shares[p.calendar_month - 1] ?? (1 / 12);
-    const escLaborMult = Math.pow(1 + labor_esc_pct, yearIdx);
+    // 2026-06-12: UPH productivity divisor mirrors buildYearlyProjections'
+    // laborMult exactly (engine parity) — folded into escLaborMult so every
+    // labor consumer (per-line + aggregate) stays consistent.
+    const escLaborMult = Math.pow(1 + labor_esc_pct, yearIdx) / Math.pow(1 + Math.max(0, uph_yoy_pct), yearIdx);
     const escCostMult  = Math.pow(1 + cost_esc_pct,  yearIdx);
     const escFacilityMult  = Math.pow(1 + (facility_esc_pct  != null ? facility_esc_pct  : cost_esc_pct), yearIdx);
     const escEquipmentMult = Math.pow(1 + (equipment_esc_pct != null ? equipment_esc_pct : cost_esc_pct), yearIdx);
