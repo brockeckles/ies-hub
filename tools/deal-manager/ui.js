@@ -12,7 +12,7 @@ import * as calc from './calc.js?v=20260610-straggler1';
 import * as api from './api.js?v=20260511-port2';
 import * as cmApi from '../cost-model/api.js?v=20260612-am1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
-import { escapeHtml } from '../../shared/escape.js?v=20260511-port12';
+import { escapeHtml } from '../../shared/escape.js?v=20260702-sec1';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260611-sl1';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 
@@ -419,8 +419,8 @@ function renderKanban(el) {
                   const badge = calc.statusBadge(d.status);
                   return `
                     <div class="hub-card dm-deal-card" draggable="true" style="cursor:pointer;padding:12px;border:1px solid var(--ies-gray-200);" data-deal-id="${d.id}" data-drag-deal-id="${d.id}">
-                      <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ies-navy);">${d.dealName}</div>
-                      <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:6px;">${d.clientName}</div>
+                      <div style="font-size:12px;font-weight:700;margin-bottom:4px;color:var(--ies-navy);">${escapeHtml(d.dealName)}</div>
+                      <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:6px;">${escapeHtml(d.clientName)}</div>
                       <div style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:${badge.bg};color:${badge.color};">${badge.label}</div>
                     </div>
                   `;
@@ -530,7 +530,7 @@ async function openCombinePreview(srcId, tgtId) {
     <div class="hub-modal" style="max-width:720px;">
       <h3 style="margin:0 0 4px 0;">Combine Deals — Preview</h3>
       <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:16px;">
-        <b>${dealA.dealName}</b> + <b>${dealB.dealName}</b> · ${(sitesA.length + sitesB.length)} sites total
+        <b>${escapeHtml(dealA.dealName)}</b> + <b>${escapeHtml(dealB.dealName)}</b> · ${(sitesA.length + sitesB.length)} sites total
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">
         <div class="hub-card" style="padding:12px;text-align:center;">
@@ -560,13 +560,13 @@ async function openCombinePreview(srcId, tgtId) {
       </div>
 
       <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:12px;">
-        <b>Save as new combined deal:</b> creates a new "${dealA.dealName} + ${dealB.dealName}" container with the cannibalization % applied.<br>
-        <b>Move all sites to ${dealB.dealName}:</b> re-links every site from the source deal onto the target. Source deal becomes site-less but stays.
+        <b>Save as new combined deal:</b> creates a new "${escapeHtml(dealA.dealName)} + ${escapeHtml(dealB.dealName)}" container with the cannibalization % applied.<br>
+        <b>Move all sites to ${escapeHtml(dealB.dealName)}:</b> re-links every site from the source deal onto the target. Source deal becomes site-less but stays.
       </div>
 
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button class="hub-btn hub-btn-secondary" data-action="dm-cmb-cancel">Cancel</button>
-        <button class="hub-btn hub-btn-secondary" data-action="dm-cmb-move" title="Re-link sites from source onto target">Move sites → ${dealB.dealName}</button>
+        <button class="hub-btn hub-btn-secondary" data-action="dm-cmb-move" title="Re-link sites from source onto target">Move sites → ${escapeHtml(dealB.dealName)}</button>
         <button class="hub-btn hub-btn-primary" data-action="dm-cmb-save">Save combined deal</button>
       </div>
     </div>
@@ -801,10 +801,10 @@ function renderDealList(el) {
                   ✕
                 </button>
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-right:24px;">
-                  <span style="font-size:14px;font-weight:700;">${d.dealName}</span>
+                  <span style="font-size:14px;font-weight:700;">${escapeHtml(d.dealName)}</span>
                   <span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:${badge.bg};color:${badge.color};">${badge.label}</span>
                 </div>
-                <div style="font-size:13px;color:var(--ies-gray-400);margin-bottom:8px;">${d.clientName}</div>
+                <div style="font-size:13px;color:var(--ies-gray-400);margin-bottom:8px;">${escapeHtml(d.clientName)}</div>
                 <div style="display:flex;gap:16px;font-size:11px;color:var(--ies-gray-400);">
                   <span>Owner: ${d.dealOwner || '—'}</span>
                   ${d.contractTermYears ? `<span>${d.contractTermYears}yr term</span>` : ''}
@@ -1007,8 +1007,8 @@ function renderSummary(el) {
       <div style="max-width:800px;">
         <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
           <div>
-            <div style="font-size:20px;font-weight:800;">${activeDeal.dealName}</div>
-            <div style="font-size:13px;color:var(--ies-gray-400);">${activeDeal.clientName} • ${activeDeal.dealOwner || 'Unassigned'}</div>
+            <div style="font-size:20px;font-weight:800;">${escapeHtml(activeDeal.dealName)}</div>
+            <div style="font-size:13px;color:var(--ies-gray-400);">${escapeHtml(activeDeal.clientName)} • ${escapeHtml(activeDeal.dealOwner || 'Unassigned')}</div>
           </div>
           <span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:${badge.bg};color:${badge.color};">${badge.label}</span>
         </div>
@@ -1044,8 +1044,8 @@ function renderSummary(el) {
       <!-- Deal Header -->
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
         <div>
-          <div style="font-size:20px;font-weight:800;">${activeDeal.dealName}</div>
-          <div style="font-size:13px;color:var(--ies-gray-400);">${activeDeal.clientName} • ${activeDeal.dealOwner || 'Unassigned'}</div>
+          <div style="font-size:20px;font-weight:800;">${escapeHtml(activeDeal.dealName)}</div>
+          <div style="font-size:13px;color:var(--ies-gray-400);">${escapeHtml(activeDeal.clientName)} • ${escapeHtml(activeDeal.dealOwner || 'Unassigned')}</div>
         </div>
         <span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:${badge.bg};color:${badge.color};">${badge.label}</span>
         <div style="margin-left:auto;text-align:center;">
@@ -1168,7 +1168,7 @@ function renderSites(el) {
             return `
               <div class="hub-card" style="padding:16px;${linked ? 'border-left:3px solid var(--ies-blue);' : ''}">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-                  <span style="font-size:14px;font-weight:700;">${s.name}</span>
+                  <span style="font-size:14px;font-weight:700;">${escapeHtml(s.name)}</span>
                   <button class="hub-btn hub-btn-sm hub-btn-secondary" data-unlink="${s.id}" style="padding:4px 8px;">✕</button>
                 </div>
                 <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
@@ -1644,7 +1644,7 @@ function renderCompare(el) {
           <div style="font-size:12px;">
             <select id="dm-compare-add" style="padding:4px 8px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;">
               <option value="">+ Add deal to compare…</option>
-              ${candidates.filter(d => !compareDealIds.includes(d.id)).map(d => `<option value="${d.id}">${d.dealName}</option>`).join('')}
+              ${candidates.filter(d => !compareDealIds.includes(d.id)).map(d => `<option value="${d.id}">${escapeHtml(d.dealName)}</option>`).join('')}
             </select>
           </div>
         </div>
@@ -1655,7 +1655,7 @@ function renderCompare(el) {
           <thead>
             <tr style="border-bottom:2px solid var(--ies-gray-200);">
               <th style="text-align:left;padding:8px;font-weight:700;color:var(--ies-gray-500);">Metric</th>
-              ${computed.map(c => `<th style="text-align:right;padding:8px;font-weight:700;">${c.deal.dealName}${c.deal.id === activeDeal.id ? ' <span style="font-size:10px;color:var(--ies-blue);">(active)</span>' : ` <button class="hub-btn-icon" data-compare-remove="${c.deal.id}" title="Remove" style="border:0;background:transparent;cursor:pointer;color:var(--ies-gray-400);">×</button>`}</th>`).join('')}
+              ${computed.map(c => `<th style="text-align:right;padding:8px;font-weight:700;">${escapeHtml(c.deal.dealName)}${c.deal.id === activeDeal.id ? ' <span style="font-size:10px;color:var(--ies-blue);">(active)</span>' : ` <button class="hub-btn-icon" data-compare-remove="${c.deal.id}" title="Remove" style="border:0;background:transparent;cursor:pointer;color:var(--ies-gray-400);">×</button>`}</th>`).join('')}
             </tr>
           </thead>
           <tbody>

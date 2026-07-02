@@ -29,7 +29,7 @@
  *   completePasswordRecovery → signed in.
  *
  * Usage:
- *   import { auth } from './auth.js?v=20260526-mfalift1';
+ *   import { auth } from './auth.js?v=20260702-mfarestore1';
  *
  *   await auth.bootstrapSession();            // call once before gate check
  *   if (!auth.isAuthenticated()) {
@@ -366,18 +366,14 @@ async function getAalLevel() {
  * @returns {Promise<boolean>}
  */
 async function requiresMfa() {
-  // TEMPORARY (2026-05-26) — MFA gate LIFTED at Brock's request to unblock
-  // GXO IT reviewer logins (nathan.clarke001, alan.hall1). The gate is
-  // app-layer only; zero RLS policies invoke current_user_is_aal2(), so
-  // returning false here is a complete bypass with no DB-side fallback.
-  //
-  // TO RESTORE: uncomment the two original lines below and delete this
-  // early-return + comment block. No other file touches this function's
-  // behavior; flipping it back is a one-edit change.
-  //
-  //   const lvl = await getAalLevel();
-  //   return lvl !== 'aal2';
-  return false;
+  // RESTORED (2026-07-02) — the MFA gate lifted 2026-05-26 for GXO IT
+  // reviewer logins is re-enabled ahead of the inside-firewall transition.
+  // A session that has not reached aal2 is prompted to enroll/verify TOTP.
+  // NOTE: still app-layer only; no RLS policy enforces current_user_is_aal2()
+  // for members, so this is a UI gate, not a DB boundary. Hardening RLS to
+  // require aal2 is tracked as a Phase-1 item.
+  const lvl = await getAalLevel();
+  return lvl !== 'aal2';
 }
 
 /**

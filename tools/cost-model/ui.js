@@ -11,7 +11,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
-import { auth } from '../../shared/auth.js?v=20260526-mfalift1';
+import { auth } from '../../shared/auth.js?v=20260702-mfarestore1';
 import * as calc from './calc.js?v=20260612-mix2';
 import * as api from './api.js?v=20260612-am1';
 import * as scenarios from './calc.scenarios.js?v=20260612-mix2';
@@ -28,7 +28,7 @@ import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js
 import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260512-slideover3';
 import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260610-life1';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
-import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260511-port12';
+import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec1';
 import {
   OFP_MHE_OPTIONS as _OFP_MHE_OPTIONS,
   OFP_IT_OPTIONS as _OFP_IT_OPTIONS,
@@ -3175,12 +3175,12 @@ function renderSetup() {
     <div class="cm-narrow-form" style="margin:0;">
       <div class="hub-field hub-field--full">
         <label class="hub-field__label">Project Name</label>
-        <input class="hub-input" id="cm-name" value="${pd.name || ''}" placeholder="e.g., Acme Ecommerce Fulfillment" data-field="projectDetails.name" />
+        <input class="hub-input" id="cm-name" value="${escapeAttr(pd.name || '')}" placeholder="e.g., Acme Ecommerce Fulfillment" data-field="projectDetails.name" />
       </div>
 
       <div class="hub-field">
         <label class="hub-field__label">Client Name</label>
-        <input class="hub-input" id="cm-client" value="${pd.clientName || ''}" placeholder="Client name" data-field="projectDetails.clientName" />
+        <input class="hub-input" id="cm-client" value="${escapeAttr(pd.clientName || '')}" placeholder="Client name" data-field="projectDetails.clientName" />
       </div>
       <div class="hub-field">
         <label class="hub-field__label">Market</label>
@@ -3593,9 +3593,9 @@ function renderVolumes() {
     return `
       <button class="cm-vol-tab${isActive ? ' cm-vol-tab--active' : ''}${isReverse ? ' cm-vol-tab--reverse' : ''}"
               data-action="vol-channel-tab" data-key="${c.key}"
-              title="${c.name}${c.archetypeId ? ` (${c.archetypeId})` : ''}">
+              title="${escapeAttr(c.name)}${c.archetypeId ? ` (${c.archetypeId})` : ''}">
         ${c.color ? `<span class="cm-vol-tab__dot" style="background:${c.color};"></span>` : ''}
-        <span>${c.name || '(unnamed)'}</span>
+        <span>${escapeHtml(c.name || '(unnamed)')}</span>
         ${pctLabel && !isReverse ? `<span class="cm-vol-tab__pct">${pctLabel}</span>` : ''}
       </button>`;
   }).join('');

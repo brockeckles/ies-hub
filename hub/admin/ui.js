@@ -12,7 +12,7 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { getEnv, getEnvLabel, getProjectRef } from '../../shared/supabase.js?v=20260429-demo-s3';
 import { getBuildInfo, getBuildInfoSync } from '../../shared/build-info.js?v=20260424-A2';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
-import { escapeHtml } from '../../shared/escape.js?v=20260511-port12';
+import { escapeHtml } from '../../shared/escape.js?v=20260702-sec1';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;

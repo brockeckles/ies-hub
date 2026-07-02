@@ -11,7 +11,7 @@
 
 import { router } from './router.js?v=20260610-sec1';
 import { bus } from './event-bus.js?v=20260418-sK';
-import { escapeHtml as _h } from './escape.js?v=20260511-port12';
+import { escapeHtml as _h } from './escape.js?v=20260702-sec1';
 
 /**
  * @typedef {Object} SearchEntry

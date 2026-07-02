@@ -9,7 +9,7 @@
  *   import { router } from './router.js?v=20260610-sec1';
  *
  *   router.register('designtools/cost-model', {
- *     load: () => import('../tools/cost-model/ui.js?v=20260612-mix2'),
+ *     load: () => import('../tools/cost-model/ui.js?v=20260702-sec1'),
  *     title: 'Cost Model Builder',
  *   });
  *
@@ -19,7 +19,7 @@
  */
 
 import { bus } from './event-bus.js?v=20260418-sK';
-import { escapeHtml as _h } from './escape.js?v=20260511-port12';
+import { escapeHtml as _h } from './escape.js?v=20260702-sec1';
 
 /**
  * @typedef {Object} RouteConfig

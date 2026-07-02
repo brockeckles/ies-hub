@@ -17,6 +17,7 @@ import * as calc from './calc.js?v=20260610-cogdisp1';
 import * as api from './api.js?v=20260504-auth1';
 import * as cmApi from '../cost-model/api.js?v=20260612-am1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
+import { escapeHtml } from '../../shared/escape.js?v=20260702-sec1';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -1572,7 +1573,7 @@ function renderInputsPhase(el) {
                   ) : '';
                   return `
                   <tr style="${rowStyle}">
-                    <td style="${nameStyle}" title="${exc ? 'Excluded from the solve. Edit the source file and re-upload, or delete this row.' : ''}">${p.name || p.id}</td>
+                    <td style="${nameStyle}" title="${exc ? 'Excluded from the solve. Edit the source file and re-upload, or delete this row.' : ''}">${escapeHtml(p.name || p.id)}</td>
                     <td style="padding:6px;text-align:right;">${ll(p.lat)}</td>
                     <td style="padding:6px;text-align:right;">${ll(p.lng)}</td>
                     <td style="padding:6px;text-align:right;">${(p.weight || 0).toLocaleString()}</td>
@@ -3283,7 +3284,7 @@ function renderAnalysis(el) {
                     <td style="padding:6px;text-align:center;">
                       <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${clusterColor(a.clusterId)};"></span>
                     </td>
-                    <td style="padding:6px;font-weight:600;">${pt?.name || a.pointId}${outBadge}</td>
+                    <td style="padding:6px;font-weight:600;">${escapeHtml(pt?.name || a.pointId)}${outBadge}</td>
                     <td style="padding:6px;text-align:right;">${(pt?.weight || 0).toLocaleString()}</td>
                     <td style="padding:6px;text-align:right;">${calc.formatMiles(a.distanceToCenter)}</td>
                     <td style="padding:6px;text-align:right;">${calc.formatCurrency(cost, { compact: true })}</td>
@@ -3486,7 +3487,7 @@ function renderCompare(el) {
               <label style="font-size:11px;font-weight:600;color:var(--ies-gray-500);">Slot ${slot + 1}:</label>
               <select data-compare-slot="${slot}" style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
                 <option value="">— None —</option>
-                ${otherScenarios.map(r => `<option value="${r.id}"${comparedScenarioIds[slot] === r.id ? ' selected' : ''}>${(r.name || 'Untitled').replace(/</g, '&lt;')}</option>`).join('')}
+                ${otherScenarios.map(r => `<option value="${r.id}"${comparedScenarioIds[slot] === r.id ? ' selected' : ''}>${escapeHtml(r.name || 'Untitled')}</option>`).join('')}
               </select>
             `).join('')}
             ${comparedScenarioIds.length > 0 ? `
@@ -3994,10 +3995,10 @@ function _initCogMapBody() {
       radius: size, fillColor: color, color: ringColor, weight: ringWeight, fillOpacity: 0.9, pane: 'cog-demand',
     }).addTo(mapInstance);
     const outNote = a.outOfService ? `<br><strong style="color:#b91c1c;">OUT of SLA</strong> (${Math.round(a.driveRoadMi || 0)} road-mi > ${cogResult.serviceStats?.maxMiles || 0} mi)` : '';
-    marker.bindPopup(`<strong>${pt.name || pt.id}</strong><br>Weight: ${pt.weight.toLocaleString()}<br>Cluster: ${a.clusterId + 1}<br>Distance: ${calc.formatMiles(a.distanceToCenter)}${outNote}`);
+    marker.bindPopup(`<strong>${escapeHtml(pt.name || pt.id)}</strong><br>Weight: ${pt.weight.toLocaleString()}<br>Cluster: ${a.clusterId + 1}<br>Distance: ${calc.formatMiles(a.distanceToCenter)}${outNote}`);
     // 2026-05-28 D14 — permanent labels above each demand point when toggled.
     if (mapOptions.pointLabels) {
-      marker.bindTooltip(pt.name || pt.id, { permanent: true, direction: 'top', offset: [0, -4], className: 'cog-pt-label', opacity: 0.85 });
+      marker.bindTooltip(escapeHtml(pt.name || pt.id), { permanent: true, direction: 'top', offset: [0, -4], className: 'cog-pt-label', opacity: 0.85 });
     }
 
     // Line to center
@@ -5488,7 +5489,7 @@ function openPrintView() {
         const pt = points.find(p => p.id === a.pointId);
         if (!pt) return '';
         return `<tr>
-          <td>${(pt.name || pt.id).replace(/</g, '&lt;')}${a.outOfService ? ' <strong style="color:#b91c1c;">[OUT]</strong>' : ''}</td>
+          <td>${escapeHtml(pt.name || pt.id)}${a.outOfService ? ' <strong style="color:#b91c1c;">[OUT]</strong>' : ''}</td>
           <td class="right">${pt.lat.toFixed(3)}</td>
           <td class="right">${pt.lng.toFixed(3)}</td>
           <td class="right">${(pt.weight || 0).toLocaleString()}</td>

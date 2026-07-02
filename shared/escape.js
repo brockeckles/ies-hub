@@ -63,3 +63,25 @@ export function escapeAttr(s) {
     "'": '&#39;',
   }[c]));
 }
+
+/**
+ * Resolve a value to a safe absolute http(s) URL for use in an href, or
+ * return '' if it is not a plain web link. Blocks javascript:, data:,
+ * vbscript:, file:, and any other scheme — the isRealLink() path-only
+ * guards used by the intel feeds do NOT check scheme, so a feed row with
+ * `source_url: "javascript:..."` would otherwise become a live href.
+ *
+ * Added 2026-07-02 (Phase 0 security) alongside the feed-XSS escaping.
+ *
+ * @param {*} s
+ * @returns {string}  the normalized http(s) URL, or '' if unsafe/invalid
+ */
+export function safeHttpUrl(s) {
+  if (s == null) return '';
+  try {
+    const base = (typeof window !== 'undefined' && window.location) ? window.location.href : undefined;
+    const u = new URL(String(s), base);
+    if (u.protocol === 'http:' || u.protocol === 'https:') return u.href;
+  } catch { /* not a parseable URL */ }
+  return '';
+}

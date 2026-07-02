@@ -9,6 +9,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import * as api from './api.js?v=20260610-honest1';
+import { safeHttpUrl } from '../../shared/escape.js?v=20260702-sec1';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -435,10 +436,10 @@ function sectorPulseCard(title, icon, data, color) {
           <span style="width:6px;height:6px;border-radius:50%;background:${severityDot(item.severity)};flex-shrink:0;margin-top:4px;"></span>
           <div style="flex:1;">
             ${item.source_url
-              ? `<a href="${item.source_url}" target="_blank" rel="noopener" style="font-size:11px;color:var(--ies-gray-600);text-decoration:none;" onmouseover="this.style.color='#2563eb';this.style.textDecoration='underline'" onmouseout="this.style.color='var(--ies-gray-600)';this.style.textDecoration='none'">${item.headline}</a>`
-              : `<span style="font-size:11px;color:var(--ies-gray-600);">${item.headline}</span>`
+              ? `<a href="${safeHttpUrl(item.source_url)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--ies-gray-600);text-decoration:none;" onmouseover="this.style.color='#2563eb';this.style.textDecoration='underline'" onmouseout="this.style.color='var(--ies-gray-600)';this.style.textDecoration='none'">${escapeText(item.headline)}</a>`
+              : `<span style="font-size:11px;color:var(--ies-gray-600);">${escapeText(item.headline)}</span>`
             }
-            ${item.source ? `<div style="font-size:9px;color:var(--ies-gray-300);">${item.source}</div>` : ''}
+            ${item.source ? `<div style="font-size:9px;color:var(--ies-gray-300);">${escapeText(item.source)}</div>` : ''}
           </div>
         </div>
       `).join('')}
@@ -464,12 +465,12 @@ function alertRow(a) {
     ? `<span style="font-size:11px;color:#2563eb;flex-shrink:0;margin-top:1px;">↗</span>`
     : '';
   const sourceLine = a.source
-    ? `<span style="font-size:10px;color:var(--ies-gray-400);">${a.source}</span>`
+    ? `<span style="font-size:10px;color:var(--ies-gray-400);">${escapeText(a.source)}</span>`
     : '';
   return `
-    <div style="display:flex;align-items:start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--ies-gray-100);cursor:${hasLink ? 'pointer' : 'default'};" data-alert-url="${hasLink ? a.source_url : ''}">
+    <div style="display:flex;align-items:start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--ies-gray-100);cursor:${hasLink ? 'pointer' : 'default'};" data-alert-url="${hasLink ? safeHttpUrl(a.source_url) : ''}">
       <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;font-weight:600;color:var(--ies-gray-700);margin-bottom:2px;">${a.title}</div>
+        <div style="font-size:12px;font-weight:600;color:var(--ies-gray-700);margin-bottom:2px;">${escapeText(a.title)}</div>
         <div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${a.message}</div>
         ${sourceLine ? `<div style="margin-top:3px;">${sourceLine}</div>` : ''}
       </div>
@@ -557,7 +558,7 @@ function renderIntelFeed(items, fallbackActivity) {
     return `https://www.google.com/search?tbm=nws&q=${encodeURIComponent(clean)}`;
   };
   return items.slice(0, 25).map(item => {
-    let href = isRealLink(item.source_url) ? item.source_url : '';
+    let href = isRealLink(item.source_url) ? safeHttpUrl(item.source_url) : '';
     let isFallback = false;
     if (!href && !looksInternal(item)) {
       href = googleNewsSearch(item.title);
@@ -581,7 +582,7 @@ function renderIntelFeed(items, fallbackActivity) {
         <span style="width:8px;height:8px;border-radius:50%;background:${severityDot(item.severity)};margin-top:5px;flex-shrink:0;"></span>
         <div style="flex:1;min-width:0;">
           <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:2px;">
-            <span style="font-size:11px;font-weight:800;color:${categoryColor(item.category)};text-transform:uppercase;letter-spacing:.04em;">${item.category || ''}</span>
+            <span style="font-size:11px;font-weight:800;color:${categoryColor(item.category)};text-transform:uppercase;letter-spacing:.04em;">${escapeText(item.category || '')}</span>
             <span style="font-size:13px;font-weight:600;color:${clickable ? '#1d4ed8' : 'var(--ies-gray-800)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeText(item.title)}</span>
             ${linkIcon}
           </div>
@@ -639,7 +640,7 @@ function renderInlineAlertBanner(alerts) {
     /ies pipeline/i.test(top.source || '') ||
     /\b(OVERDUE|exec.?review|ops.?review|(review|stage),?\s+due|TODAY|\bstage\b)/i.test(top.title || '')
   );
-  let topUrl = top && top.source_url && top.source_url.length > 'https://'.length ? top.source_url : '';
+  let topUrl = top && top.source_url && top.source_url.length > 'https://'.length ? safeHttpUrl(top.source_url) : '';
   if (!topUrl && top && !topInternal && top.title) {
     const clean = String(top.title).split(/\s[—–-]\s/)[0].trim();
     if (clean) topUrl = `https://www.google.com/search?tbm=nws&q=${encodeURIComponent(clean)}`;

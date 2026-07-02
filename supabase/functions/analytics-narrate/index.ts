@@ -1,40 +1,25 @@
+// Phase 0 security (2026-07-02) — `analytics-narrate` retired in place.
+//
+// Previously: an unauthenticated-CORS (`Access-Control-Allow-Origin: *`)
+// proxy that forwarded a client-supplied Anthropic API key to
+// api.anthropic.com. The 2026-07-02 ground-up assessment flagged it as an
+// orphaned relay: grep of the client (tools/, hub/, shared/) shows ZERO
+// callers. Rather than leave an unused, unaudited proxy deployed ahead of the
+// inside-firewall transition, it is neutralized to a 410 Gone tombstone
+// (matching the `hub` function retirement pattern). Safe to delete from the
+// Supabase dashboard once logs confirm no traffic.
+
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
-  try {
-    const body = await req.json();
-    const apiKey = body.apiKey;
-    const model = body.model || 'claude-sonnet-4-6';
-    const system = body.system || '';
-    const userMsg = body.user || '';
-    const maxTokens = body.max_tokens || 2000;
-    if (!apiKey) return new Response(JSON.stringify({ error: 'Missing apiKey in request body' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } });
-    if (!userMsg) return new Response(JSON.stringify({ error: 'Missing user message' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } });
-
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
+Deno.serve(() =>
+  new Response(
+    "Gone — the analytics-narrate endpoint has been retired for security review.\n",
+    {
+      status: 410,
       headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
       },
-      body: JSON.stringify({
-        model,
-        max_tokens: maxTokens,
-        system,
-        messages: [{ role: 'user', content: userMsg }],
-      }),
-    });
-    const text = await resp.text();
-    return new Response(text, { status: resp.status, headers: { ...CORS, 'Content-Type': 'application/json' } });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } });
-  }
-});
+    }
+  )
+);

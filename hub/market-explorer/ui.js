@@ -7,6 +7,7 @@
 
 import * as calc from './calc.js?v=20260418-sK';
 import * as api from './api.js?v=20260610-honest1';
+import { escapeHtml, safeHttpUrl } from '../../shared/escape.js?v=20260702-sec1';
 
 // Per-market signal cache: marketId → { news, alerts, fetchedAt }
 const marketSignalCache = new Map();
@@ -488,7 +489,7 @@ function _renderRailList(filtered) {
     const isSelected = selectedMarket && selectedMarket.id === m.id;
     return `
       <div class="me-row ${isSelected ? 'selected' : ''}" data-market-row="${m.id}">
-        <div class="me-row__name"><span class="me-pin-bullet" style="background:${pinColor};"></span>${m.name}</div>
+        <div class="me-row__name"><span class="me-pin-bullet" style="background:${pinColor};"></span>${escapeHtml(m.name)}</div>
         <div class="me-row__region">${m.region}</div>
         <div class="me-row__metric">
           <div class="me-row__metric-label">${metric.label}</div>
@@ -617,7 +618,7 @@ function renderDetailPanel(m) {
     <div class="hub-card" style="padding: var(--sp-4); border: none; box-shadow: none; border-radius: 0;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-4);">
         <div>
-          <h2 class="text-subtitle" style="margin: 0;">${m.name}</h2>
+          <h2 class="text-subtitle" style="margin: 0;">${escapeHtml(m.name)}</h2>
           <div class="text-caption text-muted" style="margin-top: 4px;">${m.region}</div>
         </div>
         <button class="hub-btn hub-btn-secondary" data-action="close-detail" style="font-size: 12px; padding: 4px 12px;">Close</button>
@@ -805,7 +806,7 @@ function renderIntelligencePanel(m) {
   if (loading) {
     return `
       <div style="padding: var(--sp-4); text-align:center; color:var(--ies-gray-400); font-size:13px;">
-        Loading recent signals for ${m.name}…
+        Loading recent signals for ${escapeHtml(m.name)}…
       </div>
     `;
   }
@@ -815,7 +816,7 @@ function renderIntelligencePanel(m) {
       <div>
         <div class="text-caption text-muted" style="margin-bottom: var(--sp-3);">Recent Market Signals</div>
         <div style="border: 1px dashed var(--ies-gray-200); border-radius: var(--radius-md); padding: var(--sp-4); background: var(--ies-gray-50); text-align:center;">
-          <div style="font-size: 13px; color: var(--ies-gray-500); margin-bottom:6px;">No recent signals found for ${m.name}.</div>
+          <div style="font-size: 13px; color: var(--ies-gray-500); margin-bottom:6px;">No recent signals found for ${escapeHtml(m.name)}.</div>
           <div style="font-size: 11px; color: var(--ies-gray-400);">Industry-wide signals are available on the Command Center.</div>
         </div>
       </div>
@@ -829,10 +830,10 @@ function renderIntelligencePanel(m) {
         <div style="display:flex;flex-direction:column;gap:6px;margin-bottom: var(--sp-4);">
           ${alerts.map(a => `
             <div style="padding:10px 12px;background:var(--ies-gray-50);border:1px solid var(--ies-gray-200);border-radius:6px;font-size:12px;">
-              <div style="font-weight:700;color:var(--ies-gray-700);margin-bottom:3px;">${a.title}</div>
+              <div style="font-weight:700;color:var(--ies-gray-700);margin-bottom:3px;">${escapeHtml(a.title)}</div>
               ${a.summary ? `<div style="color:var(--ies-gray-500);line-height:1.4;">${a.summary}</div>` : ''}
               <div style="display:flex;gap:8px;margin-top:4px;font-size:10px;color:var(--ies-gray-400);">
-                ${a.source ? `<span>${a.source}</span>` : ''}
+                ${a.source ? `<span>${escapeHtml(a.source)}</span>` : ''}
                 <span>${formatDateShort(a.created_at)}</span>
               </div>
             </div>
@@ -846,12 +847,12 @@ function renderIntelligencePanel(m) {
           ${news.map(n => `
             <div style="padding:10px 12px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:12px;">
               <div style="font-weight:600;color:var(--ies-gray-700);margin-bottom:3px;">
-                ${n.source_url ? `<a href="${n.source_url}" target="_blank" rel="noopener" class="me-news-link">${n.headline} ↗</a>` : n.headline}
+                ${n.source_url ? `<a href="${safeHttpUrl(n.source_url)}" target="_blank" rel="noopener" class="me-news-link">${escapeHtml(n.headline)} ↗</a>` : escapeHtml(n.headline)}
               </div>
               ${n.summary ? `<div style="color:var(--ies-gray-500);line-height:1.4;">${n.summary}</div>` : ''}
               <div style="display:flex;gap:8px;margin-top:4px;font-size:10px;color:var(--ies-gray-400);">
                 ${n.competitor ? `<span style="font-weight:600;">${n.competitor}</span>` : ''}
-                ${n.source ? `<span>${n.source}</span>` : ''}
+                ${n.source ? `<span>${escapeHtml(n.source)}</span>` : ''}
                 <span>${formatDateShort(n.published_date || n.created_at)}</span>
               </div>
             </div>
@@ -968,7 +969,7 @@ function initializeMap(filtered) {
         className: 'market-map-pin',
       }).addTo(mapInstance);
 
-      marker.bindTooltip(`<strong>${m.name}</strong><br>Labor: ${m.laborScore}/100 · Wage: ${calc.fmt$(m.avgWage || 0)}/hr`, {
+      marker.bindTooltip(`<strong>${escapeHtml(m.name)}</strong><br>Labor: ${m.laborScore}/100 · Wage: ${calc.fmt$(m.avgWage || 0)}/hr`, {
         direction: 'top',
         offset: [0, -10],
         className: 'market-tooltip',

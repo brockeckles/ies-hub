@@ -9,7 +9,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import * as api from './api.js?v=20260512-port27';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { escapeAttr } from '../../shared/escape.js?v=20260511-port12';
+import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec1';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -724,8 +724,8 @@ function renderPipeline(el) {
               const siteCount = Array.isArray(deal.sites) ? deal.sites.length : deal.sites;
               return `
               <div class="hub-card" style="padding:10px;margin-bottom:8px;cursor:pointer;border-left:3px solid ${stage.color};" data-deal="${deal.id}">
-                <div style="font-size:12px;font-weight:700;margin-bottom:4px;">${deal.name}</div>
-                <div style="font-size:11px;color:var(--ies-gray-400);margin-bottom:4px;">${deal.client} — ${siteCount} site${siteCount > 1 ? 's' : ''}</div>
+                <div style="font-size:12px;font-weight:700;margin-bottom:4px;">${escapeHtml(deal.name)}</div>
+                <div style="font-size:11px;color:var(--ies-gray-400);margin-bottom:4px;">${escapeHtml(deal.client)} — ${siteCount} site${siteCount > 1 ? 's' : ''}</div>
                 <div style="display:flex;justify-content:space-between;font-size:10px;">
                   <span style="color:var(--ies-gray-400);">$${(deal.revenue / 1e6).toFixed(1)}M</span>
                   ${deal.margin > 0 ? `<span style="font-weight:700;color:${deal.margin >= 10 ? '#16a34a' : '#d97706'};">${deal.margin}%</span>` : ''}
@@ -765,8 +765,8 @@ function renderList(el) {
             const siteCount = Array.isArray(d.sites) ? d.sites.length : d.sites;
             return `
               <tr style="border-bottom:1px solid var(--ies-gray-100);cursor:pointer;" data-deal="${d.id}" onmouseover="this.style.background='var(--ies-gray-50)'" onmouseout="this.style.background='transparent'">
-                <td style="padding:10px 12px;font-weight:600;">${d.name}</td>
-                <td style="padding:10px 12px;color:var(--ies-gray-500);">${d.client}</td>
+                <td style="padding:10px 12px;font-weight:600;">${escapeHtml(d.name)}</td>
+                <td style="padding:10px 12px;color:var(--ies-gray-500);">${escapeHtml(d.client)}</td>
                 <td style="padding:10px 12px;text-align:center;">
                   <span style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:${stage.color};">${stage.name}</span>
                 </td>
@@ -927,9 +927,9 @@ function renderDetail() {
 
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
         <div style="flex:1;">
-          <h2 style="font-size:20px;font-weight:800;margin:0 0 4px 0;">${d.name}</h2>
+          <h2 style="font-size:20px;font-weight:800;margin:0 0 4px 0;">${escapeHtml(d.name)}</h2>
           <div style="display:flex;gap:12px;font-size:12px;color:var(--ies-gray-400);">
-            <span>${d.client}</span>
+            <span>${escapeHtml(d.client)}</span>
             <span>•</span>
             <span>${siteCount} site${siteCount > 1 ? 's' : ''}</span>
             <span>•</span>
@@ -1523,7 +1523,7 @@ function renderDealSites() {
           ${emptyState}
           ${sites.map(s => `
             <tr style="border-bottom:1px solid var(--ies-gray-100);">
-              <td style="padding:8px;font-weight:600;">${s.name}</td>
+              <td style="padding:8px;font-weight:600;">${escapeHtml(s.name)}</td>
               <td style="padding:8px;color:var(--ies-gray-500);">${s.market}</td>
               <td style="padding:8px;text-align:right;font-weight:600;">${(s.sqft || 0).toLocaleString()}</td>
               <td style="padding:8px;"><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;background:var(--ies-gray-100);color:var(--ies-gray-600);">${s.type}</span></td>
