@@ -16,7 +16,7 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202606
 // button is a convenience trigger rather than a discrete compute step, so a
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
-import * as calc from './calc.js?v=20260610-straggler1';
+import * as calc from './calc.js?v=20260702-p1c';
 import * as api from './api.js?v=20260504-auth1';
 
 // ============================================================
@@ -112,17 +112,18 @@ function analysisRowToScenario(row) {
   // productivity_pct is stashed inside analysis_data jsonb (no DB column).
   const productivity = data.productivity_pct == null ? 90 : Number(data.productivity_pct);
   // Recompute summary so display KPIs always match current calc engine
-  const computed = lines.map(line => ({
-    ...line,
-    ...calc.computeAnalysisLine({
-      base_uph: line.base_uph,
-      pfd_pct: row.pfd_pct,
-      productivity_pct: productivity,
-      daily_volume: line.daily_volume,
-      shift_hours: row.shift_hours,
-      hourly_rate: line.hourly_rate || row.hourly_rate,
-    }),
-  }));
+  // P1-3: canonical path (previously skipped learning curve + category rates,
+  // so list KPIs drifted from the Analysis tab for any LC/category scenario).
+  const computed = calc.computeAnalysisLines({
+    lines,
+    pfd_pct: row.pfd_pct,
+    productivity_pct: productivity,
+    learning_curve_pct: data.learning_curve_pct == null ? 100 : Number(data.learning_curve_pct),
+    shift_hours: row.shift_hours,
+    hourly_rate: row.hourly_rate,
+    rates_by_category: data.rates_by_category || null,
+    operating_days: row.operating_days || 250,
+  });
   const summary = calc.computeAnalysisSummary(computed, row.operating_days || 250);
   return {
     id: row.id,
@@ -1294,33 +1295,8 @@ function renderAnalysis() {
   // one explicitly. 100% = pure engineered, unachievable in practice.
   const productivity = analysis.productivity_pct == null ? 90 : analysis.productivity_pct;
 
-  // Compute derived fields for display
-  const computedLines = lines.map(line => {
-    const effRate = calc.resolveCategoryRate(
-      analysis.rates_by_category, line.labor_category, analysis.hourly_rate, line.hourly_rate);
-    // MOS-B5: learning-curve adjusts adjusted UPH after PFD/productivity.
-    const lc = analysis.learning_curve_pct == null ? 100 : analysis.learning_curve_pct;
-    const baseDerived = calc.computeAnalysisLine({
-      base_uph: line.base_uph,
-      pfd_pct: pfd,
-      productivity_pct: productivity,
-      daily_volume: line.daily_volume,
-      shift_hours: analysis.shift_hours,
-      hourly_rate: effRate,
-    });
-    const lcUph = calc.applyLearningCurve(baseDerived.adjusted_uph, lc);
-    const lcHours = lcUph > 0 ? (line.daily_volume || 0) / lcUph : 0;
-    const lcFte = (analysis.shift_hours || 8) > 0 ? lcHours / (analysis.shift_hours || 8) : 0;
-    const lcCost = lcHours * effRate;
-    const derived = {
-      adjusted_uph: lcUph,
-      hours_per_day: lcHours,
-      fte: lcFte,
-      headcount: Math.ceil(lcFte),
-      daily_cost: lcCost,
-    };
-    return { ...line, ...derived };
-  });
+  // Compute derived fields for display — canonical shared path (P1-3).
+  const computedLines = calc.computeAnalysisLines(analysis);
 
   const summary = calc.computeAnalysisSummary(computedLines, analysis.operating_days);
   const allowProfiles = refData.allowanceProfiles || [];
@@ -2270,32 +2246,7 @@ function renderAllowanceProfileModal(profiles) {
 function pushToCostModel() {
   const pfd = analysis.pfd_pct || 14;
   const productivity = analysis.productivity_pct == null ? 90 : analysis.productivity_pct;
-  const computedLines = analysis.lines.map(line => {
-    const effRate = calc.resolveCategoryRate(
-      analysis.rates_by_category, line.labor_category, analysis.hourly_rate, line.hourly_rate);
-    // MOS-B5: learning-curve adjusts adjusted UPH after PFD/productivity.
-    const lc = analysis.learning_curve_pct == null ? 100 : analysis.learning_curve_pct;
-    const baseDerived = calc.computeAnalysisLine({
-      base_uph: line.base_uph,
-      pfd_pct: pfd,
-      productivity_pct: productivity,
-      daily_volume: line.daily_volume,
-      shift_hours: analysis.shift_hours,
-      hourly_rate: effRate,
-    });
-    const lcUph = calc.applyLearningCurve(baseDerived.adjusted_uph, lc);
-    const lcHours = lcUph > 0 ? (line.daily_volume || 0) / lcUph : 0;
-    const lcFte = (analysis.shift_hours || 8) > 0 ? lcHours / (analysis.shift_hours || 8) : 0;
-    const lcCost = lcHours * effRate;
-    const derived = {
-      adjusted_uph: lcUph,
-      hours_per_day: lcHours,
-      fte: lcFte,
-      headcount: Math.ceil(lcFte),
-      daily_cost: lcCost,
-    };
-    return { ...line, ...derived };
-  });
+  const computedLines = calc.computeAnalysisLines(analysis);
 
   // Build template map for metadata lookup (E1 P0)
   const templateMap = new Map();
@@ -2569,17 +2520,7 @@ async function saveCurrentScenario() {
   } catch (err) {
     console.warn('[MOST] saveAnalysis failed, falling back to localStorage:', err);
     // Fallback: keep the local-only behaviour so the user doesn't lose work
-    const summary = calc.computeAnalysisSummary((analysis.lines || []).map(line => ({
-      ...line,
-      ...calc.computeAnalysisLine({
-        base_uph: line.base_uph,
-        pfd_pct: analysis.pfd_pct || 14,
-        productivity_pct: analysis.productivity_pct == null ? 90 : analysis.productivity_pct,
-        daily_volume: line.daily_volume,
-        shift_hours: analysis.shift_hours,
-        hourly_rate: line.hourly_rate || analysis.hourly_rate,
-      }),
-    })), analysis.operating_days);
+    const summary = calc.computeAnalysisSummary(calc.computeAnalysisLines(analysis), analysis.operating_days);
     savedScenarios.push({
       name,
       timestamp: new Date().toLocaleString(),
@@ -2667,38 +2608,32 @@ async function exportAnalysisToXlsx() {
   const exp = await import('../../shared/export.js?v=20260418-sM');
   const pfd = analysis.pfd_pct || 14;
   const productivity = analysis.productivity_pct == null ? 90 : analysis.productivity_pct;
-  const lineRows = (analysis.lines || []).map(line => {
-    const computed = calc.computeAnalysisLine({
-      base_uph: line.base_uph,
-      pfd_pct: pfd,
-      productivity_pct: productivity,
-      daily_volume: line.daily_volume,
-      shift_hours: analysis.shift_hours,
-      hourly_rate: line.hourly_rate || analysis.hourly_rate,
-    });
-    return {
-      activity: line.activity_name || line.template_name || 'Activity',
-      base_uph: line.base_uph || 0,
-      pfd_pct: pfd,
-      productivity_pct: productivity,
-      effective_uph: computed.adjusted_uph || 0,
-      is_variable: line.is_variable ? 'Yes' : '',
-      variable_driver: line.variable_driver || '',
-      variable_formula: line.variable_formula || '',
-      daily_volume: line.daily_volume || 0,
-      hours_per_day: computed.hours_per_day || 0,
-      headcount: computed.headcount || 0,
-      ftes: computed.fte || 0,
-      hourly_rate: line.hourly_rate || analysis.hourly_rate || 0,
-      daily_cost: computed.daily_cost || 0,
-    };
-  });
+  // P1-3 (2026-07-02 assessment): export previously re-derived lines WITHOUT
+  // the learning curve or per-category rates (screen/export drift), mapped
+  // `ftes` where computeAnalysisSummary reads `fte` (Total FTEs always 0),
+  // and declared annual_cost without populating it. One canonical path now.
+  const computed = calc.computeAnalysisLines(analysis);
+  const lc = analysis.learning_curve_pct == null ? 100 : analysis.learning_curve_pct;
+  const lineRows = computed.map(line => ({
+    activity: line.activity_name || line.template_name || 'Activity',
+    base_uph: line.base_uph || 0,
+    pfd_pct: pfd,
+    productivity_pct: productivity,
+    learning_curve_pct: lc,
+    effective_uph: line.adjusted_uph || 0,
+    is_variable: line.is_variable ? 'Yes' : '',
+    variable_driver: line.variable_driver || '',
+    variable_formula: line.variable_formula || '',
+    daily_volume: line.daily_volume || 0,
+    hours_per_day: line.hours_per_day || 0,
+    headcount: line.headcount || 0,
+    ftes: line.fte || 0,
+    hourly_rate: line.effective_rate || 0,
+    daily_cost: line.daily_cost || 0,
+    annual_cost: line.annual_cost || 0,
+  }));
 
-  const computedLines = lineRows.map(r => ({ ...r }));
-  const summary = calc.computeAnalysisSummary(computedLines.map(r => ({
-    headcount: r.headcount, ftes: r.ftes, hours_per_day: r.hours_per_day,
-    daily_cost: r.daily_cost, annual_cost: r.annual_cost,
-  })), analysis.operating_days);
+  const summary = calc.computeAnalysisSummary(computed, analysis.operating_days);
 
   const summaryRows = [
     { metric: 'Total Headcount', value: summary.totalHeadcount },
@@ -2708,6 +2643,7 @@ async function exportAnalysisToXlsx() {
     { metric: 'Annual Cost', value: summary.annualCost },
     { metric: 'PFD %', value: pfd },
     { metric: 'Productivity %', value: productivity },
+    { metric: 'Learning Curve %', value: analysis.learning_curve_pct == null ? 100 : analysis.learning_curve_pct },
     { metric: 'Shift Hours', value: analysis.shift_hours },
     { metric: 'Operating Days/yr', value: analysis.operating_days || 250 },
     { metric: 'Default Hourly Rate', value: analysis.hourly_rate || 0 },
@@ -2724,6 +2660,7 @@ async function exportAnalysisToXlsx() {
           { key: 'base_uph', label: 'Base UPH', format: 'number', decimals: 1 },
           { key: 'pfd_pct', label: 'PFD %', format: 'pct' },
           { key: 'productivity_pct', label: 'Productivity %', format: 'pct' },
+          { key: 'learning_curve_pct', label: 'Learning Curve %', format: 'pct' },
           { key: 'effective_uph', label: 'Effective UPH', format: 'number', decimals: 1 },
           { key: 'is_variable', label: 'Variable?' },
           { key: 'variable_driver', label: 'Driver' },

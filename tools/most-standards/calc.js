@@ -378,6 +378,57 @@ export function computeAnalysisLine(params) {
 }
 
 /**
+ * Canonical per-line derivation for a whole analysis: per-category rate
+ * resolution + PFD/productivity + learning curve + annualization, in ONE
+ * code path shared by render, XLSX export, push-to-CM, and scenario-list
+ * summaries. (P1-3, 2026-07-02 assessment: the export skipped the learning
+ * curve and per-category rates, so exported cost/FTE disagreed with the
+ * screen; the summary mapped `ftes` where computeAnalysisSummary reads
+ * `fte`, so exported Total FTEs was always 0; annual_cost was declared but
+ * never populated.)
+ *
+ * @param {Object} analysis — { lines, pfd_pct, productivity_pct,
+ *   learning_curve_pct, shift_hours, hourly_rate, rates_by_category,
+ *   operating_days }
+ * @returns {Array} lines with adjusted_uph, hours_per_day, fte, headcount,
+ *   daily_cost, annual_cost, effective_rate merged in
+ */
+export function computeAnalysisLines(analysis = {}) {
+  const lines = analysis.lines || [];
+  const pfd = analysis.pfd_pct || 14;
+  const productivity = analysis.productivity_pct == null ? 90 : analysis.productivity_pct;
+  const lc = analysis.learning_curve_pct == null ? 100 : analysis.learning_curve_pct;
+  const shiftHours = analysis.shift_hours || 8;
+  const operatingDays = analysis.operating_days || DEFAULT_OPERATING_DAYS;
+  return lines.map(line => {
+    const effRate = resolveCategoryRate(
+      analysis.rates_by_category, line.labor_category, analysis.hourly_rate, line.hourly_rate);
+    const baseDerived = computeAnalysisLine({
+      base_uph: line.base_uph,
+      pfd_pct: pfd,
+      productivity_pct: productivity,
+      daily_volume: line.daily_volume,
+      shift_hours: shiftHours,
+      hourly_rate: effRate,
+    });
+    const lcUph = applyLearningCurve(baseDerived.adjusted_uph, lc);
+    const lcHours = lcUph > 0 ? (line.daily_volume || 0) / lcUph : 0;
+    const lcFte = shiftHours > 0 ? lcHours / shiftHours : 0;
+    const lcCost = lcHours * effRate;
+    return {
+      ...line,
+      adjusted_uph: lcUph,
+      hours_per_day: lcHours,
+      fte: lcFte,
+      headcount: Math.ceil(lcFte),
+      daily_cost: lcCost,
+      annual_cost: lcCost * operatingDays,
+      effective_rate: effRate,
+    };
+  });
+}
+
+/**
  * Compute full analysis summary from a set of lines.
  * @param {import('./types.js?v=20260418-sM').AnalysisLine[]} lines
  * @param {number} operatingDays — annual operating days
