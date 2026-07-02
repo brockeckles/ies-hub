@@ -11,7 +11,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
-import { auth } from '../../shared/auth.js?v=20260702-mfarestore1';
+import { auth } from '../../shared/auth.js?v=20260702-sec2';
 import * as calc from './calc.js?v=20260612-mix2';
 import * as api from './api.js?v=20260612-am1';
 import * as scenarios from './calc.scenarios.js?v=20260612-mix2';
@@ -22,13 +22,13 @@ import * as monthlyCalc from './calc.monthly.js?v=20260612-mix2';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
-import * as shiftPlannerUi from './shift-planner-ui.js?v=20260430-hours-first';
+import * as shiftPlannerUi from './shift-planner-ui.js?v=20260702-sec2';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260512-slideover3';
 import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260610-life1';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
-import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec1';
+import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import {
   OFP_MHE_OPTIONS as _OFP_MHE_OPTIONS,
   OFP_IT_OPTIONS as _OFP_IT_OPTIONS,
@@ -42,7 +42,7 @@ import {
   ofpUomIn as _ofpUomIn,
   ofpUomOut as _ofpUomOut,
   ofpSlugifyForFlow as _ofpSlugifyForFlow,
-} from './ofp-helpers.js?v=20260511-port23';
+} from './ofp-helpers.js?v=20260702-sec2';
 import {
   cmState,
   setModel,
@@ -96,7 +96,7 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260611-tia4';
+} from './operational-flow-render.js?v=20260702-sec2';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
 import { computeHeaderKpis } from './header-kpis.js?v=20260611-tia4';
@@ -3593,7 +3593,7 @@ function renderVolumes() {
     return `
       <button class="cm-vol-tab${isActive ? ' cm-vol-tab--active' : ''}${isReverse ? ' cm-vol-tab--reverse' : ''}"
               data-action="vol-channel-tab" data-key="${c.key}"
-              title="${escapeAttr(c.name)}${c.archetypeId ? ` (${c.archetypeId})` : ''}">
+              title="${escapeAttr(c.name)}${c.archetypeId ? ` (${escapeAttr(c.archetypeId)})` : ''}">
         ${c.color ? `<span class="cm-vol-tab__dot" style="background:${c.color};"></span>` : ''}
         <span>${escapeHtml(c.name || '(unnamed)')}</span>
         ${pctLabel && !isReverse ? `<span class="cm-vol-tab__pct">${pctLabel}</span>` : ''}
@@ -3654,7 +3654,7 @@ function renderVolumes() {
     <div class="hub-card cm-vol-nucleus mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:12px;flex-wrap:wrap;">
         <div style="display:flex;align-items:center;gap:8px;">
-          <div class="text-subtitle" style="margin:0;">Primary Volume${isMultiChannel ? ` — <span style="color:var(--ies-blue);">${ch.name}</span>` : ''}</div>
+          <div class="text-subtitle" style="margin:0;">Primary Volume${isMultiChannel ? ` — <span style="color:var(--ies-blue);">${escapeHtml(ch.name)}</span>` : ''}</div>
           <span class="cm-vol-pill cm-vol-pill--info">nucleus</span>
         </div>
         <span class="hub-field__hint" style="flex:1;min-width:240px;text-align:right;">All other UOMs derive from this value &times; the conversion factors below.</span>
@@ -3756,7 +3756,7 @@ function renderVolumes() {
     <!-- Derived Volumes table — read-only traceability surface -->
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:12px;flex-wrap:wrap;">
-        <div class="text-subtitle" style="margin:0;">Derived Volumes${isMultiChannel ? ` — <span style="color:var(--ies-blue);">${ch.name}</span>` : ''}</div>
+        <div class="text-subtitle" style="margin:0;">Derived Volumes${isMultiChannel ? ` — <span style="color:var(--ies-blue);">${escapeHtml(ch.name)}</span>` : ''}</div>
         <span class="hub-field__hint">Read-only — every calc consumer reads from here. Override per-row when RFP figures don’t reconcile.</span>
       </div>
       <table class="cm-vol-derived-table">
@@ -13331,8 +13331,8 @@ function openChannelManageModal() {
     return channels.map((c, i) => `
       <div class="cm-mgmt-row" data-channel-key="${c.key}">
         <div class="cm-mgmt-row__handle">${c.color ? `<span class="cm-vol-tab__dot" style="background:${c.color};"></span>` : ''}</div>
-        <input class="hub-input cm-mgmt-row__name" value="${c.name || ''}" data-action="vol-channel-rename" data-key="${c.key}" placeholder="Channel name" />
-        <span class="cm-mgmt-row__type">${c.archetypeId || 'custom'}</span>
+        <input class="hub-input cm-mgmt-row__name" value="${escapeAttr(c.name || '')}" data-action="vol-channel-rename" data-key="${c.key}" placeholder="Channel name" />
+        <span class="cm-mgmt-row__type">${escapeHtml(c.archetypeId || 'custom')}</span>
         <div class="cm-mgmt-row__actions">
           <button class="hub-btn hub-btn-secondary hub-btn-sm" ${i === 0 ? 'disabled' : ''} data-action="vol-channel-reorder-up" data-key="${c.key}" title="Move up">▲</button>
           <button class="hub-btn hub-btn-secondary hub-btn-sm" ${i === channels.length - 1 ? 'disabled' : ''} data-action="vol-channel-reorder-down" data-key="${c.key}" title="Move down">▼</button>

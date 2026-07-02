@@ -29,7 +29,7 @@
  *   completePasswordRecovery → signed in.
  *
  * Usage:
- *   import { auth } from './auth.js?v=20260702-mfarestore1';
+ *   import { auth } from './auth.js?v=20260702-sec2';
  *
  *   await auth.bootstrapSession();            // call once before gate check
  *   if (!auth.isAuthenticated()) {

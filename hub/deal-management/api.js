@@ -7,7 +7,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260429-demo-s3';
-import { auth } from '../../shared/auth.js?v=20260702-mfarestore1';
+import { auth } from '../../shared/auth.js?v=20260702-sec2';
 
 /**
  * Fetch the 6 canonical DOS stages.

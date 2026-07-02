@@ -7,7 +7,7 @@
 
 import * as calc from './calc.js?v=20260418-sK';
 import * as api from './api.js?v=20260610-honest1';
-import { escapeHtml, safeHttpUrl } from '../../shared/escape.js?v=20260702-sec1';
+import { escapeHtml, safeHttpUrl } from '../../shared/escape.js?v=20260702-sec2';
 
 // Per-market signal cache: marketId → { news, alerts, fetchedAt }
 const marketSignalCache = new Map();
@@ -490,7 +490,7 @@ function _renderRailList(filtered) {
     return `
       <div class="me-row ${isSelected ? 'selected' : ''}" data-market-row="${m.id}">
         <div class="me-row__name"><span class="me-pin-bullet" style="background:${pinColor};"></span>${escapeHtml(m.name)}</div>
-        <div class="me-row__region">${m.region}</div>
+        <div class="me-row__region">${escapeHtml(m.region)}</div>
         <div class="me-row__metric">
           <div class="me-row__metric-label">${metric.label}</div>
           <div class="me-row__metric-value">${metric.value}</div>
@@ -619,7 +619,7 @@ function renderDetailPanel(m) {
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--sp-4);">
         <div>
           <h2 class="text-subtitle" style="margin: 0;">${escapeHtml(m.name)}</h2>
-          <div class="text-caption text-muted" style="margin-top: 4px;">${m.region}</div>
+          <div class="text-caption text-muted" style="margin-top: 4px;">${escapeHtml(m.region)}</div>
         </div>
         <button class="hub-btn hub-btn-secondary" data-action="close-detail" style="font-size: 12px; padding: 4px 12px;">Close</button>
       </div>
@@ -831,7 +831,7 @@ function renderIntelligencePanel(m) {
           ${alerts.map(a => `
             <div style="padding:10px 12px;background:var(--ies-gray-50);border:1px solid var(--ies-gray-200);border-radius:6px;font-size:12px;">
               <div style="font-weight:700;color:var(--ies-gray-700);margin-bottom:3px;">${escapeHtml(a.title)}</div>
-              ${a.summary ? `<div style="color:var(--ies-gray-500);line-height:1.4;">${a.summary}</div>` : ''}
+              ${a.summary ? `<div style="color:var(--ies-gray-500);line-height:1.4;">${escapeHtml(a.summary)}</div>` : ''}
               <div style="display:flex;gap:8px;margin-top:4px;font-size:10px;color:var(--ies-gray-400);">
                 ${a.source ? `<span>${escapeHtml(a.source)}</span>` : ''}
                 <span>${formatDateShort(a.created_at)}</span>
@@ -849,9 +849,9 @@ function renderIntelligencePanel(m) {
               <div style="font-weight:600;color:var(--ies-gray-700);margin-bottom:3px;">
                 ${n.source_url ? `<a href="${safeHttpUrl(n.source_url)}" target="_blank" rel="noopener" class="me-news-link">${escapeHtml(n.headline)} ↗</a>` : escapeHtml(n.headline)}
               </div>
-              ${n.summary ? `<div style="color:var(--ies-gray-500);line-height:1.4;">${n.summary}</div>` : ''}
+              ${n.summary ? `<div style="color:var(--ies-gray-500);line-height:1.4;">${escapeHtml(n.summary)}</div>` : ''}
               <div style="display:flex;gap:8px;margin-top:4px;font-size:10px;color:var(--ies-gray-400);">
-                ${n.competitor ? `<span style="font-weight:600;">${n.competitor}</span>` : ''}
+                ${n.competitor ? `<span style="font-weight:600;">${escapeHtml(n.competitor)}</span>` : ''}
                 ${n.source ? `<span>${escapeHtml(n.source)}</span>` : ''}
                 <span>${formatDateShort(n.published_date || n.created_at)}</span>
               </div>

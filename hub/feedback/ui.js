@@ -9,7 +9,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import * as calc from './calc.js?v=20260418-sK';
 import * as api from './api.js?v=20260430-fb1';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { escapeHtml as _h, escapeAttr as _a } from '../../shared/escape.js?v=20260702-sec1';
+import { escapeHtml as _h, escapeAttr as _a } from '../../shared/escape.js?v=20260702-sec2';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;

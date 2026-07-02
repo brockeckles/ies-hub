@@ -14,7 +14,7 @@ import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260511-port11';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
-import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec1';
+import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)

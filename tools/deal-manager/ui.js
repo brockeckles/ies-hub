@@ -12,7 +12,7 @@ import * as calc from './calc.js?v=20260610-straggler1';
 import * as api from './api.js?v=20260511-port2';
 import * as cmApi from '../cost-model/api.js?v=20260612-am1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
-import { escapeHtml } from '../../shared/escape.js?v=20260702-sec1';
+import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260611-sl1';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 
@@ -806,7 +806,7 @@ function renderDealList(el) {
                 </div>
                 <div style="font-size:13px;color:var(--ies-gray-400);margin-bottom:8px;">${escapeHtml(d.clientName)}</div>
                 <div style="display:flex;gap:16px;font-size:11px;color:var(--ies-gray-400);">
-                  <span>Owner: ${d.dealOwner || '—'}</span>
+                  <span>Owner: ${escapeHtml(d.dealOwner || '—')}</span>
                   ${d.contractTermYears ? `<span>${d.contractTermYears}yr term</span>` : ''}
                 </div>
               </div>

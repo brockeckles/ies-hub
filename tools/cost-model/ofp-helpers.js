@@ -12,7 +12,7 @@
  *
  * @module tools/cost-model/ofp-helpers
  */
-import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec1';
+import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 
 // ============================================================
 // Canonical option lists (UI-bound dropdowns + label lookup)

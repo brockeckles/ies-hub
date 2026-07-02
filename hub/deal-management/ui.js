@@ -7,9 +7,9 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260512-port27';
+import * as api from './api.js?v=20260702-sec2';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec1';
+import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -1524,9 +1524,9 @@ function renderDealSites() {
           ${sites.map(s => `
             <tr style="border-bottom:1px solid var(--ies-gray-100);">
               <td style="padding:8px;font-weight:600;">${escapeHtml(s.name)}</td>
-              <td style="padding:8px;color:var(--ies-gray-500);">${s.market}</td>
+              <td style="padding:8px;color:var(--ies-gray-500);">${escapeHtml(s.market)}</td>
               <td style="padding:8px;text-align:right;font-weight:600;">${(s.sqft || 0).toLocaleString()}</td>
-              <td style="padding:8px;"><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;background:var(--ies-gray-100);color:var(--ies-gray-600);">${s.type}</span></td>
+              <td style="padding:8px;"><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;background:var(--ies-gray-100);color:var(--ies-gray-600);">${escapeHtml(s.type)}</span></td>
             </tr>
           `).join('')}
         </tbody>

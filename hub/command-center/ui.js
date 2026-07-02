@@ -8,8 +8,8 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260610-honest1';
-import { safeHttpUrl } from '../../shared/escape.js?v=20260702-sec1';
+import * as api from './api.js?v=20260702-sec2';
+import { safeHttpUrl } from '../../shared/escape.js?v=20260702-sec2';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -471,7 +471,7 @@ function alertRow(a) {
     <div style="display:flex;align-items:start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--ies-gray-100);cursor:${hasLink ? 'pointer' : 'default'};" data-alert-url="${hasLink ? safeHttpUrl(a.source_url) : ''}">
       <div style="flex:1;min-width:0;">
         <div style="font-size:12px;font-weight:600;color:var(--ies-gray-700);margin-bottom:2px;">${escapeText(a.title)}</div>
-        <div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${a.message}</div>
+        <div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${escapeText(a.message)}</div>
         ${sourceLine ? `<div style="margin-top:3px;">${sourceLine}</div>` : ''}
       </div>
       ${linkArrow}

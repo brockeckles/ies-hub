@@ -17,7 +17,7 @@
  */
 
 import * as calc from './calc.js?v=20260610-wscrec1';
-import { escapeHtml } from '../../shared/escape.js?v=20260702-sec1';
+import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { renderCmDrillbackChip } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 
 export function renderDashboard(ctx) {
