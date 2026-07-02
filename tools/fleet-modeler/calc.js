@@ -582,6 +582,11 @@ export function calcDedicatedFleet(lanes, vehicles = DEFAULT_VEHICLES, config = 
   const composition = core.fleetComposition;
 
   let totalFuel = 0, totalMaint = 0, totalVehicle = 0, totalInsurance = 0, totalDriver = 0, totalAdmin = 0;
+  // P1-M (2026-07-02): tires/tolls/permits were split out of maintenance by
+  // FLE-B6 and carried on every composition row — but this rollup never
+  // picked them up, understating the Dedicated base vs the 3-way comparison
+  // (analyzeFleet sums all three) and flattering Dedicated.
+  let totalTires = 0, totalTolls = 0, totalPermits = 0;
 
   composition.forEach(f => {
     totalFuel += f.annualFuelCost;
@@ -590,17 +595,21 @@ export function calcDedicatedFleet(lanes, vehicles = DEFAULT_VEHICLES, config = 
     totalInsurance += f.annualInsurance;
     totalDriver += f.annualDriverCost;
     totalAdmin += f.annualAdminCost || 0;
+    totalTires += f.annualTiresCost || 0;
+    totalTolls += f.annualTollsCost || 0;
+    totalPermits += f.annualPermitsCost || 0;
   });
 
   // GXO cost-plus: apply 1.25 markup to driver cost, then add margin
   const margin = config.gxoMarginPct ?? 12;
-  const baseCost = totalFuel + totalMaint + totalVehicle + totalInsurance + (totalDriver * 1.25) + totalAdmin;
+  const baseCost = totalFuel + totalMaint + totalTires + totalTolls + totalPermits
+    + totalVehicle + totalInsurance + (totalDriver * 1.25) + totalAdmin;
   const totalAnnual = baseCost * (1 + margin / 100);
 
   return {
     totalAnnual,
     perMile: core.totalAnnualMiles > 0 ? totalAnnual / core.totalAnnualMiles : 0,
-    breakdown: { fuel: totalFuel, maintenance: totalMaint, vehicle: totalVehicle, insurance: totalInsurance, driver: totalDriver, admin: totalAdmin },
+    breakdown: { fuel: totalFuel, maintenance: totalMaint, tires: totalTires, tolls: totalTolls, permits: totalPermits, vehicle: totalVehicle, insurance: totalInsurance, driver: totalDriver, admin: totalAdmin },
   };
 }
 

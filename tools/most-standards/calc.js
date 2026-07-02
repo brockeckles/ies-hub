@@ -498,16 +498,28 @@ export function computeWorkflowStep(params) {
 export function analyzeWorkflow(steps) {
   const result = {
     bottleneckUph: Infinity,
+    bottleneckThroughputUph: Infinity,
     bottleneckStep: '',
     totalFtes: 0,
     totalHoursPerDay: 0,
     ftesByCategory: { manual: 0, mhe: 0, hybrid: 0 },
   };
 
+  // P1-M (2026-07-02): bottleneck selection is volume-ratio-aware. A step
+  // seeing only part of the flow constrains TOTAL throughput at
+  // adjusted_uph / volume_ratio in whole-flow units — a 50-UPH step on 30%
+  // of the flow caps the workflow at 167 total UPH, NOT 50. The old rule
+  // (min raw adjusted_uph) mis-flagged partial-flow steps as bottlenecks.
+  // All-default workflows (ratio 1) are unchanged.
+  let minThroughput = Infinity;
   for (const step of (steps || [])) {
     const adjUph = step.adjusted_uph || 0;
-    if (adjUph > 0 && adjUph < result.bottleneckUph) {
-      result.bottleneckUph = adjUph;
+    const ratio = Math.min(1, Math.max(0, Number(step.volume_ratio ?? 1))) || 1;
+    const throughputUph = adjUph / ratio; // whole-flow capacity
+    if (adjUph > 0 && throughputUph < minThroughput) {
+      minThroughput = throughputUph;
+      result.bottleneckUph = adjUph;                 // step's own UPH (display)
+      result.bottleneckThroughputUph = throughputUph; // whole-flow constraint
       result.bottleneckStep = step.step_name || '';
     }
 
@@ -521,6 +533,7 @@ export function analyzeWorkflow(steps) {
   }
 
   if (result.bottleneckUph === Infinity) result.bottleneckUph = 0;
+  if (!Number.isFinite(result.bottleneckThroughputUph)) result.bottleneckThroughputUph = 0;
   return result;
 }
 
@@ -543,10 +556,16 @@ export function calcWorkflowBottleneck(steps) {
   const avgUph = uphs.reduce((a, b) => a + b, 0) / uphs.length;
   let bottleneckIdx = -1;
   let minUph = Infinity;
+  // P1-M (2026-07-02): select by whole-flow constraint (uph / volume_ratio)
+  // — see analyzeWorkflow. minUph stays the step's own UPH for display.
+  let minThroughput = Infinity;
 
   for (let i = 0; i < steps.length; i++) {
     const uph = steps[i].adjusted_uph || 0;
-    if (uph > 0 && uph < minUph) {
+    const ratio = Math.min(1, Math.max(0, Number(steps[i].volume_ratio ?? 1))) || 1;
+    const throughput = uph / ratio;
+    if (uph > 0 && throughput < minThroughput) {
+      minThroughput = throughput;
       minUph = uph;
       bottleneckIdx = i;
     }

@@ -11,7 +11,8 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202606
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260610-life1';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
-import * as calc from './calc.js?v=20260702-p14a';
+import * as calc from './calc.js?v=20260702-p1m1';
+import { splitCsvLine } from '../../shared/export.js?v=20260702-p1m1';
 import * as api from './api.js?v=20260504-auth1';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
@@ -658,11 +659,13 @@ function renderLanes(el) {
       try {
         const csv = event.target?.result;
         const lines = String(csv).split('\n');
-        const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
+        // P1-M (2026-07-02): RFC-4180 parse — the old comma-naive split
+        // corrupted the tool's own exports on every "City, ST" field.
+        const headers = splitCsvLine(lines[0].toLowerCase()).map(h => h.trim());
         lanes = [];
         for (let i = 1; i < lines.length; i++) {
           if (!lines[i].trim()) continue;
-          const values = lines[i].split(',').map(v => v.trim());
+          const values = splitCsvLine(lines[i]).map(v => v.trim());
           const obj = {};
           headers.forEach((h, idx) => { obj[h] = values[idx]; });
           if (obj.origin && obj.destination) {
@@ -686,9 +689,15 @@ function renderLanes(el) {
   });
 
   el.querySelector('#fm-export-csv')?.addEventListener('click', () => {
+    // P1-M (2026-07-02): quote fields containing commas/quotes (RFC-4180)
+    // so "Chicago, IL" survives the export→import round-trip.
+    const q = (v) => {
+      const str = v == null ? '' : String(v);
+      return /[",\n\r]/.test(str) ? '"' + str.replaceAll('"', '""') + '"' : str;
+    };
     const csv = ['origin,destination,weekly_shipments,avg_weight_lbs,avg_cube_ft3,distance_miles'];
     lanes.forEach(lane => {
-      csv.push(`${lane.origin},${lane.destination},${lane.weeklyShipments},${lane.avgWeightLbs},${lane.avgCubeFt3},${lane.distanceMiles}`);
+      csv.push(`${q(lane.origin)},${q(lane.destination)},${lane.weeklyShipments},${lane.avgWeightLbs},${lane.avgCubeFt3},${lane.distanceMiles}`);
     });
     const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -1626,7 +1635,7 @@ async function exportFleetXLSX() {
 
   try {
     // Dynamically import XLSX utilities
-    const { downloadXLSX } = await import('../../shared/export.js?v=20260418-sM');
+    const { downloadXLSX } = await import('../../shared/export.js?v=20260702-p1m1');
 
     // Prepare sheet data
     const sheets = [];

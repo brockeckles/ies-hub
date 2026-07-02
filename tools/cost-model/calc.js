@@ -14,8 +14,8 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260702-p1e';
-import { permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260702-p1e';
+import * as monthly from './calc.monthly.js?v=20260702-p1m1';
+import { permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260702-p1m1';
 import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260430-hours-first';
 import {
   getAnnualVolume as _getAnnualVolume,
@@ -2487,7 +2487,14 @@ export function computeFinancialMetrics(projections, opts) {
       estimatedNWC = 0;
     }
   }
-  const investedCapitalBase = totalInvestment + estimatedNWC;
+  // P1-M (2026-07-02 ground-up assessment): the doc block above promises
+  // "Invested Capital = startup + equipment + avg NWC" but the code used
+  // totalInvestment, which the R5 fix reduced to startupCapital ONLY (correct
+  // for the t=0 cashflow anchor under opex-amortization — equipment recovers
+  // through opex — but ROIC measures capital EMPLOYED, which includes the
+  // equipment fleet regardless of how the P&L recovers it). Capital-heavy
+  // deals were overstating ROIC.
+  const investedCapitalBase = startupCapital + equipmentCapital + estimatedNWC;
   // Fallback: if capital base is still 0 (e.g. all-lease deal, no DSO),
   // use 10% of Y1 revenue as a placeholder WC floor so ROIC doesn't divide
   // by zero and read as a blank tile.

@@ -66,6 +66,39 @@ export function toCSV(rows, columns) {
 }
 
 /**
+ * P1-M (2026-07-02) — RFC-4180-ish CSV line splitter, the read-side twin of
+ * csvEscape. Handles quoted fields containing commas ("Chicago, IL"),
+ * doubled internal quotes, and trailing \r. Fleet's lane import used a
+ * comma-naive split that corrupted its own exports on every "City, ST"
+ * field — any tool that reads CSV should parse with this.
+ * @param {string} line — one CSV record (no embedded newlines)
+ * @returns {string[]} field values, unescaped
+ */
+export function splitCsvLine(line) {
+  const out = [];
+  let cur = '';
+  let inQuotes = false;
+  const s = String(line ?? '').replace(/\r$/, '');
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (s[i + 1] === '"') { cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += ch;
+    } else if (ch === '"' && cur === '') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      out.push(cur); cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+/**
  * Trigger a browser download of the given rows as a CSV file.
  * @param {object[]} rows
  * @param {{ filename: string, columns?: ExportColumn[] }} opts

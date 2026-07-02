@@ -7,18 +7,18 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
+import { downloadXLSX } from '../../shared/export.js?v=20260702-p1m1';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260702-sec2';
-import * as calc from './calc.js?v=20260702-p1e';
+import * as calc from './calc.js?v=20260702-p1m1';
 import * as api from './api.js?v=20260612-am1';
-import * as scenarios from './calc.scenarios.js?v=20260702-p1e';
+import * as scenarios from './calc.scenarios.js?v=20260702-p1m1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260511-port8';
 import { renderImplementation } from './render-implementation.js?v=20260511-port9';
-import * as monthlyCalc from './calc.monthly.js?v=20260702-p1e';
+import * as monthlyCalc from './calc.monthly.js?v=20260702-p1m1';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
@@ -96,11 +96,11 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260702-p1e';
+} from './operational-flow-render.js?v=20260702-p1m1';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260702-p1e';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260702-p1e';
+import { computeHeaderKpis } from './header-kpis.js?v=20260702-p1m1';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260702-p1m1';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.

@@ -8,7 +8,7 @@
 import { db } from '../../shared/supabase.js?v=20260429-demo-s3';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 // P2-2 (2026-07-02) — pure element sanitation lives in calc.js
-import { sanitizeElementForWrite } from './calc.js?v=20260702-p22a';
+import { sanitizeElementForWrite } from './calc.js?v=20260702-p1m1';
 
 // ============================================================
 // TEMPLATES

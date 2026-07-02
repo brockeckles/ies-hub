@@ -1142,10 +1142,15 @@ export function simulateLaborVariance(laborLines, calcHeur, marketProfile, nTria
         mixFrac: permMixFracForLine(line, { tempShareDeltaPp: calcHeur?.tempShareDeltaPp }),
         tempMarkupFrac: tempMarkupFracForLine(line, { marketTempPremiumPct: marketProfile?.temp_cost_premium_pct, defaultTempMarkupPct: calcHeur?.tempMarkupPct }),
       });
-      // Apply avg OT / absence from profile (or fallback) to net hours
+      // Apply avg OT / absence from profile (or fallback) to net hours.
+      // P1-M (2026-07-02): OT carries the HALF premium, matching the monthly
+      // engine (annualLaborHoursForLine: ×(1 + ot×0.5)) — OT hours substitute
+      // straight-time hours at 1.5×, so the net cost effect is the 0.5×
+      // premium on the OT share. The old full (1 + ot) ran the MC ~2.5% hot
+      // vs the engine at the 5% house default.
       const avgOT = avgMonthlyProfilePct(line, calcHeur, marketProfile, 'ot');
       const avgAbs = avgMonthlyProfilePct(line, calcHeur, marketProfile, 'absence');
-      const effectiveHours = shockedHours * (1 + avgOT / 100) * (1 - avgAbs / 100);
+      const effectiveHours = shockedHours * (1 + (avgOT / 100) * 0.5) * (1 - avgAbs / 100);
       yearTotal += effectiveHours * loadedRate;
     }
     trials[t] = yearTotal;

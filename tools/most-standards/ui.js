@@ -16,8 +16,8 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202606
 // button is a convenience trigger rather than a discrete compute step, so a
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
-import * as calc from './calc.js?v=20260702-p22a';
-import * as api from './api.js?v=20260702-p22a';
+import * as calc from './calc.js?v=20260702-p1m1';
+import * as api from './api.js?v=20260702-p1m1';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -2611,7 +2611,7 @@ async function copyScenario(idx) {
  * One sheet for activity lines, one sheet for the rolled-up summary.
  */
 async function exportAnalysisToXlsx() {
-  const exp = await import('../../shared/export.js?v=20260418-sM');
+  const exp = await import('../../shared/export.js?v=20260702-p1m1');
   const pfd = analysis.pfd_pct || 14;
   const productivity = analysis.productivity_pct == null ? 90 : analysis.productivity_pct;
   // P1-3 (2026-07-02 assessment): export previously re-derived lines WITHOUT
