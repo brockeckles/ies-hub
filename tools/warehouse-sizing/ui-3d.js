@@ -13,7 +13,7 @@
  * @module tools/warehouse-sizing/ui-3d
  */
 
-import * as calc from './calc.js?v=20260610-wscrec1';
+import * as calc from './calc.js?v=20260702-p1b';
 
 // ============================================================
 // MODULE-LOCAL 3D STATE

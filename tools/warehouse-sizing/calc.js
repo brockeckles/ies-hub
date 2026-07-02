@@ -2912,6 +2912,23 @@ export function sizeFacility(userInputs = {}) {
     sfPerDoor:          DOCK_SF_PER_DOOR,
   });
 
+  // P1-5 (2026-07-02 assessment): explicit door overrides must reach the
+  // headline total. computeDockRequirement is throughput-derived only, so a
+  // "customer gave us their door count" scenario (overrides set, dock
+  // capacity/throughput inputs sparse) yielded 0 dock SF inside totalSqft
+  // while the Dock Doors KPI showed the override count. Floor the Phase-1
+  // requirement at the explicit-doors SF (same formula as the legacy
+  // dockSqft path above: doors x SF/door x two-sided factor, no surge --
+  // explicit counts are the user's engineered answer). Mutated BEFORE
+  // computeRequiredFacilitySF + zoneBreakdown consume it, so the
+  // sum-of-rows === totalSqft invariant holds.
+  if (doorsAreExplicit && dockSqft > _dockRequirement.dockSfRequired) {
+    _dockRequirement.doorsRequired = Math.max(_dockRequirement.doorsRequired, inboundDoors + outboundDoors);
+    _dockRequirement.doorsBySurge = Math.max(_dockRequirement.doorsBySurge, inboundDoors + outboundDoors);
+    _dockRequirement.dockSfRequired = dockSqft;
+    _dockRequirement.explicitDoorsApplied = true;
+  }
+
   // Requirements-driven facility footprint: aggregate the components and
   // suggest a 1.5:1 building. Compare against the user's facility dims to
   // decide over-built vs under-built (Phase 2 banner will consume this).
