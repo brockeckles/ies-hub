@@ -18,7 +18,7 @@
  * single what-if slider value (or full whatIfTransient when called
  * without an arg).
  */
-import * as calc from './calc.js?v=20260612-mix2';
+import * as calc from './calc.js?v=20260702-p1d';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 
 /**
@@ -53,6 +53,17 @@ export function computeWhatIfPreview(overlay, {
     const orders = (model.volumeLines || []).find(v => v.isOutboundPrimary)?.volume || 0;
     const contractYears = model.projectDetails?.contractTerm || 5;
     const fin = model.financial || {};
+    // P1-2 (2026-07-02 assessment): calcHeur (with the What-If overlay)
+    // resolved BEFORE computeSummary so preview pricing carries the same
+    // labor basis as Summary — including the temp-share / OT / absence
+    // levers, which are 'transient'-sourced here and therefore thread
+    // through resolveSummaryLaborOpts into the priced labor cost.
+    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
+      currentScenario, currentScenarioSnapshots, heuristicOverrides, _heurProjectFallbacks(model), ov,
+    ), model);
+    const laborOpts = scenarios.resolveSummaryLaborOpts({
+      calcHeur, marketLaborProfile: currentMarketLaborProfile,
+    });
     const summary = calc.computeSummary({
       laborLines: model.laborLines || [],
       indirectLaborLines: model.indirectLaborLines || [],
@@ -67,10 +78,8 @@ export function computeWhatIfPreview(overlay, {
       contractYears,
       targetMarginPct: fin.targetMargin || 0,
       annualOrders: orders || 1,
+      laborOpts,
     });
-    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
-      currentScenario, currentScenarioSnapshots, heuristicOverrides, _heurProjectFallbacks(model), ov,
-    ), model);
     const whatIfMarginFrac = (calcHeur.targetMarginPct || 0) / 100;
 
     // Direct Labor Productivity scaling. Pull from the overlay first, then
@@ -144,6 +153,7 @@ export function computeWhatIfPreview(overlay, {
             facilityCost: summary.facilityCost || 0,
             operatingHours: opHrs || 0,
             facilityBucketId: model.financial?.facilityBucketId || null,
+            laborOpts, // P1-2: same labor basis as the summary above
           });
           return calc.enrichBucketsWithDerivedRates({
             buckets: cleared,
@@ -153,7 +163,7 @@ export function computeWhatIfPreview(overlay, {
             model,
           });
         })()
-      : calc.computePricingSnapshot({ model, summary, marginFrac: whatIfMarginFrac, opHrs, contractYears }).buckets;
+      : calc.computePricingSnapshot({ model, summary, marginFrac: whatIfMarginFrac, opHrs, contractYears, laborOpts }).buckets;
     // Apply M4 pricing-discount multiplier AFTER enrichment so it layers on
     // both explicit and derived rates uniformly.
     const whatIfBucketsAfterDiscount = pricingMult === 1 ? whatIfBuckets

@@ -915,6 +915,85 @@ export function annualEffectiveHoursFromMonthly(line, calcHeur, marketProfile) {
 }
 
 /**
+ * P1-2 (2026-07-02 assessment): build the ONE labor-opts bag for the ANNUAL
+ * pricing path — computeSummary → totalLaborCost and computePricingSnapshot
+ * → computeBucketCosts — resolved from the SAME source fields the monthly
+ * expense engine reads (computeMonthlyLaborFromLines / monthlyEffectiveHours).
+ *
+ * Why: recommended pricing derives from the annual path while the P&L
+ * expense comes from the monthly engine. Three labor drivers — the market
+ * temp premium (`temp_cost_premium_pct`), market OT/absence monthly
+ * profiles, and the What-If `temp_share_delta_pp` lever — existed ONLY in
+ * the monthly engine, so achieved margin landed structurally below target
+ * on any market-profile model. This bag threads them into pricing so priced
+ * labor matches the monthly engine's labor-cost basis.
+ *
+ * Back-compat contract (pinned by test-cm-pricing-parity.mjs): with the
+ * house-default calcHeur and no market profile the bag is INERT —
+ * default-house models price bit-identically to the pre-fix engine
+ * (tempMarkupPct default 38 === tempMarkupFracForLine's own fallback,
+ * tempShareDeltaPp default 0, benefitLoadPct default 30 === the engine's
+ * DEFAULT_WAGE_LOAD_PCT fallback).
+ *
+ * OT / absence are deliberately gated: the annual path has NEVER priced the
+ * house-default 5% OT / 12% absence (the monthly expense engine applies
+ * them regardless — that residual default-model gap is documented, not
+ * closed, because closing it would reprice every existing default model).
+ * They thread only when
+ *   (a) the value came from an EXPLICIT user choice — calcHeur.used source
+ *       'transient' (What-If) or 'override' — mirroring the
+ *       force-project-flat semantics in monthlyEffectiveHours, or
+ *   (b) the market profile carries the 12-month arrays, in which case the
+ *       annual mean is used (exactly the flat-seasonality annualization of
+ *       what the monthly engine books).
+ * 'snapshot' is intentionally NOT treated as explicit here: approved
+ * scenarios freeze house defaults into their snapshots, and threading those
+ * would silently move recommended rates on already-approved deals.
+ *
+ * Units: otPct / absencePct are 0-based FRACTIONS (the directLineAnnual /
+ * indirectLineAnnual convention). Market arrays store fractions; calcHeur
+ * stores percents — both normalized here.
+ *
+ * @param {Object}      params
+ * @param {Object|null} params.calcHeur           resolveCalcHeuristics output
+ * @param {Object|null} params.marketLaborProfile ref_labor_market_profiles row
+ * @returns {Object} laborOpts for computeSummary / computePricingSnapshot
+ */
+export function resolveSummaryLaborOpts({ calcHeur, marketLaborProfile } = {}) {
+  const opts = {
+    // Same chain the monthly engine hands tempMarkupFracForLine:
+    // line value → market temp premium → heuristic default (38).
+    marketTempPremiumPct: marketLaborProfile?.temp_cost_premium_pct,
+    defaultTempMarkupPct: calcHeur?.tempMarkupPct,
+    // What-If "shift N pp of perm hours to temp" lever (permMixFracForLine).
+    tempShareDeltaPp: calcHeur?.tempShareDeltaPp,
+    // Monthly engine's fallbackWageLoadFrac = (benefitLoadPct ?? 30) / 100.
+    // Default-identical; only moves pricing when benefit_load_pct is
+    // explicitly overridden (which the monthly expense already honors).
+    benefitLoadFallback: (calcHeur?.benefitLoadPct ?? DEFAULT_WAGE_LOAD_PCT) / 100,
+  };
+  const explicit = (src) => src === 'transient' || src === 'override';
+  const mean12 = (arr) => arr.reduce((s, v) => s + (Number(v) || 0), 0) / 12;
+  const mktOt = (marketLaborProfile && Array.isArray(marketLaborProfile.peak_month_overtime_pct)
+    && marketLaborProfile.peak_month_overtime_pct.length === 12)
+    ? marketLaborProfile.peak_month_overtime_pct : null;
+  const mktAbs = (marketLaborProfile && Array.isArray(marketLaborProfile.peak_month_absence_pct)
+    && marketLaborProfile.peak_month_absence_pct.length === 12)
+    ? marketLaborProfile.peak_month_absence_pct : null;
+  if (explicit(calcHeur?.used?.overtime_pct)) {
+    opts.otPct = (Number(calcHeur.overtimePct) || 0) / 100;   // percent → fraction
+  } else if (mktOt) {
+    opts.otPct = mean12(mktOt);                               // already fractions
+  }
+  if (explicit(calcHeur?.used?.absence_allowance_pct)) {
+    opts.absencePct = (Number(calcHeur.absenceAllowancePct) || 0) / 100;
+  } else if (mktAbs) {
+    opts.absencePct = mean12(mktAbs);
+  }
+  return opts;
+}
+
+/**
  * Validate a 12-element profile array. Returns issue string or null.
  * Allows null (means "inherit"). When provided, must be exactly 12
  * non-negative numbers ≤ 2.0 (no individual month over 200% sanity check).

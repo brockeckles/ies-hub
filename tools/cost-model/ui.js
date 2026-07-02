@@ -12,17 +12,17 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260702-sec2';
-import * as calc from './calc.js?v=20260612-mix2';
+import * as calc from './calc.js?v=20260702-p1d';
 import * as api from './api.js?v=20260612-am1';
-import * as scenarios from './calc.scenarios.js?v=20260612-mix2';
+import * as scenarios from './calc.scenarios.js?v=20260702-p1d';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260511-port8';
 import { renderImplementation } from './render-implementation.js?v=20260511-port9';
-import * as monthlyCalc from './calc.monthly.js?v=20260612-mix2';
+import * as monthlyCalc from './calc.monthly.js?v=20260702-p1d';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
-import * as shiftPlannerUi from './shift-planner-ui.js?v=20260702-sec2';
+import * as shiftPlannerUi from './shift-planner-ui.js?v=20260702-p1d';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260512-slideover3';
@@ -96,11 +96,11 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260702-sec2';
+} from './operational-flow-render.js?v=20260702-p1d';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260611-tia4';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260611-tia4';
+import { computeHeaderKpis } from './header-kpis.js?v=20260702-p1d';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260702-p1d';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -7538,6 +7538,25 @@ function renderSummary() {
   const contractYears = model.projectDetails?.contractTerm || 5;
   const fin = model.financial || {};
 
+  // Phase 3 close-the-loop: resolve heuristics through the
+  //   transient (Phase 5b) → approved-snapshot → override → project-column
+  // chain so approved scenarios re-run against their FROZEN values and
+  // the What-If Studio can preview-override without persisting.
+  // P1-2 (2026-07-02 assessment): resolved BEFORE computeSummary now — the
+  // annual pricing path needs the same labor drivers (market temp premium,
+  // OT/absence, temp-share What-If) the monthly expense engine reads, so
+  // priced labor recovers the dollars the P&L books.
+  const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
+    currentScenario,
+    currentScenarioSnapshots,
+    heuristicOverrides,
+    _heurProjectFallbacks(model),
+    whatIfTransient,
+  ), model);
+  const laborOpts = scenarios.resolveSummaryLaborOpts({
+    calcHeur, marketLaborProfile: currentMarketLaborProfile,
+  });
+
   const summary = calc.computeSummary({
     laborLines: model.laborLines || [],
     indirectLaborLines: model.indirectLaborLines || [],
@@ -7552,19 +7571,8 @@ function renderSummary() {
     contractYears,
     targetMarginPct: fin.targetMargin || 0,
     annualOrders: orders || 1,
+    laborOpts, // P1-2: price labor on the monthly engine's basis
   });
-
-  // Phase 3 close-the-loop: resolve heuristics through the
-  //   transient (Phase 5b) → approved-snapshot → override → project-column
-  // chain so approved scenarios re-run against their FROZEN values and
-  // the What-If Studio can preview-override without persisting.
-  const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
-    currentScenario,
-    currentScenarioSnapshots,
-    heuristicOverrides,
-    _heurProjectFallbacks(model),
-    whatIfTransient,
-  ), model);
 
   // Build multi-year projections
   const marginFrac = (calcHeur.targetMarginPct || 0) / 100;
@@ -7572,7 +7580,7 @@ function renderSummary() {
   // I-02 FIX — derive missing bucket rates from assigned costs so new
   // models don't render $0 revenue until someone hand-wires bucket.rate.
   // I-01 FIX — also capture unassigned-cost rollup for the Summary banner.
-  const pricingSnapshot = calc.computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears });
+  const pricingSnapshot = calc.computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears, laborOpts });
   const enrichedPricingBuckets = pricingSnapshot.buckets;
   const unassignedCost = pricingSnapshot.bucketCosts['_unassigned'] || 0;
   const unassignedCount = pricingSnapshot.unassignedCount;
@@ -11993,6 +12001,20 @@ function ensureMonthlyBundle() {
     const orders = (model.volumeLines || []).find(v => v.isOutboundPrimary)?.volume || 0;
     const contractYears = model.projectDetails?.contractTerm || 5;
     const fin = model.financial || {};
+    // P1-2 (2026-07-02 assessment): calcHeur resolved before computeSummary
+    // so the shared laborOpts bag prices labor on the monthly engine's basis
+    // (mirrors renderSummary — the two must agree or persisted monthly facts
+    // drift from the Summary P&L).
+    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
+      currentScenario,
+      currentScenarioSnapshots,
+      heuristicOverrides,
+      _heurProjectFallbacks(model),
+      whatIfTransient,
+    ), model);
+    const laborOpts = scenarios.resolveSummaryLaborOpts({
+      calcHeur, marketLaborProfile: currentMarketLaborProfile,
+    });
     const summary = calc.computeSummary({
       laborLines: model.laborLines || [],
       indirectLaborLines: model.indirectLaborLines || [],
@@ -12007,21 +12029,15 @@ function ensureMonthlyBundle() {
       contractYears,
       targetMarginPct: fin.targetMargin || 0,
       annualOrders: orders || 1,
+      laborOpts,
     });
-    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
-      currentScenario,
-      currentScenarioSnapshots,
-      heuristicOverrides,
-      _heurProjectFallbacks(model),
-      whatIfTransient,
-    ), model);
     const emBMarginFrac = (calcHeur.targetMarginPct || 0) / 100;
     // Phase 2a (2026-06-10): shared builder. This site previously OMITTED
     // the SG&A overlay — persisted monthly facts disagreed with Summary on
     // overlay projects. The builder includes it unconditionally now.
     const projResult = calc.buildYearlyProjections(scenarios.buildProjectionParams({
       model, summary, calcHeur, contractYears, orders, refData,
-      pricingBuckets: buildEnrichedPricingBuckets(summary, emBMarginFrac, opHrs, contractYears),
+      pricingBuckets: buildEnrichedPricingBuckets(summary, emBMarginFrac, opHrs, contractYears, laborOpts),
       marketLaborProfile: currentMarketLaborProfile,
     }));
     if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;
@@ -12161,6 +12177,13 @@ function handleExportExcel() {
     let summary = null;
     try {
       const outbound = (model.volumeLines || []).find(v => v.isOutboundPrimary);
+      // P1-2 (2026-07-02 assessment): export totals carry the same labor
+      // basis as the Summary tab (market temp premium / OT / absence /
+      // temp-share What-If) — otherwise profile models export stale labor.
+      const exportCalcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
+        currentScenario, currentScenarioSnapshots, heuristicOverrides,
+        _heurProjectFallbacks(model), whatIfTransient,
+      ), model);
       summary = calc.computeSummary({
         shifts: model.shifts,
         facility: model.facility,
@@ -12175,6 +12198,9 @@ function handleExportExcel() {
         annualOrders: (outbound && outbound.volume) || 1,
         facilityRate: 0,
         utilityRate: 0,
+        laborOpts: scenarios.resolveSummaryLaborOpts({
+          calcHeur: exportCalcHeur, marketLaborProfile: currentMarketLaborProfile,
+        }),
       });
     } catch (err) {
       console.warn('[CM] computeSummary failed during export — skipping totals:', err);
@@ -13024,9 +13050,13 @@ function defaultBucketFor(lineType) {
  * @param {number} marginFrac — target margin as a 0-based fraction
  * @param {number} opHrs — operating hours per year
  * @param {number} contractYears — for startup amortization
+ * @param {Object} [laborOpts] — P1-2 (2026-07-02 assessment): pass the same
+ *   resolveSummaryLaborOpts bag used for computeSummary so derived bucket
+ *   rates price the identical labor basis (temp premium / OT / absence /
+ *   temp-share What-If).
  */
-function buildEnrichedPricingBuckets(summary, marginFrac, opHrs, contractYears) {
-  return calc.computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears }).buckets;
+function buildEnrichedPricingBuckets(summary, marginFrac, opHrs, contractYears, laborOpts) {
+  return calc.computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears, laborOpts }).buckets;
 }
 
 /**

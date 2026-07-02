@@ -17,7 +17,7 @@
  * The function never throws; any failure inside the try block returns
  * `{ ready: false, items: [] }` with a console.warn diagnostic.
  */
-import * as calc from './calc.js?v=20260612-mix2';
+import * as calc from './calc.js?v=20260702-p1d';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
@@ -88,6 +88,28 @@ export function computeHeaderKpis({
       };
     }
 
+    // 2026-04-30 (F3) — align with renderSummary's projection inputs so the
+    // chrome KPI strip's NPV/Revenue tie to the Summary section's tiles.
+    // Prior version called buildYearlyProjections with raw model.financial
+    // and unenriched pricingBuckets; the I-02 fix that derives missing
+    // bucket rates from assigned costs only ran inside renderSummary, so
+    // chrome strip Y1 Revenue read $0 on every saved model.
+    // P1-2 (2026-07-02 assessment): calcHeur now resolved BEFORE
+    // computeSummary so the strip prices labor with the same
+    // resolveSummaryLaborOpts bag renderSummary uses (market temp premium /
+    // OT / absence / temp-share What-If) — the two surfaces must agree.
+    const opHrs = calc.operatingHours(model.shifts || {});
+    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
+      currentScenario,
+      currentScenarioSnapshots,
+      heuristicOverrides,
+      _heurProjectFallbacks(model),
+      whatIfTransient,
+    ), model);
+    const laborOpts = scenarios.resolveSummaryLaborOpts({
+      calcHeur, marketLaborProfile: currentMarketLaborProfile,
+    });
+
     const summary = calc.computeSummary({
       laborLines: model.laborLines || [],
       indirectLaborLines: model.indirectLaborLines || [],
@@ -102,24 +124,11 @@ export function computeHeaderKpis({
       contractYears,
       targetMarginPct: fin.targetMargin || 0,
       annualOrders: orders,
+      laborOpts,
     });
 
-    // 2026-04-30 (F3) — align with renderSummary's projection inputs so the
-    // chrome KPI strip's NPV/Revenue tie to the Summary section's tiles.
-    // Prior version called buildYearlyProjections with raw model.financial
-    // and unenriched pricingBuckets; the I-02 fix that derives missing
-    // bucket rates from assigned costs only ran inside renderSummary, so
-    // chrome strip Y1 Revenue read $0 on every saved model.
-    const opHrs = calc.operatingHours(model.shifts || {});
-    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
-      currentScenario,
-      currentScenarioSnapshots,
-      heuristicOverrides,
-      _heurProjectFallbacks(model),
-      whatIfTransient,
-    ), model);
     const marginFrac = (calcHeur.targetMarginPct || 0) / 100;
-    const pricingSnapshot = calc.computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears });
+    const pricingSnapshot = calc.computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears, laborOpts });
     const enrichedPricingBuckets = pricingSnapshot.buckets;
 
     // Phase 2a (2026-06-10): shared builder (see calc.scenarios.js).

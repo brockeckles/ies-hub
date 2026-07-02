@@ -14,8 +14,8 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260612-mix2';
-import { permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260612-mix2';
+import * as monthly from './calc.monthly.js?v=20260702-p1d';
+import { permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260702-p1d';
 import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260430-hours-first';
 import {
   getAnnualVolume as _getAnnualVolume,
@@ -506,11 +506,20 @@ export function fullyLoadedRate(line, opts = {}) {
  * @param {import('./types.js?v=20260612-mix1').DirectLaborLine} line
  * @param {Object} [opts]
  * @param {number} [opts.otPct] — overtime % (0-based), applied at 1.5× rate
+ * @param {number} [opts.absencePct] — absence allowance (0-based fraction).
+ *   P1-2 (2026-07-02 assessment): reduces effective hours × (1 − absence),
+ *   the exact shape monthlyEffectiveHours applies in the monthly expense
+ *   engine — threading it here lets the annual PRICING path recover the
+ *   same labor dollars the P&L books. Absent/0 → legacy math bit-identical.
  * @param {number} [opts.benefitLoadFallback] — fallback wage-load fraction
  * @param {number[]} [opts.wageLoadByYear] — 5-year wage load schedule
  * @param {number} [opts.year] — 1-based year, default 1
  * @param {number} [opts.shift2Premium]
  * @param {number} [opts.shift3Premium]
+ * @param {number} [opts.marketTempPremiumPct] — market temp premium (percent);
+ *   flows to tempMarkupFracForLine via _blendedLoadedRate (P1-2)
+ * @param {number} [opts.defaultTempMarkupPct] — house agency markup (percent)
+ * @param {number} [opts.tempShareDeltaPp] — What-If perm→temp shift (pp)
  * @returns {number}
  */
 export function directLineAnnual(line, opts = {}) {
@@ -520,10 +529,13 @@ export function directLineAnnual(line, opts = {}) {
   const otMult = otEligible ? (1 + (opts.otPct || 0) * 0.5) : 1.0;
   // Shift differential pulls fraction fields OR legacy shift_num integer.
   const shiftMult = shiftDifferentialMultForLine(line, opts);
+  // P1-2 (2026-07-02 assessment): absence allowance as an effective-hours
+  // reduction, mirroring monthlyEffectiveHours' (1 − absence) term.
+  const absMult = 1 - (Number(opts.absencePct) || 0);
   // Phase 4e: retention blend (historically this path excluded
   // benefits_per_hour — preserved).
   const effectiveRate = _blendedLoadedRate(line, { ...opts, includeBenefits: false }) * otMult * shiftMult;
-  return hours * effectiveRate;
+  return hours * absMult * effectiveRate;
 }
 
 /**
@@ -619,8 +631,13 @@ export function indirectLineAnnual(line, opts) {
   // as no uplift.
   const isTemp = (line.employment_type || 'permanent') === 'temp_agency';
   const effectiveHc = isTemp ? hc : ptoHeadcountUplift(hc, opts.ptoPct || 0);
+  // P1-2 (2026-07-02 assessment): absence allowance applied symmetrically
+  // with opts.otPct (which this path already honored) so the ONE laborOpts
+  // bag prices direct + indirect on the same effective-hours basis.
+  // Absent/0 → legacy math bit-identical.
+  const absMult = 1 - (Number(opts.absencePct) || 0);
   return effectiveHc * opts.operatingHours * rate * (1 + wageLoadFrac)
-       * bonusMult * otMult * shiftMult;
+       * bonusMult * otMult * shiftMult * absMult;
 }
 
 /**
@@ -2029,7 +2046,14 @@ export function totalStartupAsIncurred(lines) {
  * @param {number} params.contractYears
  * @param {number} params.targetMarginPct
  * @param {number} params.annualOrders
- * @param {Object} [params.laborOpts] — otPct, bonusPct, benefitLoadFallback
+ * @param {Object} [params.laborOpts] — otPct, absencePct, bonusPct,
+ *   benefitLoadFallback, marketTempPremiumPct, defaultTempMarkupPct,
+ *   tempShareDeltaPp. P1-2 (2026-07-02 assessment): callers build this via
+ *   scenarios.resolveSummaryLaborOpts so the priced labor basis matches the
+ *   monthly expense engine (market temp premium, OT/absence profiles, and
+ *   the What-If temp-share lever previously existed only there — achieved
+ *   margin landed below target on every market-profile model). Omitted →
+ *   pre-fix behavior, bit-identical.
  * @returns {import('./types.js?v=20260612-mix1').CostSummary}
  */
 export function computeSummary(params) {
@@ -4771,6 +4795,11 @@ export function adaptYearlyToMonthlyParams(p) {
  * @param {number} params.marginFrac — target margin as a 0-based fraction
  * @param {number} params.opHrs — operating hours per year
  * @param {number} params.contractYears — for startup amortization (max 1)
+ * @param {Object} [params.laborOpts] — P1-2 (2026-07-02 assessment): the
+ *   same bag passed to computeSummary (see resolveSummaryLaborOpts). Flows
+ *   into computeBucketCosts so RECOMMENDED bucket rates price the identical
+ *   labor dollars the summary/P&L carries — without it, market temp premium,
+ *   OT/absence profiles and the temp-share What-If under-recovered.
  * @returns {{
  *   buckets: Array,           // enriched pricing buckets (derived rates, override diagnostics)
  *   bucketCosts: Object,      // bucketId -> cost map, including `_unassigned`
@@ -4778,7 +4807,7 @@ export function adaptYearlyToMonthlyParams(p) {
  *   unassignedLines: Array,   // [{ type, line }] for the Summary banner drill-down
  * }}
  */
-export function computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears }) {
+export function computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears, laborOpts }) {
   const m = model || {};
   const startupWithAmort = (m.startupLines || []).map(l => ({
     ...l,
@@ -4799,6 +4828,7 @@ export function computePricingSnapshot({ model, summary, marginFrac, opHrs, cont
     facilityCost: summary?.facilityCost || 0,
     operatingHours: opHrs || 0,
     facilityBucketId: m.financial?.facilityBucketId || null,
+    laborOpts, // P1-2: keep bucket labor on the same basis as computeSummary
   });
   // Count lines that explicitly lack a pricing_bucket (what goes to _unassigned)
   const unassignedLines = [];
