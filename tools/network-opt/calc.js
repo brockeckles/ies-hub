@@ -60,6 +60,49 @@ export const DEFAULT_RATES = {
 
 export const PARCEL_WEIGHT_BRACKETS = [1, 5, 10, 25, 50, 70];
 
+/**
+ * Normalize a rate card: map legacy/phantom keys (tlPerMile, ltlPerLb,
+ * parcelPerLb — written by the pre-2026-07 rate-card UI and READ NOWHERE
+ * by the engine, see P1-1 in the 2026-07-02 assessment) onto the keys the
+ * engine actually reads (tlRatePerMile, ltlBreakRates/ltlBaseRate,
+ * parcelZoneRates). Returns a NEW object; safe no-op on clean cards.
+ *
+ * Unit conventions:
+ *  - tlPerMile: $/mile -> tlRatePerMile (direct).
+ *  - ltlPerLb: values < 2 are $/lb (legacy heuristic) -> x100 to $/CWT;
+ *    values >= 2 are treated as already $/CWT. The class-100 break-rate
+ *    curve is scaled proportionally so its 1,000-lb break equals the given
+ *    rate (curve shape preserved); ltlBaseRate follows.
+ *  - parcelPerLb: $/lb -> zone x bracket matrix scaled so the reference
+ *    cell (Zone 5 row, 25-lb bracket) equals rate x 25 lb.
+ */
+export function normalizeRateCard(card) {
+  const c = { ...(card || {}) };
+  if (Number.isFinite(+c.tlPerMile) && +c.tlPerMile > 0) {
+    c.tlRatePerMile = +c.tlPerMile;
+  }
+  if (Number.isFinite(+c.ltlPerLb) && +c.ltlPerLb > 0) {
+    const perCwt = +c.ltlPerLb < 2 ? +c.ltlPerLb * 100 : +c.ltlPerLb;
+    const base = (Array.isArray(c.ltlBreakRates) && c.ltlBreakRates.length >= 2)
+      ? c.ltlBreakRates : DEFAULT_RATES.ltlBreakRates;
+    const factor = perCwt / (base[1] || DEFAULT_RATES.ltlBreakRates[1]);
+    c.ltlBreakRates = base.map(r => +(r * factor).toFixed(2));
+    c.ltlBaseRate = perCwt;
+  }
+  if (Number.isFinite(+c.parcelPerLb) && +c.parcelPerLb > 0) {
+    const matrix = (Array.isArray(c.parcelZoneRates) && c.parcelZoneRates.length)
+      ? c.parcelZoneRates : DEFAULT_RATES.parcelZoneRates;
+    const refRow = Math.min(3, matrix.length - 1);            // Zone 5
+    const refIdx = 3;                                          // 25-lb bracket
+    const current = matrix[refRow] && matrix[refRow][refIdx];
+    const target = +c.parcelPerLb * PARCEL_WEIGHT_BRACKETS[refIdx];
+    const factor = (Number.isFinite(current) && current > 0) ? target / current : 1;
+    c.parcelZoneRates = matrix.map(row => row.map(v => +(v * factor).toFixed(2)));
+  }
+  delete c.tlPerMile; delete c.ltlPerLb; delete c.parcelPerLb;
+  return c;
+}
+
 /** Default service config */
 export const DEFAULT_SERVICE = {
   targetServicePct: 95,

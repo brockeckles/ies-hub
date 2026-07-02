@@ -15,7 +15,7 @@ import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillbac
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260610-shipv2';
+import * as calc from './calc.js?v=20260702-p1a';
 import * as api from './api.js?v=20260702-sec2';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
@@ -414,7 +414,7 @@ function openEditor(savedRow) {
   facilities = (d.facilities && d.facilities.length) ? d.facilities.map(f => calc.normalizeFacility({ ...f })) : [];
   demands = (d.demands && d.demands.length) ? d.demands.map(x => calc.normalizeDemand({ ...x })) : [];
   modeMix = d.modeMix || { tlPct: 30, ltlPct: 40, parcelPct: 30 };
-  rateCard = d.rateCard || { ...calc.DEFAULT_RATES };
+  rateCard = calc.normalizeRateCard(d.rateCard || { ...calc.DEFAULT_RATES });
   serviceConfig = d.serviceConfig || { ...calc.DEFAULT_SERVICE };
   scenarios = [];
   activeScenario = null;
@@ -682,7 +682,7 @@ function _noSectionCompleteness(key) {
       const sum = (modeMix && modeMix.tlPct || 0) + (modeMix && modeMix.ltlPct || 0) + (modeMix && modeMix.parcelPct || 0);
       return Math.abs(sum - 100) < 0.5 ? 'complete' : 'partial';
     }
-    case 'rates':   return (rateCard && rateCard.tlPerMile) ? 'complete' : 'empty';
+    case 'rates':   return (rateCard && Number.isFinite(+rateCard.tlRatePerMile) && +rateCard.tlRatePerMile > 0) ? 'complete' : 'empty';
     case 'service': return (serviceConfig && serviceConfig.globalMaxDays) ? 'complete' : 'empty';
     case 'results': return activeScenario ? 'complete' : 'empty';
     case 'map':     return activeScenario ? 'complete' : 'empty';
@@ -931,10 +931,15 @@ async function applyMarketRates() {
     }
     const spot = Array.from(byIdx.values()).find(r => /spot/i.test(r.rate_type || '') || /spot/i.test(r.index_name || ''));
     const contract = Array.from(byIdx.values()).find(r => /contract/i.test(r.rate_type || '') || /contract/i.test(r.index_name || ''));
-    const tlPerMile = parseFloat((contract?.rate || spot?.rate || rateCard.tlPerMile || 2.25));
-    rateCard.tlPerMile = tlPerMile;
-    // LTL per lb approximation: TL / (TL capacity ~44000 lb)
-    rateCard.ltlPerLb = Math.max(0.15, tlPerMile / 90);
+    const tlPerMile = parseFloat((contract?.rate || spot?.rate || rateCard.tlRatePerMile || 2.25));
+    const prevTl = +rateCard.tlRatePerMile || calc.DEFAULT_RATES.tlRatePerMile;
+    rateCard.tlRatePerMile = tlPerMile;
+    // Scale the LTL published-tariff curve with the TL market move (shape preserved).
+    const ltlFactor = prevTl > 0 ? tlPerMile / prevTl : 1;
+    const curve = (Array.isArray(rateCard.ltlBreakRates) && rateCard.ltlBreakRates.length)
+      ? rateCard.ltlBreakRates : calc.DEFAULT_RATES.ltlBreakRates;
+    rateCard.ltlBreakRates = curve.map(r => +(r * ltlFactor).toFixed(2));
+    rateCard.ltlBaseRate = rateCard.ltlBreakRates[1] ?? rateCard.ltlBaseRate;
     showToast(`Applied latest market rates (TL $${tlPerMile.toFixed(2)}/mi)`, 'success');
     renderContentView();
   } catch (err) {
@@ -968,15 +973,17 @@ function handleCsvUpload(e) {
     const lines = text.split(/\r?\n/).filter(Boolean);
     if (!lines.length) { showToast('Empty CSV', 'error'); return; }
     let applied = 0;
+    const staged = {};
     for (let i = 1; i < lines.length; i++) {
       const [_lane, mode, rate] = lines[i].split(',').map(s => s.trim());
       const r = parseFloat(rate);
       if (!isNaN(r)) {
-        if (/tl/i.test(mode)) { rateCard.tlPerMile = r; applied++; }
-        else if (/ltl/i.test(mode)) { rateCard.ltlPerLb = r; applied++; }
-        else if (/parcel/i.test(mode)) { rateCard.parcelPerLb = r; applied++; }
+        if (/parcel/i.test(mode)) { staged.parcelPerLb = r; applied++; }
+        else if (/ltl/i.test(mode)) { staged.ltlPerLb = r; applied++; }
+        else if (/tl/i.test(mode)) { staged.tlPerMile = r; applied++; }
       }
     }
+    if (applied) rateCard = calc.normalizeRateCard({ ...rateCard, ...staged });
     showToast(`Rate card CSV applied (${applied} rate${applied === 1 ? '' : 's'})`, 'success');
     renderContentView();
   };
