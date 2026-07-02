@@ -921,34 +921,43 @@ export function annualEffectiveHoursFromMonthly(line, calcHeur, marketProfile) {
  * expense engine reads (computeMonthlyLaborFromLines / monthlyEffectiveHours).
  *
  * Why: recommended pricing derives from the annual path while the P&L
- * expense comes from the monthly engine. Three labor drivers — the market
- * temp premium (`temp_cost_premium_pct`), market OT/absence monthly
- * profiles, and the What-If `temp_share_delta_pp` lever — existed ONLY in
- * the monthly engine, so achieved margin landed structurally below target
- * on any market-profile model. This bag threads them into pricing so priced
+ * expense comes from the monthly engine. The labor drivers — the market
+ * temp premium (`temp_cost_premium_pct`), OT/absence, and the What-If
+ * `temp_share_delta_pp` lever — existed ONLY in the monthly engine, so
+ * achieved margin landed structurally off target whenever priced labor and
+ * expensed labor diverged. This bag threads them into pricing so priced
  * labor matches the monthly engine's labor-cost basis.
  *
- * Back-compat contract (pinned by test-cm-pricing-parity.mjs): with the
- * house-default calcHeur and no market profile the bag is INERT —
- * default-house models price bit-identically to the pre-fix engine
- * (tempMarkupPct default 38 === tempMarkupFracForLine's own fallback,
- * tempShareDeltaPp default 0, benefitLoadPct default 30 === the engine's
- * DEFAULT_WAGE_LOAD_PCT fallback).
+ * P1-2b house-default closure (Brock decision 2026-07-02): otPct /
+ * absencePct now ALWAYS resolve — including the house defaults (OT 5% /
+ * absence 12%) and snapshot-sourced values. Pre-P1-2b they were gated to
+ * 'transient'/'override' sources + market-profile arrays, which left the
+ * annual pricing path charging full hours while the monthly expense engine
+ * booked hours × (1 + OT×0.5) × (1 − absence) on EVERY model. Brock decided
+ * pricing must recover the exact basis the P&L expenses, defaults included;
+ * 'snapshot' threads too (an approved model's monthly P&L already expenses
+ * its frozen snapshot values — pricing on the same basis IS the parity).
  *
- * OT / absence are deliberately gated: the annual path has NEVER priced the
- * house-default 5% OT / 12% absence (the monthly expense engine applies
- * them regardless — that residual default-model gap is documented, not
- * closed, because closing it would reprice every existing default model).
- * They thread only when
- *   (a) the value came from an EXPLICIT user choice — calcHeur.used source
- *       'transient' (What-If) or 'override' — mirroring the
- *       force-project-flat semantics in monthlyEffectiveHours, or
- *   (b) the market profile carries the 12-month arrays, in which case the
- *       annual mean is used (exactly the flat-seasonality annualization of
- *       what the monthly engine books).
- * 'snapshot' is intentionally NOT treated as explicit here: approved
- * scenarios freeze house defaults into their snapshots, and threading those
- * would silently move recommended rates on already-approved deals.
+ * Resolution chain — mirrors monthlyEffectiveHours / monthlyOvertimePct /
+ * monthlyAbsencePct exactly (annualized, flat-seasonality):
+ *   1. per-line monthly profile — TODO(P1-2c per-line profiles): per-line
+ *      monthly_overtime_profile / monthly_absence_profile always win in the
+ *      monthly engine; this bag is line-independent so they would need a
+ *      per-line annual-mean seam in directLineAnnual. Deferred.
+ *   2. explicit project-flat — calcHeur.used source 'transient' (What-If) /
+ *      'override' / 'snapshot' forces the flat value over the market arrays
+ *      (monthlyOvertimePct's forceProjectFlat semantics, incl. snapshot).
+ *   3. market profile 12-month arrays → annual mean (exactly the
+ *      flat-seasonality annualization of what the monthly engine books).
+ *   4. calcHeur flat value — house defaults OT 5% / absence 12% included.
+ *
+ * Back-compat contract (pinned by test-cm-pricing-parity.mjs): the RATE
+ * side of the bag stays inert for default-house models (tempMarkupPct
+ * default 38 === tempMarkupFracForLine's own fallback, tempShareDeltaPp
+ * default 0, benefitLoadPct default 30 === the engine's
+ * DEFAULT_WAGE_LOAD_PCT fallback). The HOURS side intentionally moves
+ * default-house pricing as of P1-2b: labor basis × 1.025 × 0.88 = 0.902 —
+ * the same effective-hours basis the monthly P&L has always expensed.
  *
  * Units: otPct / absencePct are 0-based FRACTIONS (the directLineAnnual /
  * indirectLineAnnual convention). Market arrays store fractions; calcHeur
@@ -972,7 +981,10 @@ export function resolveSummaryLaborOpts({ calcHeur, marketLaborProfile } = {}) {
     // explicitly overridden (which the monthly expense already honors).
     benefitLoadFallback: (calcHeur?.benefitLoadPct ?? DEFAULT_WAGE_LOAD_PCT) / 100,
   };
-  const explicit = (src) => src === 'transient' || src === 'override';
+  // Same force-project-flat semantics as monthlyEffectiveHours: 'transient'
+  // (What-If) / 'override' / 'snapshot' are deliberate flat values that beat
+  // the market arrays. 'default' lets the market arrays win when present.
+  const force = (src) => src === 'transient' || src === 'override' || src === 'snapshot';
   const mean12 = (arr) => arr.reduce((s, v) => s + (Number(v) || 0), 0) / 12;
   const mktOt = (marketLaborProfile && Array.isArray(marketLaborProfile.peak_month_overtime_pct)
     && marketLaborProfile.peak_month_overtime_pct.length === 12)
@@ -980,16 +992,15 @@ export function resolveSummaryLaborOpts({ calcHeur, marketLaborProfile } = {}) {
   const mktAbs = (marketLaborProfile && Array.isArray(marketLaborProfile.peak_month_absence_pct)
     && marketLaborProfile.peak_month_absence_pct.length === 12)
     ? marketLaborProfile.peak_month_absence_pct : null;
-  if (explicit(calcHeur?.used?.overtime_pct)) {
-    opts.otPct = (Number(calcHeur.overtimePct) || 0) / 100;   // percent → fraction
-  } else if (mktOt) {
-    opts.otPct = mean12(mktOt);                               // already fractions
-  }
-  if (explicit(calcHeur?.used?.absence_allowance_pct)) {
-    opts.absencePct = (Number(calcHeur.absenceAllowancePct) || 0) / 100;
-  } else if (mktAbs) {
-    opts.absencePct = mean12(mktAbs);
-  }
+  // TODO(P1-2c per-line profiles): per-line monthly_overtime_profile /
+  // monthly_absence_profile would resolve FIRST here (annual mean per line,
+  // needs a per-line seam in directLineAnnual/indirectLineAnnual).
+  opts.otPct = (!force(calcHeur?.used?.overtime_pct) && mktOt)
+    ? mean12(mktOt)                                    // arrays store fractions
+    : (Number(calcHeur?.overtimePct) || 0) / 100;      // calcHeur percent → fraction
+  opts.absencePct = (!force(calcHeur?.used?.absence_allowance_pct) && mktAbs)
+    ? mean12(mktAbs)
+    : (Number(calcHeur?.absenceAllowancePct) || 0) / 100;
   return opts;
 }
 

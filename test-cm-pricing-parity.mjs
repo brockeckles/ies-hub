@@ -17,11 +17,13 @@
 // computeSummary + computePricingSnapshot by every pricing surface.
 //
 // Pins:
-//  1. BACK-COMPAT — default-house model (no market profile, no What-If
-//     deltas): the bag is inert; computeSummary/computePricingSnapshot
-//     output is BIT-IDENTICAL (===) to the no-bag pre-fix path, and the
-//     bag deliberately omits otPct/absencePct (the annual path has never
-//     priced the house-default 5% OT / 12% absence).
+//  1. P1-2b house-default closure (Brock decision 2026-07-02) — the bag
+//     ALWAYS resolves otPct/absencePct, house defaults (OT 5% / absence
+//     12%) included. Default-house pricing now moves by EXACTLY the
+//     monthly engine's effective-hours factor (1 + OT×0.5) × (1 − absence)
+//     — derived from calcHeur, not hardcoded — and equals 12 × the monthly
+//     engine's flat-month labor (the actual parity being closed). The RATE
+//     side of the bag stays inert (markup 38 / delta 0 / load 30).
 //  2. Market temp_cost_premium_pct now reaches priced labor: summary labor
 //     rises by exactly hours × tempShare × base × (premium − house 38%) on
 //     mixed lines; pure-perm and pure-temp lines are untouched.
@@ -31,9 +33,11 @@
 //  4. Market OT/absence monthly arrays: annualized summary labor ===
 //     12 × the monthly engine's flat-month labor (exact annualization of
 //     the same basis under flat seasonality).
-//  5. Gating: 'transient'/'override' OT threads; 'snapshot' deliberately
-//     does NOT (approved scenarios froze house defaults — repricing them
-//     on upgrade would silently move recommended rates on signed deals).
+//  5. Precedence: 'transient'/'override'/'snapshot' flat values force over
+//     the market arrays (monthlyEffectiveHours' exact semantics); as of
+//     P1-2b 'snapshot' THREADS (Brock decision 2026-07-02 — an approved
+//     model's monthly P&L already expenses its frozen snapshot values, so
+//     pricing on the same basis is the parity, not a repricing risk).
 //  6. Bucket parity: computePricingSnapshot with the bag prices the same
 //     labor dollars as computeSummary (recommended rates recover them).
 //
@@ -85,40 +89,77 @@ function model(overrides = {}) {
 }
 const HEUR_DEFAULT = resolveCalcHeuristics(null, null, null, {}, null);
 const OP_HRS = calc.operatingHours(SHIFTS);
+// P1-2b house-default closure (Brock decision 2026-07-02): the monthly
+// engine's effective-hours factor, derived from the SAME calcHeur the bag
+// reads (house defaults OT 5 / absence 12 → 1.025 × 0.88 = 0.902).
+const HOURS_MULT = (heur) =>
+  (1 + (heur.overtimePct / 100) * 0.5) * (1 - heur.absenceAllowancePct / 100);
 
-// ── 1. back-compat: default-house bag is inert, bit-identical ─────────
-t('bag: default calcHeur + no profile → no otPct/absencePct, house defaults', () => {
+// ── 1. P1-2b house-default closure: bag always resolves OT/absence ────
+t('bag: default calcHeur + no profile → HOUSE otPct/absencePct, inert rate side', () => {
   const bag = resolveSummaryLaborOpts({ calcHeur: HEUR_DEFAULT, marketLaborProfile: null });
-  assert(!('otPct' in bag), 'otPct must be absent for default-house models');
-  assert(!('absencePct' in bag), 'absencePct must be absent for default-house models');
+  // P1-2b house-default closure (Brock decision 2026-07-02): defaults thread.
+  near(bag.otPct, HEUR_DEFAULT.overtimePct / 100, 1e-12, 'house OT (5% → 0.05)');
+  near(bag.absencePct, HEUR_DEFAULT.absenceAllowancePct / 100, 1e-12, 'house absence (12% → 0.12)');
   assert(bag.defaultTempMarkupPct === 38, `defaultTempMarkupPct ${bag.defaultTempMarkupPct}`);
   assert(bag.tempShareDeltaPp === 0, `tempShareDeltaPp ${bag.tempShareDeltaPp}`);
   near(bag.benefitLoadFallback, 0.30, 1e-12, 'benefitLoadFallback');
   assert(bag.marketTempPremiumPct === undefined, 'no market premium without a profile');
 });
 
-t('computeSummary: default-house model bit-identical with/without the bag', () => {
+t('computeSummary: default-house labor moves by EXACTLY the monthly hours factor', () => {
+  // P1-2b house-default closure (Brock decision 2026-07-02): this pin was
+  // "bit-identical with/without the bag". Now the INTENTIONAL baseline is
+  // labor × (1 + 5%×0.5) × (1 − 12%) — the effective-hours basis the
+  // monthly expense engine has always booked. Every fixture line is
+  // hourly/OT-eligible, so the factor applies uniformly.
   const withoutBag = calc.computeSummary(summaryParams());
   const withBag = calc.computeSummary(summaryParams({
     laborOpts: resolveSummaryLaborOpts({ calcHeur: HEUR_DEFAULT, marketLaborProfile: null }),
   }));
-  for (const k of Object.keys(withoutBag)) {
+  const f = HOURS_MULT(HEUR_DEFAULT);
+  near(f, 1.025 * 0.88, 1e-12, 'sanity: house factor 0.902');
+  // summary.laborCost = direct + indirect; both paths apply otMult × absMult
+  // (indirectLineAnnual got the symmetric absMult in P1-2), so ONE factor.
+  near(withBag.laborCost, withoutBag.laborCost * f, 1e-9, 'labor (direct+indirect) × hours factor');
+  // Non-labor components must NOT move.
+  for (const k of ['equipmentCost', 'facilityCost', 'overheadCost', 'vasCost']) {
     if (typeof withoutBag[k] !== 'number') continue;
-    assert(withBag[k] === withoutBag[k], `summary.${k}: ${withBag[k]} !== ${withoutBag[k]} (must be ===)`);
+    assert(withBag[k] === withoutBag[k], `summary.${k}: ${withBag[k]} !== ${withoutBag[k]} (non-labor must be ===)`);
   }
 });
 
-t('computePricingSnapshot: default-house bucket costs bit-identical with/without the bag', () => {
-  const m = model();
-  const summary = calc.computeSummary(summaryParams());
-  const a = calc.computePricingSnapshot({ model: m, summary, marginFrac: 0.12, opHrs: OP_HRS, contractYears: 5 });
-  const b = calc.computePricingSnapshot({
-    model: m, summary, marginFrac: 0.12, opHrs: OP_HRS, contractYears: 5,
-    laborOpts: resolveSummaryLaborOpts({ calcHeur: HEUR_DEFAULT, marketLaborProfile: null }),
+t('computeSummary: default-house priced labor === 12 × monthly-engine flat month', () => {
+  // The parity P1-2b actually closes: the annual PRICING basis now equals
+  // the annualized monthly EXPENSE basis on a default-house model.
+  const bag = resolveSummaryLaborOpts({ calcHeur: HEUR_DEFAULT, marketLaborProfile: null });
+  const s = calc.computeSummary(summaryParams({ indirectLaborLines: [], laborOpts: bag }));
+  const monthly = computeMonthlyLaborFromLines([PERM, MIXED, TEMP], {
+    calcHeur: HEUR_DEFAULT, marketLaborProfile: null, calendarMonth: 1,
+    seasonalShare: 1 / 12, escLaborMult: 1, volMult: 1, rampLaborMult: 1, yearIdx: 0,
   });
+  near(s.laborCost, monthly * 12, 1e-9, 'annualized default-house parity');
+});
+
+t('computePricingSnapshot: default-house bucket labor scales by the hours factor', () => {
+  // P1-2b house-default closure (Brock decision 2026-07-02): was a
+  // bit-identical pin; buckets in this fixture are pure labor (no facility /
+  // equipment / overhead), so every bucket cost scales by EXACTLY the
+  // monthly effective-hours factor.
+  const m = model();
+  const bag = resolveSummaryLaborOpts({ calcHeur: HEUR_DEFAULT, marketLaborProfile: null });
+  const a = calc.computePricingSnapshot({
+    model: m, summary: calc.computeSummary(summaryParams()),
+    marginFrac: 0.12, opHrs: OP_HRS, contractYears: 5,
+  });
+  const b = calc.computePricingSnapshot({
+    model: m, summary: calc.computeSummary(summaryParams({ laborOpts: bag })),
+    marginFrac: 0.12, opHrs: OP_HRS, contractYears: 5, laborOpts: bag,
+  });
+  const f = HOURS_MULT(HEUR_DEFAULT);
   for (const k of Object.keys(a.bucketCosts)) {
     if (typeof a.bucketCosts[k] !== 'number') continue;
-    assert(a.bucketCosts[k] === b.bucketCosts[k], `bucketCosts.${k}: ${b.bucketCosts[k]} !== ${a.bucketCosts[k]}`);
+    near(b.bucketCosts[k], a.bucketCosts[k] * f, 1e-9, `bucketCosts.${k} × hours factor`);
   }
 });
 
@@ -132,8 +173,10 @@ t('market temp_cost_premium_pct raises summary labor by the exact blend delta', 
   const sMkt = calc.computeSummary(summaryParams({ laborOpts: bagMkt }));
   assert(sMkt.laborCost > sNo.laborCost, 'premium must raise priced labor');
   // Only MIXED participates: 40% temp share reprices 38% → 55% markup.
-  // Expected delta = hours × tempShare × base × (0.55 − 0.38).
-  const expectedDelta = 2080 * 0.4 * 22 * (0.55 - 0.38);
+  // Expected delta = hours × tempShare × base × (0.55 − 0.38), scaled by
+  // the house effective-hours factor now that P1-2b threads OT/absence
+  // into BOTH bags (Brock decision 2026-07-02).
+  const expectedDelta = 2080 * 0.4 * 22 * (0.55 - 0.38) * HOURS_MULT(HEUR_DEFAULT);
   near(sMkt.laborCost - sNo.laborCost, expectedDelta, 1e-9, 'blend delta');
   // Pure-perm + pure-temp lines are untouched by the premium.
   near(calc.directLineAnnual(PERM, bagMkt), calc.directLineAnnual(PERM, bagNo), 1e-12, 'perm line');
@@ -185,22 +228,29 @@ t('market OT/absence profiles: summary labor === 12 × monthly flat-month labor'
   near(s.laborCost, 2080 * (1 + 0.06 * 0.5) * 0.90 * 18 * 1.30, 1e-9, 'hand math');
 });
 
-// ── 5. OT gating: transient/override thread, snapshot does not ────────
-t('explicit What-If / override OT threads into the bag; snapshot is gated out', () => {
+// ── 5. OT precedence: flat sources force over market; snapshot threads ──
+t('transient / override / snapshot OT all thread; flat sources beat market arrays', () => {
   const heurTransient = resolveCalcHeuristics(null, null, null, {}, { overtime_pct: 8 });
   near(resolveSummaryLaborOpts({ calcHeur: heurTransient }).otPct, 0.08, 1e-12, 'transient');
   const heurOverride = resolveCalcHeuristics(null, null, { overtime_pct: 7 }, {}, null);
   near(resolveSummaryLaborOpts({ calcHeur: heurOverride }).otPct, 0.07, 1e-12, 'override');
-  // Approved scenario snapshot carrying the frozen house default (5) must
-  // NOT reprice — recommended rates on approved deals stay put.
+  // P1-2b house-default closure (Brock decision 2026-07-02): flipped pin.
+  // 'snapshot' now THREADS — an approved model's monthly P&L already
+  // expenses its frozen snapshot OT/absence, so pricing the same basis is
+  // the parity this fix exists for (mirrors monthlyEffectiveHours, which
+  // has always treated 'snapshot' as force-project-flat).
   const heurSnap = resolveCalcHeuristics(
     { status: 'approved' },
-    { heuristics: [{ key: 'overtime_pct', effective: 5 }] },
+    { heuristics: [{ key: 'overtime_pct', effective: 6 }] },
     null, {}, null,
   );
   assert(heurSnap.used.overtime_pct === 'snapshot', 'provenance sanity');
-  const bagSnap = resolveSummaryLaborOpts({ calcHeur: heurSnap });
-  assert(!('otPct' in bagSnap), 'snapshot OT must not thread into pricing');
+  near(resolveSummaryLaborOpts({ calcHeur: heurSnap }).otPct, 0.06, 1e-12, 'snapshot threads');
+  // And flat sources beat the market arrays, exactly like the monthly path.
+  const mkt = { peak_month_overtime_pct: Array(12).fill(0.11), peak_month_absence_pct: Array(12).fill(0.09) };
+  const bagForced = resolveSummaryLaborOpts({ calcHeur: heurSnap, marketLaborProfile: mkt });
+  near(bagForced.otPct, 0.06, 1e-12, 'snapshot flat beats market array');
+  near(bagForced.absencePct, 0.09, 1e-12, 'unforced absence still resolves from market');
 });
 
 // ── 6. bucket parity: snapshot prices the same labor dollars as summary ──
