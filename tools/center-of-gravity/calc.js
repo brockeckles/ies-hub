@@ -34,7 +34,10 @@ import {
   estimateParcelLane,
   parcelDistributionByZone,
   PARCEL_ENGINE_VERSION,
-} from './parcel-calc.js?v=20260528-parcel15';
+} from './parcel-calc.js?v=20260702-p14a';
+
+// P1-4 (2026-07-02) — road factor single-sourced in shared/transport-rates.js
+import { DEFAULT_ROAD_FACTOR, DEFAULT_TL_RATE_PER_MILE } from '../../shared/transport-rates.js?v=20260702-p14a';
 
 export {
   ZONE_BREAKPOINTS,
@@ -59,7 +62,7 @@ export const DEFAULT_CONFIG = {
   numCenters: 1,
   maxIterations: 100,
   includeSupply: false,
-  transportCostPerMile: 2.85,
+  transportCostPerMile: DEFAULT_TL_RATE_PER_MILE,
   // 2026-05-26 — Round-trip factor. The k-means + cost formula compute
   // one-way distance from each demand point to its assigned center; real
   // carriers price for the round trip (loaded outbound + empty/backhaul
@@ -144,7 +147,7 @@ export const DEFAULT_CONFIG = {
   //     parcel-specific unitsPerTruck (~3,000 pkgs per trailer); users
   //     on the lb-default should bump higher. Earlier placeholder of
   //     $8.50 was 3-5x too low (caught by Brock 2026-05-28).
-  modeRates: { tlPerMile: 2.85, ltlPerMile: 4.20, parcelPerMile: 28.00 },
+  modeRates: { tlPerMile: DEFAULT_TL_RATE_PER_MILE, ltlPerMile: 4.20, parcelPerMile: 28.00 },
   // 2026-05-28 27b — Parcel engine knobs. Active when modeMixEnabled=true
   // and modeMix.parcelPct > 0. Parcel slice routes through parcel-calc's
   // zone-priced math; modeRates.parcelPerMile becomes display-only legacy.
@@ -217,7 +220,7 @@ export const DEFAULT_CONFIG = {
   // RFP number this should typically be 1.20-1.25. Set to 1.0 to recover
   // legacy great-circle behavior. Threaded through estimateTransportCost
   // + sensitivityAnalysis. Future: regional override (mountain / plains).
-  roadFactor: 1.22,
+  roadFactor: DEFAULT_ROAD_FACTOR,
   // 2026-05-28 — k-means restart count. k-means is local-optimum-prone;
   // running N restarts with different seeds and keeping the lowest-cost
   // solution is the standard defense. Restart #0 uses the deterministic
@@ -962,7 +965,7 @@ export function effectiveCpm(modeMix, modeRates) {
  * @param {number} [rt=2.0]
  * @returns {number}
  */
-export function effectiveCpmForFormula(modeMix, modeRates, roadFactor = 1.22, rt = 2.0) {
+export function effectiveCpmForFormula(modeMix, modeRates, roadFactor = DEFAULT_ROAD_FACTOR, rt = 2.0) {
   const tlPct     = Math.max(0, +modeMix?.tlPct     || 0);
   const ltlPct    = Math.max(0, +modeMix?.ltlPct    || 0);
   const parcelPct = Math.max(0, +modeMix?.parcelPct || 0);
@@ -995,7 +998,7 @@ export function effectiveCpmForFormula(modeMix, modeRates, roadFactor = 1.22, rt
  * @param {number} roadFactor
  * @returns {{ maxMiles: number, coveredWeight: number, outWeight: number, coveragePct: number, coveredCount: number, outCount: number }}
  */
-export function flagServiceViolations(mcr, points, maxMiles = 0, roadFactor = 1.22) {
+export function flagServiceViolations(mcr, points, maxMiles = 0, roadFactor = DEFAULT_ROAD_FACTOR) {
   const stats = { maxMiles: maxMiles || 0, coveredWeight: 0, outWeight: 0, coveragePct: 100, coveredCount: 0, outCount: 0 };
   if (!mcr || !Array.isArray(mcr.assignments)) return stats;
   const road = Math.max(1, +roadFactor || 1);
@@ -1217,7 +1220,7 @@ export function buildMcrFromDcList(dcs, points) {
  * @param {number} [unitsPerTruck=25000]
  * @returns {{ totalCost: number, avgCostPerUnit: number, costByCluster: number[], totalTruckloads: number }}
  */
-export function estimateTransportCost(cogResult, points, costPerMile = 2.85, unitsPerTruck = 25000, roundTripFactor = 2.0, roadFactor = 1.22) {
+export function estimateTransportCost(cogResult, points, costPerMile = DEFAULT_TL_RATE_PER_MILE, unitsPerTruck = 25000, roundTripFactor = 2.0, roadFactor = DEFAULT_ROAD_FACTOR) {
   const capacity = Math.max(1, unitsPerTruck || 1); // guard against /0
   // 2026-05-26 — Round-trip factor. Distances in cogResult.assignments are
   // one-way; carrier pricing includes the return leg. Default 2.0 = full
@@ -1338,7 +1341,7 @@ export function tornadoSensitivity(mcr, points, cfg, drivers) {
     }
     const cpm = overrides.cpm != null ? overrides.cpm : liveCfg.transportCostPerMile;
     const rt  = overrides.rt  != null ? overrides.rt  : (liveCfg.roundTripFactor ?? 2.0);
-    const road = overrides.road != null ? overrides.road : (liveCfg.roadFactor ?? 1.22);
+    const road = overrides.road != null ? overrides.road : (liveCfg.roadFactor ?? DEFAULT_ROAD_FACTOR);
     const cap = overrides.cap != null ? overrides.cap : (liveCfg.unitsPerTruck || 25000);
     return estimateTransportCost(mcr, pts, cpm, cap, rt, road).totalCost;
   }
@@ -1349,7 +1352,7 @@ export function tornadoSensitivity(mcr, points, cfg, drivers) {
   // knobs that actually move parcel cost. Truck-only scenarios keep the
   // original 4-driver set (back-compat).
   const baseCpm = +liveCfg.transportCostPerMile || 0;
-  const baseRoad = +(liveCfg.roadFactor ?? 1.22);
+  const baseRoad = +(liveCfg.roadFactor ?? DEFAULT_ROAD_FACTOR);
   const baseRt = +(liveCfg.roundTripFactor ?? 2.0);
   let allDrivers = drivers;
   if (!allDrivers) {
@@ -1455,7 +1458,7 @@ export function estimateBlendedCost(cogResult, points, config) {
   const cfg = config || {};
   const unitsPerTruck = cfg.unitsPerTruck || 25000;
   const rt = cfg.roundTripFactor ?? 2.0;
-  const road = cfg.roadFactor ?? 1.22;
+  const road = cfg.roadFactor ?? DEFAULT_ROAD_FACTOR;
 
   if (!cfg.modeMixEnabled) {
     const r = estimateTransportCost(cogResult, points, cfg.transportCostPerMile, unitsPerTruck, rt, road);
@@ -1738,7 +1741,7 @@ export function multiYearCostProjection(baseCost, cfg) {
  * @param {number} [fixedCostPerDC=0]  Annual fixed cost per facility ($/year).
  * @returns {Array<{ k: number, totalWeightedDistance: number, transportCost: number, facilityCost: number, totalCost: number, estimatedCost: number, avgDistance: number, isElbow?: boolean, isRecommended?: boolean }>}
  */
-export function sensitivityAnalysis(points, maxK = 5, configOrCpm = 2.85, maxIter = 100, unitsPerTruck = 25000, fixedCostPerDC = 0, roundTripFactor = 2.0, roadFactor = 1.22) {
+export function sensitivityAnalysis(points, maxK = 5, configOrCpm = DEFAULT_TL_RATE_PER_MILE, maxIter = 100, unitsPerTruck = 25000, fixedCostPerDC = 0, roundTripFactor = 2.0, roadFactor = DEFAULT_ROAD_FACTOR) {
   // 2026-05-28 — accept config object (new, parcel-aware) or scalar cpm (legacy).
   const isConfig = configOrCpm != null && typeof configOrCpm === 'object';
   const cfg = isConfig ? configOrCpm : {
@@ -2776,7 +2779,7 @@ export function runScenario(params) {
   const cost = estimateTransportCost(
     cogResult,
     params.points,
-    Number(params.costPerMile) || 2.85,
+    Number(params.costPerMile) || DEFAULT_TL_RATE_PER_MILE,
     Number(params.unitsPerTruck) || 25000
   );
   return { ok: true, version: ENGINE_VERSION, result: { ...cogResult, transportCost: cost }, errors: [] };

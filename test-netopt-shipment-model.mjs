@@ -61,24 +61,28 @@ t('shipment profile: weight resolution order (avgWeight > lbsPerUnit > 25)', () 
 });
 
 // ── hand-computed TL lane ───────────────────────────────────────────────────
-// 1,000 mi East→East lane (no regional surcharge): 1,000 × 2.85 × 1.12 = $3,192/truck
-t('TL leg: hand-computed single-truck lane', () => {
+// P1-4 (2026-07-02): blendedLaneCost now bills ROAD miles (gc × 1.22 —
+// COG parity; carriers don't drive great circles).
+// 1,000 gc mi East→East lane (no regional surcharge):
+//   1,000 × 1.22 × 2.85 × 1.12 = $3,894.24/truck
+t('TL leg: hand-computed single-truck lane (road miles)', () => {
   const c = blendedLaneCost(1000, 40_000, TL_ONLY, DEFAULT_RATES, -80, -85, 40, 35);
-  near(c.tlCost, 3_192, 0.5, '1 truck × $3,192');
+  near(c.tlCost, 3_894.24, 0.5, '1 truck × $3,894.24');
   assert(c.trucksPerShipment === 1, 'one dry van for 40K lbs');
-  near(c.blendedCost, 3_192, 0.5);
+  near(c.blendedCost, 3_894.24, 0.5);
 });
 
 t('TL leg: 90K-lb shipment takes 2 trucks (weight-honest)', () => {
   const c = blendedLaneCost(1000, 90_000, TL_ONLY, DEFAULT_RATES, -80, -85, 40, 35);
   assert(c.trucksPerShipment === 2, `expected 2 trucks, got ${c.trucksPerShipment}`);
-  near(c.tlCost, 6_384, 0.5, '2 × $3,192');
+  near(c.tlCost, 7_788.48, 0.5, '2 × $3,894.24');
 });
 
 t('parcel leg: 500-lb shipment splits into 20 × 25-lb packages', () => {
   const c = blendedLaneCost(1000, 500, PCL_ONLY, DEFAULT_RATES, -80, -85, 40, 35);
   assert(c.pkgsPerShipment === 20, `expected 20 pkgs, got ${c.pkgsPerShipment}`);
-  const perPkg = parcelCost(25, 1000, DEFAULT_RATES.parcelZoneRates, DEFAULT_RATES.fuelSurcharge);
+  // per-package zone/rate off road miles (P1-4)
+  const perPkg = parcelCost(25, 1000 * 1.22, DEFAULT_RATES.parcelZoneRates, DEFAULT_RATES.fuelSurcharge);
   near(c.parcelCost, perPkg * 20, 0.5, '20 × per-package cost');
 });
 

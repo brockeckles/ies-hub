@@ -8,6 +8,13 @@
  * @module tools/fleet-modeler/calc
  */
 
+// P1-4 (2026-07-02) — shared transport primitives (single source of truth
+// with COG + NetOpt; see shared/transport-rates.js).
+import {
+  DEFAULT_TL_RATE_PER_MILE,
+  COMMON_CARRIER_PREMIUM,
+} from '../../shared/transport-rates.js?v=20260702-p14a';
+
 // ============================================================
 // VEHICLE SPECS (ATRI 2024 benchmarks)
 // ============================================================
@@ -602,8 +609,11 @@ export function calcDedicatedFleet(lanes, vehicles = DEFAULT_VEHICLES, config = 
  * deck is supplied. The UI prefers the editable rate deck pulled from
  * ref_fleet_carrier_rates (api.listCarrierRates).
  */
+// P1-4 (2026-07-02): dry-van benchmark derived from the shared contract
+// TL rate (2.85 x 1.228 common-carrier premium = 3.50) so Fleet's
+// carrier benchmark moves with the same base rate COG/NetOpt price with.
 export const FALLBACK_CARRIER_RATES = {
-  'dry-van': { base_rate_per_mile: 3.50, fuel_surcharge_pct: 0.18, min_charge: 350 },
+  'dry-van': { base_rate_per_mile: +(DEFAULT_TL_RATE_PER_MILE * COMMON_CARRIER_PREMIUM).toFixed(2), fuel_surcharge_pct: 0.18, min_charge: 350 },
   'reefer':  { base_rate_per_mile: 4.00, fuel_surcharge_pct: 0.20, min_charge: 450 },
   'flatbed': { base_rate_per_mile: 3.80, fuel_surcharge_pct: 0.18, min_charge: 425 },
   'straight':{ base_rate_per_mile: 2.80, fuel_surcharge_pct: 0.15, min_charge: 175 },

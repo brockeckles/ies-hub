@@ -5,6 +5,25 @@
  * @module tools/network-opt/calc
  */
 
+// P1-4 (2026-07-02) — transport primitives single-sourced in
+// shared/transport-rates.js: zone table (was shifted one bracket vs
+// COG's carrier table), parcel rate matrix (was synthetic — now derived
+// from the published FedEx Ground 2026 list COG prices with), road-mile
+// factor (was absent — lanes priced great-circle miles, ~18% under
+// billable road miles), and TL/fuel defaults.
+import {
+  zoneForMiles as sharedZoneForMiles,
+  buildZoneMatrix,
+  roadMiles,
+  DEFAULT_ROAD_FACTOR,
+  DEFAULT_TL_RATE_PER_MILE,
+  DEFAULT_FUEL_SURCHARGE,
+  DEFAULT_TL_CAPACITY_LBS,
+  PARCEL_WEIGHT_BRACKETS,
+} from '../../shared/transport-rates.js?v=20260702-p14a';
+
+export { PARCEL_WEIGHT_BRACKETS };
+
 // ============================================================
 // CONSTANTS
 // ============================================================
@@ -19,7 +38,7 @@ const EARTH_RADIUS_MI = 3959;
  * 30–50% mid-shipper discount off published, 10–18% FSC). Replace with contract rates
  * before quoting. Sources: Hatfield & Associates, Trans Logistics, FreightWise. */
 export const DEFAULT_RATES = {
-  tlRatePerMile: 2.85,
+  tlRatePerMile: DEFAULT_TL_RATE_PER_MILE,
   ltlBaseRate: 18.50, // $/CWT
   // Weight breaks for the class-100 baseline row. Other classes derive via NMFC_CLASS_MULTIPLIERS.
   ltlWeightBreaks: [500, 1000, 2000, 5000, 10000, 20000],
@@ -28,23 +47,19 @@ export const DEFAULT_RATES = {
   ltlDiscountPct: 50,
   // Minimum charge floor per shipment (typical industry $90-$120 absolute minimum).
   ltlMinCharge: 110,
-  parcelZoneRates: [
-    // Zones 2-8, weight brackets: 1lb, 5lb, 10lb, 25lb, 50lb, 70lb
-    [8.50, 11.20, 14.80, 22.50, 35.00, 45.00],   // Zone 2
-    [9.80, 13.50, 17.20, 26.00, 40.00, 52.00],   // Zone 3
-    [11.20, 15.80, 20.50, 31.00, 48.00, 62.00],  // Zone 4
-    [13.50, 18.20, 24.00, 36.50, 56.00, 72.00],  // Zone 5
-    [15.80, 21.50, 28.50, 43.00, 66.00, 85.00],  // Zone 6
-    [18.50, 25.00, 33.00, 50.00, 77.00, 99.00],  // Zone 7
-    [22.00, 29.50, 39.00, 59.00, 91.00, 117.00], // Zone 8
-  ],
-  fuelSurcharge: 0.12,
+  // P1-4: zone × bracket matrix derived from the published FedEx Ground
+  // 2026 list (same table COG prices with) at the legacy 6 brackets —
+  // replaces the synthetic matrix that disagreed with COG on every lane.
+  parcelZoneRates: buildZoneMatrix(),
+  fuelSurcharge: DEFAULT_FUEL_SURCHARGE,
+  // P1-4: great-circle → billable road miles gross-up (COG parity).
+  roadFactor: DEFAULT_ROAD_FACTOR,
   // 2026-06-10 shipment-build model — equipment assumptions for weight-honest
   // mode legs. TL: dry-van payload capacity (multi-truck shipments when a
   // single shipment exceeds it). Parcel: average package weight a shipment
   // splits into (a 500-lb parcel-mode shipment is ~20 boxes, not one 500-lb
   // package priced off the bracket edge).
-  tlCapacityLbs: 45000,
+  tlCapacityLbs: DEFAULT_TL_CAPACITY_LBS,
   parcelAvgPkgWeightLbs: 25,
   // NET-C1 — Per-lane rate overrides. Each entry shadows the global rates
   // for a specific origin→destination pair when both keys match. Use facility
@@ -58,7 +73,7 @@ export const DEFAULT_RATES = {
   laneRates: [],
 };
 
-export const PARCEL_WEIGHT_BRACKETS = [1, 5, 10, 25, 50, 70];
+// PARCEL_WEIGHT_BRACKETS re-exported from shared/transport-rates.js above.
 
 /**
  * Normalize a rate card: map legacy/phantom keys (tlPerMile, ltlPerLb,
@@ -470,13 +485,10 @@ export function estimateTransitDays(miles, speedMphOrOpts = 50, opts = {}) {
  * @returns {number} zone 2-8
  */
 export function parcelZone(miles) {
-  if (miles <= 50) return 2;
-  if (miles <= 150) return 3;
-  if (miles <= 300) return 4;
-  if (miles <= 600) return 5;
-  if (miles <= 1000) return 6;
-  if (miles <= 1400) return 7;
-  return 8;
+  // P1-4: delegate to the shared carrier zone table. The old local table
+  // was shifted one bracket early (e.g. 100 mi -> Zone 3 instead of 2),
+  // over-zoning every parcel lane relative to COG.
+  return sharedZoneForMiles(miles);
 }
 
 // ============================================================
@@ -665,6 +677,12 @@ export function blendedLaneCost(miles, avgWeight, modeMix, rateCard = DEFAULT_RA
   if (!isFinite(miles) || miles <= 0) {
     return { tlCost: 0, ltlCost: 0, parcelCost: 0, blendedCost: 0, trucksPerShipment: 0, pkgsPerShipment: 0 };
   }
+  // P1-4 (2026-07-02): carriers bill road miles, not great-circle miles.
+  // Callers pass haversine distance; gross it up once here so TL $/mile,
+  // LTL distance factor, and parcel zoning all price the same billable
+  // miles COG does (default 1.22, override via rateCard.roadFactor).
+  // assignment.distanceMiles stays great-circle for display/SLA.
+  miles = roadMiles(miles, rateCard.roadFactor ?? DEFAULT_ROAD_FACTOR);
   // 2026-06-10 shipment-build model: TL leg is per-truck — a shipment heavier
   // than one dry van takes multiple trucks. Previously one full-truck cost was
   // charged per "shipment" regardless of weight (a 25-lb default shipment was

@@ -15,7 +15,7 @@ import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillbac
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260418-sM';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260702-p1a';
+import * as calc from './calc.js?v=20260702-p14a';
 import * as api from './api.js?v=20260702-sec2';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
