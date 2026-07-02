@@ -820,3 +820,87 @@ export function resolveCategoryRate(ratesByCategory, category, fallback, lineRat
   const fb = Number(fallback);
   return Number.isFinite(fb) && fb > 0 ? fb : 0;
 }
+
+// ============================================================
+// P2-2 (2026-07-02): TEMPLATE-EDITOR PERSISTENCE HELPERS
+// ============================================================
+// ref_most_elements.id / ref_most_templates.id are BIGSERIAL (numeric).
+// The editor used to tag unsaved elements with a UUID and detect them via
+// `el.id.includes('new')` — Number.prototype.includes doesn't exist, so
+// every edit-and-save of an existing template threw a TypeError, and new
+// elements leaked their UUID into the bigint insert. These helpers are the
+// canonical (pure, unit-tested) id classification + column sanitation +
+// element-persistence orchestration used by ui.js's saveTemplateAction.
+
+/**
+ * Writable columns on ref_most_elements (schema as of migrations
+ * 20260329224951 + 20260418203612 freq_per_cycle + 20260420141100
+ * variable_min/max). id / created_at are DB-managed — never write them.
+ */
+export const MOST_ELEMENT_WRITE_COLUMNS = [
+  'template_id', 'sequence_order', 'element_name', 'most_sequence',
+  'sequence_type', 'tmu_value', 'is_variable', 'variable_driver',
+  'variable_formula', 'notes', 'freq_per_cycle', 'variable_min',
+  'variable_max',
+];
+
+/**
+ * True when `id` is a persisted BIGSERIAL row id (all-digit). Editor-local
+ * placeholder ids (crypto.randomUUID / Date.now().toString()) are treated
+ * as unsaved. Accepts number or string; null/undefined → false.
+ * @param {number|string|null|undefined} id
+ * @returns {boolean}
+ */
+export function isPersistedRowId(id) {
+  if (id == null || id === '') return false;
+  return /^\d+$/.test(String(id));
+}
+
+/**
+ * Pick only schema-writable element columns (drops id, created_at, and any
+ * UI-local scratch keys) so inserts/updates can never 400 on an unknown
+ * column or a UUID-into-bigint cast.
+ * @param {Object} el
+ * @returns {Object}
+ */
+export function sanitizeElementForWrite(el) {
+  const out = {};
+  for (const k of MOST_ELEMENT_WRITE_COLUMNS) {
+    if (el && Object.prototype.hasOwnProperty.call(el, k)) out[k] = el[k];
+  }
+  return out;
+}
+
+/**
+ * Persist the editor's element list for a template: re-stamps
+ * sequence_order, updates persisted rows, inserts new rows (assigning the
+ * DB id back onto the in-memory element), and deletes rows the user
+ * removed in the editor (previously never persisted — deleted elements
+ * reappeared on the next edit).
+ *
+ * `apiLike` is duck-typed ({updateElement, createElement, deleteElement})
+ * so tests can drive it with a schema-shaped stub.
+ *
+ * @param {{updateElement:Function, createElement:Function, deleteElement:Function}} apiLike
+ * @param {number|string} templateId — persisted template id
+ * @param {Object[]} elements — editor element list (mutated: ids assigned)
+ * @param {Array<number|string>} [deletedIds] — persisted ids removed in the editor
+ * @returns {Promise<Object[]>} the same `elements` array, ids resolved
+ */
+export async function saveTemplateElements(apiLike, templateId, elements, deletedIds = []) {
+  for (const delId of deletedIds) {
+    if (isPersistedRowId(delId)) await apiLike.deleteElement(delId);
+  }
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i];
+    el.sequence_order = i + 1;
+    el.template_id = templateId;
+    if (isPersistedRowId(el.id)) {
+      await apiLike.updateElement(el.id, sanitizeElementForWrite(el));
+    } else {
+      const row = await apiLike.createElement(sanitizeElementForWrite(el));
+      el.id = row.id;
+    }
+  }
+  return elements;
+}

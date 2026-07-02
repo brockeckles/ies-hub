@@ -7,6 +7,8 @@
 
 import { db } from '../../shared/supabase.js?v=20260429-demo-s3';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
+// P2-2 (2026-07-02) — pure element sanitation lives in calc.js
+import { sanitizeElementForWrite } from './calc.js?v=20260702-p22a';
 
 // ============================================================
 // TEMPLATES
@@ -75,8 +77,10 @@ export async function duplicateTemplate(id) {
   if (!template) throw new Error('Template not found');
   const elements = await listElements(id);
 
+  // P2-2 fix: the column is activity_name — inserting `name` 400'd every
+  // Duplicate click (and read undefined off the source row).
   const { id: _, created_at, updated_at, ...tplData } = template;
-  const newTpl = await createTemplate({ ...tplData, name: tplData.name + ' (Copy)' });
+  const newTpl = await createTemplate({ ...tplData, activity_name: (tplData.activity_name || 'Template') + ' (Copy)' });
 
   // Copy elements to new template
   for (const el of elements) {
@@ -111,7 +115,9 @@ export async function listElements(templateId) {
  * @returns {Promise<import('./types.js?v=20260418-sM').MostElement>}
  */
 export async function createElement(data) {
-  return db.insert('ref_most_elements', data);
+  // P2-2: sanitize — id is BIGSERIAL; editor-local UUID placeholder ids and
+  // UI scratch keys must never reach the insert.
+  return db.insert('ref_most_elements', sanitizeElementForWrite(data));
 }
 
 /**
@@ -121,7 +127,8 @@ export async function createElement(data) {
  * @returns {Promise<import('./types.js?v=20260418-sM').MostElement>}
  */
 export async function updateElement(id, data) {
-  return db.update('ref_most_elements', id, data);
+  // P2-2: sanitize — never write id/created_at back into the row.
+  return db.update('ref_most_elements', id, sanitizeElementForWrite(data));
 }
 
 /**
@@ -140,7 +147,8 @@ export async function deleteElement(id) {
  */
 export async function reorderElements(updates) {
   for (const u of updates) {
-    await db.update('ref_most_elements', u.id, { sequence: u.sequence });
+    // P2-2 fix: column is sequence_order (writing `sequence` 400'd).
+    await db.update('ref_most_elements', u.id, { sequence_order: u.sequence });
   }
 }
 

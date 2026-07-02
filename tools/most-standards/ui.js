@@ -7,7 +7,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260610-life1';
+import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260610-life1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260611-sl1';
@@ -16,8 +16,8 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202606
 // button is a convenience trigger rather than a discrete compute step, so a
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
-import * as calc from './calc.js?v=20260702-p1c';
-import * as api from './api.js?v=20260504-auth1';
+import * as calc from './calc.js?v=20260702-p22a';
+import * as api from './api.js?v=20260702-p22a';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -56,6 +56,10 @@ let editorTemplate = null;
 
 /** Editor elements for the current template being edited */
 let editorElements = [];
+/** P2-2 — persisted element ids removed in the editor; deleted on save.
+ * (Previously element deletion never persisted — rows reappeared on the
+ * next edit because deleteElement had zero callers.) */
+let editorDeletedElementIds = [];
 
 /** Saved scenarios for Quick Analysis (Supabase-backed via api.most_analyses) */
 let savedScenarios = [];
@@ -397,25 +401,22 @@ function _buildMostChromeHandlers() {
 /** Route a chrome action click to MOST's existing handlers. */
 function _handleMostAction(actionId) {
   if (!rootEl) return;
+  // P2-2 (2026-07-02): these used to click phantom in-canvas buttons via
+  // selectors that matched nothing (prefixed most-* action names etc.)
+  // — every chrome action flashed and did nothing. Call the handlers.
   if (actionId === 'most-save-template') {
-    const btn = rootEl.querySelector('[data-action="most-save-template"], #most-save-template');
-    if (btn) /** @type {HTMLButtonElement} */ (btn).click();
+    saveTemplateAction();
     return;
   }
   if (actionId === 'most-save-scenario') {
-    const btn = rootEl.querySelector('[data-action="most-save-scenario"], #most-save-scenario');
-    if (btn) /** @type {HTMLButtonElement} */ (btn).click();
+    saveCurrentScenario();
     return;
   }
-  if (actionId === 'most-run-analysis') {
-    const btn = rootEl.querySelector('#most-analysis-calc, [data-action="most-analyze"]');
-    if (btn) /** @type {HTMLButtonElement} */ (btn).click();
-    flashPrimaryAction(rootEl);
-    return;
-  }
-  if (actionId === 'most-run-workflow') {
-    const btn = rootEl.querySelector('[data-action="most-workflow-calc"]');
-    if (btn) /** @type {HTMLButtonElement} */ (btn).click();
+  if (actionId === 'most-run-analysis' || actionId === 'most-run-workflow') {
+    // Analysis + Workflow recompute inline on every render — "Run" is a
+    // deliberate recompute trigger (see the run-state opt-out note at top).
+    renderContent();
+    _refreshMostKpis();
     flashPrimaryAction(rootEl);
     return;
   }
@@ -728,11 +729,9 @@ function _buildMostChromeOpts() {
     });
   }
   if (activeTab === 'workflow') {
-    actions.push({
-      id: 'most-save-scenario',
-      label: '\u{1F4BE} Save',
-      title: 'Save this workflow scenario',
-    });
+    // P2-2: no Save here — Workflow Composer has no persistence (P2-3);
+    // the old chrome Save was a dead selector, and wiring it to the
+    // analysis-scenario saver would save the wrong object.
     actions.push({
       id: 'most-run-workflow',
       label: 'Run Workflow',
@@ -1788,6 +1787,7 @@ function bindContentEvents(container) {
       try {
         editorTemplate = await api.getTemplate(id) || null;
         editorElements = editorTemplate ? await api.listElements(id) : [];
+        editorDeletedElementIds = [];
       } catch (err) {
         console.warn('[MOST] Failed to load template:', err);
       }
@@ -1991,19 +1991,26 @@ function handleAction(action, idx) {
     case 'create-template':
       editorTemplate = { id: null, activity_name: '', process_area: '', labor_category: 'manual', uom: 'each', description: '' };
       editorElements = [];
+      editorDeletedElementIds = [];
       break;
     case 'close-editor':
       editorTemplate = null;
       editorElements = [];
+      editorDeletedElementIds = [];
       break;
     case 'add-element':
       editorElements.push(createEmptyElement());
       updateEditorMetrics();
       break;
-    case 'delete-element':
-      editorElements.splice(idx, 1);
+    case 'delete-element': {
+      const [removed] = editorElements.splice(idx, 1);
+      // P2-2: remember persisted rows so save actually deletes them.
+      if (removed && calc.isPersistedRowId(removed.id)) {
+        editorDeletedElementIds.push(removed.id);
+      }
       updateEditorMetrics();
       break;
+    }
     case 'save-template':
       saveTemplateAction();
       return;
@@ -2387,7 +2394,9 @@ function formatDollar(val) {
 
 function createEmptyElement() {
   return {
-    id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
+    // P2-2: placeholder must never look like a BIGSERIAL id (all-digits) —
+    // isPersistedRowId classifies on that. Prefix the rare non-UUID fallback.
+    id: crypto.randomUUID ? crypto.randomUUID() : 'new-' + Date.now(),
     template_id: null,
     sequence_order: (editorElements.length || 0) + 1,
     element_name: '',
@@ -2443,35 +2452,32 @@ async function saveTemplateAction() {
     let tpl = editorTemplate || { activity_name: name, process_area: area, labor_category: cat, uom, equipment_type: equipment, wms_transaction: wms, description: desc };
 
     if (editorTemplate?.id) {
-      // Update existing
+      // Update existing. P2-2: element persistence routes through the
+      // canonical calc.saveTemplateElements — the old inline loop called
+      // String.prototype.includes on BIGSERIAL numeric ids (TypeError on every
+      // edit-and-save) and never deleted removed elements.
       tpl = await api.updateTemplate(editorTemplate.id, {
         activity_name: name, process_area: area, labor_category: cat, uom, equipment_type: equipment,
         wms_transaction: wms, description: desc, total_tmu_base: totalTmu, units_per_hour_base: baseUph,
       });
-      // Update elements
-      for (let i = 0; i < editorElements.length; i++) {
-        const el = editorElements[i];
-        el.sequence_order = i + 1;
-        el.template_id = tpl.id;
-        if (el.id && !el.id.includes('new')) {
-          await api.updateElement(el.id, el);
-        } else {
-          const newEl = await api.createElement(el);
-          editorElements[i].id = newEl.id;
-        }
-      }
+      await calc.saveTemplateElements(api, tpl.id, editorElements, editorDeletedElementIds);
+      editorDeletedElementIds = [];
     } else {
       // Create new
       tpl = await api.createTemplate({
         activity_name: name, process_area: area, labor_category: cat, uom, equipment_type: equipment,
         wms_transaction: wms, description: desc, total_tmu_base: totalTmu, units_per_hour_base: baseUph, is_active: true,
       });
-      // Add elements
-      for (let i = 0; i < editorElements.length; i++) {
-        const el = { ...editorElements[i], sequence_order: i + 1, template_id: tpl.id };
-        const newEl = await api.createElement(el);
-        editorElements[i].id = newEl.id;
+      // P2-2 orphan guard: if any element insert fails, soft-delete the
+      // just-created template — each failed attempt used to leave an orphan
+      // active template in the library.
+      try {
+        await calc.saveTemplateElements(api, tpl.id, editorElements, []);
+      } catch (elErr) {
+        try { await api.deleteTemplate(tpl.id); } catch { /* best effort */ }
+        throw elErr;
       }
+      editorDeletedElementIds = [];
     }
 
     // Reload templates and close editor
