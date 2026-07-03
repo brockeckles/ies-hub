@@ -97,8 +97,8 @@ export function renderConfigHtml(ctx) {
         const palOverrideOn = totalPallets > 0;
         const shelvOverrideOn = totalShelv > 0;
         const cartonProf = sized?.cartonProfile;
-        const cppActual = (cartonProf?.cartonsPerPallet) || (ctx.zones.productDimensions?.cartonsPerPallet) || 12;
-        const ucActual = (ctx.zones.productDimensions?.unitsPerCartonPallet) || 6;
+        const cppActual = (cartonProf?.cartonsPerPallet) || (ctx.zones.productDimensions?.cartonsPerPallet) || 0;
+        const ucActual = (ctx.zones.productDimensions?.unitsPerCartonPallet) || 0;
         const unitsPerPallet = cppActual * ucActual;
 
         // Forward-derived peak on-hand inventory (always computed from throughput).
@@ -380,6 +380,23 @@ export function renderConfigHtml(ctx) {
           </div>
         `;
       })()}
+
+      <!-- UX0-2 (2026-07-03): unit-conversion divisors restored to the UI.
+           They were dropped 2026-05-05 while the engine kept honoring 0 —
+           the peak-units inventory path could never produce positions. -->
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin:10px 0 6px;">Unit Conversions (inventory &rarr; positions)</div>
+      <div class="wsc-config-row">
+        <div class="wsc-config-field"><label title="Units per full pallet. Divides peak units into pallet positions. Typical 3PL mixed-SKU: 48.">Units/Pallet</label><input type="number" value="${ctx.zones.productDimensions?.unitsPerPallet ?? 0}" placeholder="48" data-prod="unitsPerPallet" /></div>
+        <div class="wsc-config-field"><label title="Units per carton for the carton-on-pallet channel. Typical: 6.">Units/Carton (pallet)</label><input type="number" value="${ctx.zones.productDimensions?.unitsPerCartonPallet ?? 0}" placeholder="6" data-prod="unitsPerCartonPallet" /></div>
+      </div>
+      <div class="wsc-config-row">
+        <div class="wsc-config-field"><label title="Cartons per pallet for the carton-on-pallet channel. Typical: 12.">Cartons/Pallet</label><input type="number" value="${ctx.zones.productDimensions?.cartonsPerPallet ?? 0}" placeholder="12" data-prod="cartonsPerPallet" /></div>
+        <div class="wsc-config-field"><label title="Units per carton for the shelving channel. Typical: 6.">Units/Carton (shelving)</label><input type="number" value="${ctx.zones.productDimensions?.unitsPerCartonShelving ?? 0}" placeholder="6" data-prod="unitsPerCartonShelving" /></div>
+      </div>
+      <div class="wsc-config-row">
+        <div class="wsc-config-field"><label title="Cartons per shelving location. Divides shelving-channel cartons into locations. Typical: 4.">Cartons/Location</label><input type="number" value="${ctx.zones.productDimensions?.cartonsPerLocation ?? 0}" placeholder="4" data-prod="cartonsPerLocation" /></div>
+        <div class="wsc-config-field"></div>
+      </div>
     </div>
 
     <!-- ──────────────────────────────────────────────────────────────────
@@ -503,12 +520,12 @@ export function renderConfigHtml(ctx) {
           </select>
         </div>
         <div class="wsc-config-row">
-          <div class="wsc-config-field"><label title="If > 0, engine uses this explicit count instead of deriving from peak throughput.">Inbound Doors <span style="color:var(--ies-gray-500);font-weight:400;">(explicit)</span></label><input type="number" value="${ctx.zones.dockConfig?.inboundDoors || 10}" data-dock="inboundDoors" /></div>
-          <div class="wsc-config-field"><label title="If > 0, engine uses this explicit count instead of deriving from peak throughput.">Outbound Doors <span style="color:var(--ies-gray-500);font-weight:400;">(explicit)</span></label><input type="number" value="${ctx.zones.dockConfig?.outboundDoors || 12}" data-dock="outboundDoors" /></div>
+          <div class="wsc-config-field"><label title="If > 0, engine uses this explicit count instead of deriving from peak throughput.">Inbound Doors <span style="color:var(--ies-gray-500);font-weight:400;">(explicit)</span></label><input type="number" value="${ctx.zones.dockConfig?.inboundDoors ?? 0}" data-dock="inboundDoors" /></div>
+          <div class="wsc-config-field"><label title="If > 0, engine uses this explicit count instead of deriving from peak throughput.">Outbound Doors <span style="color:var(--ies-gray-500);font-weight:400;">(explicit)</span></label><input type="number" value="${ctx.zones.dockConfig?.outboundDoors ?? 0}" data-dock="outboundDoors" /></div>
         </div>
         <div class="wsc-config-row">
-          <div class="wsc-config-field"><label title="Pallets per door per hour throughput rate. Drives the legacy door-utilization metric.">Pallets/Hr/Door</label><input type="number" value="${ctx.zones.dockConfig?.palletsPerDockHour || 12}" step="1" data-dock="palletsPerDockHour" /></div>
-          <div class="wsc-config-field"><label title="Legacy operating hours/day for door-utilization metric.">Operating Hrs <span style="color:var(--ies-gray-500);font-weight:400;">(legacy)</span></label><input type="number" value="${ctx.zones.dockConfig?.dockOperatingHours || 10}" step="0.5" data-dock="dockOperatingHours" /></div>
+          <div class="wsc-config-field"><label title="Pallets per door per hour throughput rate. Drives the legacy door-utilization metric.">Pallets/Hr/Door</label><input type="number" value="${ctx.zones.dockConfig?.palletsPerDockHour ?? 0}" step="1" data-dock="palletsPerDockHour" /></div>
+          <div class="wsc-config-field"><label title="Legacy operating hours/day for door-utilization metric.">Operating Hrs <span style="color:var(--ies-gray-500);font-weight:400;">(legacy)</span></label><input type="number" value="${ctx.zones.dockConfig?.dockOperatingHours ?? 0}" step="0.5" data-dock="dockOperatingHours" /></div>
         </div>
       </div>
 
@@ -833,7 +850,9 @@ export function bindConfigEvents(panel, ctx) {
     const handleChange = (e) => {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.prod;
       const val = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
-      if (!ctx.zones.productDimensions) ctx.zones.productDimensions = { unitsPerPallet: 48, unitsPerCartonPallet: 6, cartonsPerPallet: 12, unitsPerCartonShelving: 6, cartonsPerLocation: 4 };
+      // UX0-2: seed zeros — seeding 48/6/12/6/4 here silently committed
+      // phantom conversions for the four fields the user did NOT touch.
+      if (!ctx.zones.productDimensions) ctx.zones.productDimensions = { unitsPerPallet: 0, unitsPerCartonPallet: 0, cartonsPerPallet: 0, unitsPerCartonShelving: 0, cartonsPerLocation: 0 };
       ctx.zones.productDimensions[field] = val;
       ctx.setDirty(true);
     };

@@ -1723,11 +1723,15 @@ export function calcStorageByType(facility, zones) {
   const useChannels = channelMixes.length > 0
     && channelMixes.some(m => Number(m?.peakUnitsPerDay) > 0);
 
-  const upp = prod.unitsPerPallet || 48;
-  const ucp = prod.unitsPerCartonPallet || 6;
-  const cpp = prod.cartonsPerPallet || 12;
-  const ucs = prod.unitsPerCartonShelving || 6;
-  const cpl = prod.cartonsPerLocation || 4;
+  // UX0-2 (2026-07-03): was || 48/6/12/6/4 — the display chip showed healthy
+  // position counts on phantom conversions while the sizing engine (which
+  // honors 0 per the 2026-05-08 convention) sized the same scenario to 0.
+  // Both paths now agree: no conversions typed = 0 positions.
+  const upp = prod.unitsPerPallet || 0;
+  const ucp = prod.unitsPerCartonPallet || 0;
+  const cpp = prod.cartonsPerPallet || 0;
+  const ucs = prod.unitsPerCartonShelving || 0;
+  const cpl = prod.cartonsPerLocation || 0;
 
   /**
    * Compute positions for one allocation × peak-units bucket.

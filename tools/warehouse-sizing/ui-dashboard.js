@@ -375,7 +375,7 @@ export function renderDashboard(ctx) {
         <div class="text-subtitle mb-4">Inventory Metrics</div>
         <table class="cm-grid-table" style="font-size:13px;">
           <tbody>
-            <tr><td>Peak Units/Day</td><td class="cm-num">${(ctx.zones.peakUnitsPerDay || 500000).toLocaleString()}</td></tr>
+            <tr><td>Peak Units/Day</td><td class="cm-num">${(ctx.zones.peakUnitsPerDay ?? 0).toLocaleString()}</td></tr>
             <tr><td>Avg Units/Day</td><td class="cm-num">${(ctx.zones.avgUnitsPerDay || 350000).toLocaleString()}</td></tr>
             <tr><td>Operating Days/Yr</td><td class="cm-num">${(ctx.zones.operatingDaysPerYear || 250)}</td></tr>
             <tr><td title="Days Inventory On-Hand = avgUnits / dailyOutbound. Typical 3PL DC: 30-90 days; high-turn retail: 10-30 days; DTC ecomm: 60-120 days. Sources: ctx.zones.outboundUnitsPerDay → outboundUnitsYr/operatingDays → forwardPick.outboundUnitsPerDay (legacy).">DIOH (Days)</td><td class="cm-num">${dioh.toFixed(1)}</td></tr>
