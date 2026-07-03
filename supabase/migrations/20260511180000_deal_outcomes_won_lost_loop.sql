@@ -72,7 +72,9 @@ CREATE INDEX IF NOT EXISTS deal_outcomes_recorded_at_idx ON public.deal_outcomes
 
 -- updated_at trigger
 CREATE OR REPLACE FUNCTION public._deal_outcomes_touch_updated_at()
-RETURNS trigger LANGUAGE plpgsql AS $$
+RETURNS trigger LANGUAGE plpgsql
+SET search_path = ''  -- 2026-07-03: pin search_path (advisor 0011)
+AS $$
 BEGIN
   NEW.updated_at = now();
   RETURN NEW;
@@ -107,7 +109,11 @@ USING (owner_id = auth.uid() OR current_user_is_admin());
 
 -- Convenience view for the future calibration coach: joins outcomes back to
 -- the cost-model snapshot fields the coach will compare to actuals.
-CREATE OR REPLACE VIEW public.deal_outcomes_enriched AS
+-- 2026-07-03 (applied-at-last sweep): security_invoker so the view runs with
+-- the caller's rights — without it, the postgres-owned view would bypass
+-- deal_outcomes RLS for every authenticated user (the P0-M2 class).
+CREATE OR REPLACE VIEW public.deal_outcomes_enriched
+WITH (security_invoker = on) AS
 SELECT
   o.id,
   o.deal_id,
