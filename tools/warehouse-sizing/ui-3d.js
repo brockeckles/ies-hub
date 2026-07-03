@@ -13,7 +13,7 @@
  * @module tools/warehouse-sizing/ui-3d
  */
 
-import * as calc from './calc.js?v=20260702-p1b';
+import * as calc from './calc.js?v=20260703-ux0';
 
 // P3-1: single-live window.mouseup for the no-OrbitControls drag fallback
 let _wsc3dPrevMouseUp = null;

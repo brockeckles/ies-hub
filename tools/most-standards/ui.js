@@ -17,7 +17,7 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202607
 // button is a convenience trigger rather than a discrete compute step, so a
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
-import * as calc from './calc.js?v=20260702-p23a';
+import * as calc from './calc.js?v=20260703-ux0';
 import * as api from './api.js?v=20260703-lw1';
 
 // ============================================================

@@ -1861,7 +1861,7 @@ function renderDemand(el) {
       try {
         // Lazy-load COG's ZIP3 centroid table (949 entries) only when a CSV
         // actually arrives — no static cross-tool dependency.
-        const cogCalc = await import('../center-of-gravity/calc.js?v=20260702-p14a');
+        const cogCalc = await import('../center-of-gravity/calc.js?v=20260703-ux0');
         const parsed = calc.parseDemandCsv(String(ev.target?.result || ''), { zip3Lookup: cogCalc.ZIP3_CENTROIDS });
         if (parsed.demands.length === 0) {
           const first = parsed.errors[0];

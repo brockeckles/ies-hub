@@ -16,7 +16,7 @@
  * @module tools/warehouse-sizing/ui-dashboard
  */
 
-import * as calc from './calc.js?v=20260702-p1b';
+import * as calc from './calc.js?v=20260703-ux0';
 import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { renderCmDrillbackChip } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 
