@@ -286,36 +286,50 @@ export function refreshKpiStrip(rootEl, items) {
  *   onPrimaryShortcut(actionId) — Cmd/Ctrl+Enter
  */
 export function bindToolChromeEvents(rootEl, handlers) {
-  if (!rootEl || rootEl.__tcBound) return;
-  rootEl.__tcBound = true;
+  if (!rootEl) return;
+  // P3-1 listener stacking (2026-07-03): live-context pattern. Every tool
+  // re-calls this on each shell re-render (sidebar toggle, save, load,
+  // section switch) to refresh handler closures — previously by resetting
+  // __tcBound=false, which re-ADDED the click listener each time (the
+  // rootEl node survives innerHTML replaces), so Run/Save fired N times
+  // after N re-renders. Now: exactly ONE click listener per rootEl node,
+  // guarded by __tcClickBound (which tools never touch), dispatching to
+  // the LATEST handlers via rootEl.__tcHandlers. The legacy __tcBound
+  // resets in tools are harmless no-ops against this guard.
+  rootEl.__tcHandlers = handlers;
+  rootEl.__tcBound = true; // legacy flag, kept for back-compat readers
 
-  rootEl.addEventListener('click', e => {
-    const phaseBtn = e.target.closest('[data-tc-phase]');
-    if (phaseBtn && rootEl.contains(phaseBtn)) {
-      handlers.onPhase && handlers.onPhase(phaseBtn.dataset.tcPhase);
-      return;
-    }
-    const sectionBtn = e.target.closest('[data-tc-section]');
-    if (sectionBtn && rootEl.contains(sectionBtn)) {
-      handlers.onSection && handlers.onSection(sectionBtn.dataset.tcSection);
-      return;
-    }
-    const sidebarBtn = e.target.closest('[data-tc-sidebar]');
-    if (sidebarBtn && rootEl.contains(sidebarBtn)) {
-      handlers.onSidebar && handlers.onSidebar(sidebarBtn.dataset.tcSidebar);
-      return;
-    }
-    const backBtn = e.target.closest('[data-tc-back]');
-    if (backBtn && rootEl.contains(backBtn)) {
-      handlers.onBack && handlers.onBack();
-      return;
-    }
-    const actionBtn = e.target.closest('[data-tc-action]');
-    if (actionBtn && rootEl.contains(actionBtn)) {
-      handlers.onAction && handlers.onAction(actionBtn.dataset.tcAction);
-      return;
-    }
-  });
+  if (!rootEl.__tcClickBound) {
+    rootEl.__tcClickBound = true;
+    rootEl.addEventListener('click', e => {
+      const h = rootEl.__tcHandlers || {};
+      const phaseBtn = e.target.closest('[data-tc-phase]');
+      if (phaseBtn && rootEl.contains(phaseBtn)) {
+        h.onPhase && h.onPhase(phaseBtn.dataset.tcPhase);
+        return;
+      }
+      const sectionBtn = e.target.closest('[data-tc-section]');
+      if (sectionBtn && rootEl.contains(sectionBtn)) {
+        h.onSection && h.onSection(sectionBtn.dataset.tcSection);
+        return;
+      }
+      const sidebarBtn = e.target.closest('[data-tc-sidebar]');
+      if (sidebarBtn && rootEl.contains(sidebarBtn)) {
+        h.onSidebar && h.onSidebar(sidebarBtn.dataset.tcSidebar);
+        return;
+      }
+      const backBtn = e.target.closest('[data-tc-back]');
+      if (backBtn && rootEl.contains(backBtn)) {
+        h.onBack && h.onBack();
+        return;
+      }
+      const actionBtn = e.target.closest('[data-tc-action]');
+      if (actionBtn && rootEl.contains(actionBtn)) {
+        h.onAction && h.onAction(actionBtn.dataset.tcAction);
+        return;
+      }
+    });
+  }
 
   if (handlers.onPrimaryShortcut) {
     // 2026-06-10 (assessment shared #9): every tool mount added a document
@@ -326,10 +340,12 @@ export function bindToolChromeEvents(rootEl, handlers) {
     const onKey = e => {
       if (!(e.key === 'Enter' && (e.metaKey || e.ctrlKey))) return;
       if (!document.contains(rootEl)) return;
+      const h = rootEl.__tcHandlers || {};
+      if (!h.onPrimaryShortcut) return;
       const primary = rootEl.querySelector('[data-tc-primary][data-tc-action]');
       if (!primary) return;
       e.preventDefault();
-      handlers.onPrimaryShortcut(primary.dataset.tcAction);
+      h.onPrimaryShortcut(primary.dataset.tcAction);
     };
     document.addEventListener('keydown', onKey);
     rootEl.__tcShortcutHandler = onKey;

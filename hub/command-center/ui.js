@@ -299,7 +299,14 @@ function matchAlertHeight() {
 }
 
 function bindEvents() {
-  if (!rootEl) return;
+  // P3-1 listener stacking (2026-07-03): render() runs on mount AND on the
+  // 5-minute auto-refresh interval AND on manual refresh — without a guard
+  // this stacked one click + one keydown listener on rootEl per refresh
+  // (288+ after a day-long session). Bind exactly once per mounted node;
+  // the router hands us a fresh outlet node each mount, so the flag
+  // resets naturally on remount.
+  if (!rootEl || rootEl.__ccBound) return;
+  rootEl.__ccBound = true;
 
   // Use event delegation for all clicks
   rootEl.addEventListener('click', (e) => {

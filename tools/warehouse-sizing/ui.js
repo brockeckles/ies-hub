@@ -9,21 +9,21 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260611-sl1';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260610-life1';
+import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260703-ls1';
 import * as calc from './calc.js?v=20260702-p1b';
 import * as api from './api.js?v=20260418-sL';
 import * as cmApi from '../cost-model/api.js?v=20260612-am1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
-import { render3DView, disposeScene3d } from './ui-3d.js?v=20260702-p1b';
+import { render3DView, disposeScene3d } from './ui-3d.js?v=20260703-ls1';
 import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260702-p1b';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260703-hw1';
 import { renderDashboard } from './ui-dashboard.js?v=20260702-p1b';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260702-p1b';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
 import { wscExtraStyles } from './ui-styles.js?v=20260513-stylesextract';
-import { bindShellEvents } from './ui-shell-events.js?v=20260702-p1b';
+import { bindShellEvents } from './ui-shell-events.js?v=20260703-ls1';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)

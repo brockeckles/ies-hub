@@ -6,10 +6,10 @@
  *   #welcome, #overview, #deals, #designtools/cost-model, #designtools/fleet-modeler
  *
  * Usage:
- *   import { router } from './router.js?v=20260702-p1m1';
+ *   import { router } from './router.js?v=20260703-ls1';
  *
  *   router.register('designtools/cost-model', {
- *     load: () => import('../tools/cost-model/ui.js?v=20260703-lw1'),
+ *     load: () => import('../tools/cost-model/ui.js?v=20260703-ls1'),
  *     title: 'Cost Model Builder',
  *   });
  *
@@ -116,6 +116,20 @@ class Router {
     if (this._active?.module?.unmount) {
       try { this._active.module.unmount(); }
       catch (err) { console.error(`[Router] Error unmounting "${this._active.key}":`, err); }
+    }
+
+    // P3-1 listener stacking (2026-07-03): the outlet node used to live
+    // forever, so any listener a view attached to the outlet ITSELF
+    // (tool-chrome click delegation, hub views' delegated handlers)
+    // survived navigation and stacked on every remount — innerHTML=''
+    // only removes CHILD listeners, not the outlet's own. Swapping in a
+    // fresh node per navigation retires the whole class: every mount
+    // starts with a listener-free outlet, and bind-guard flags like
+    // __tcBound reset naturally because they live on the discarded node.
+    if (this._outlet && this._outlet.parentNode) {
+      const fresh = this._outlet.cloneNode(false);
+      this._outlet.replaceWith(fresh);
+      this._outlet = fresh;
     }
 
     // Find matching route

@@ -15,6 +15,9 @@
 
 import * as calc from './calc.js?v=20260702-p1b';
 
+// P3-1: single-live window.mouseup for the no-OrbitControls drag fallback
+let _wsc3dPrevMouseUp = null;
+
 // ============================================================
 // MODULE-LOCAL 3D STATE
 // ============================================================
@@ -1835,7 +1838,13 @@ function build3DScene(ctx) {
         camera.lookAt(0, H * 0.4, 0);
       }
       renderer.domElement.addEventListener('mousedown', e => { isDragging = true; lastX = e.clientX; lastY = e.clientY; });
-      window.addEventListener('mouseup',   () => { isDragging = false; });
+      // P3-1 listener stacking (2026-07-03): this fallback path runs on
+      // every render3DView — a bare window listener accumulated one copy
+      // per re-render. Single live handler: remove the previous before
+      // adding the next.
+      if (typeof _wsc3dPrevMouseUp === 'function') window.removeEventListener('mouseup', _wsc3dPrevMouseUp);
+      _wsc3dPrevMouseUp = () => { isDragging = false; };
+      window.addEventListener('mouseup', _wsc3dPrevMouseUp);
       renderer.domElement.addEventListener('mousemove', e => {
         if (!isDragging) return;
         theta -= (e.clientX - lastX) * 0.006;
