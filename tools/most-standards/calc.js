@@ -954,6 +954,8 @@ export function serializeWorkflow(workflow) {
       shift_hours: Number(wf.shift_hours) || 8,
       pfd_pct: Number(wf.pfd_pct) || 0,
       productivity_pct: wf.productivity_pct == null ? null : Number(wf.productivity_pct),
+      operating_days: Number(wf.operating_days) || 250,
+      rates_by_category: wf.rates_by_category || null,
       steps: (wf.steps || []).map(s => {
         const out = {};
         for (const k of WORKFLOW_STEP_DURABLE_FIELDS) {
@@ -981,6 +983,8 @@ export function workflowFromAnalysisData(data, rowId = null) {
     shift_hours: Number(wf.shift_hours) || 8,
     pfd_pct: Number(wf.pfd_pct) || 14,
     productivity_pct: wf.productivity_pct == null ? null : Number(wf.productivity_pct),
+    operating_days: Number(wf.operating_days) || 250,
+    rates_by_category: wf.rates_by_category || null,
     steps: (wf.steps || []).map((s, i) => ({
       id: `wf-${i}-${s.template_id || 'manual'}`,
       template_id: s.template_id ?? null,
@@ -998,9 +1002,12 @@ export function workflowFromAnalysisData(data, rowId = null) {
  * step) to the line shape convertToCmLaborLines expects, so a workflow can
  * push to the Cost Model exactly like a Quick Analysis.
  * @param {Object[]} computedSteps
+ * @param {Object} [opts]
+ * @param {Object} [opts.ratesByCategory] — { manual, mhe, hybrid } $/hr map
+ * @param {number} [opts.defaultRate] — fallback when no category rate exists
  * @returns {Object[]}
  */
-export function workflowStepsToCmLines(computedSteps) {
+export function workflowStepsToCmLines(computedSteps, opts = {}) {
   return (computedSteps || [])
     .filter(s => (s.daily_volume || 0) > 0 && (s.adjusted_uph || 0) > 0)
     .map(s => ({
@@ -1012,6 +1019,10 @@ export function workflowStepsToCmLines(computedSteps) {
       adjusted_uph: s.adjusted_uph || 0,
       daily_volume: s.daily_volume || 0,
       hours_per_day: s.hours_per_day || 0,
-      hourly_rate: s.hourly_rate || 0,
+      // UX0-1 (2026-07-03): resolve through category rates like Quick Analysis
+      // does — the old `s.hourly_rate || 0` pushed $0 labor rates to CM for
+      // every workflow step (steps have no per-step rate input).
+      hourly_rate: resolveCategoryRate(
+        opts.ratesByCategory, s.labor_category || 'manual', opts.defaultRate, s.hourly_rate),
     }));
 }

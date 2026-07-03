@@ -1595,6 +1595,22 @@ function renderWorkflowComposer() {
         <label class="cm-form-label">PFD %</label>
         <input class="hub-input" type="number" value="${pfd}" step="1" data-wf="pfd_pct" />
       </div>
+      <div>
+        <label class="cm-form-label">Operating Days/Yr</label>
+        <input class="hub-input" type="number" value="${workflow.operating_days || 250}" step="1" data-wf="operating_days" title="Used to annualize hours and cost when pushing to the Cost Model." />
+      </div>
+      <div>
+        <label class="cm-form-label">Manual Rate ($/hr)</label>
+        <input class="hub-input" type="number" value="${(workflow.rates_by_category && workflow.rates_by_category.manual) || 0}" step="0.5" data-wf-rate-cat="manual" title="Hourly rate for MANUAL-category steps. Pushed to the Cost Model." />
+      </div>
+      <div>
+        <label class="cm-form-label">MHE Rate ($/hr)</label>
+        <input class="hub-input" type="number" value="${(workflow.rates_by_category && workflow.rates_by_category.mhe) || 0}" step="0.5" data-wf-rate-cat="mhe" title="Hourly rate for MHE-category steps. Pushed to the Cost Model." />
+      </div>
+      <div>
+        <label class="cm-form-label">Hybrid Rate ($/hr)</label>
+        <input class="hub-input" type="number" value="${(workflow.rates_by_category && workflow.rates_by_category.hybrid) || 0}" step="0.5" data-wf-rate-cat="hybrid" title="Hourly rate for HYBRID-category steps. Pushed to the Cost Model." />
+      </div>
     </div>
 
     <!-- Pipeline Steps -->
@@ -1896,6 +1912,16 @@ function bindContentEvents(container) {
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.wf;
       const val = input.type === 'number' ? parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0 : /** @type {HTMLInputElement} */ (e.target).value;
       workflow[field] = val;
+      renderContent();
+    });
+  });
+
+  // Workflow category-rate inputs (UX0-1)
+  container.querySelectorAll('[data-wf-rate-cat]').forEach(input => {
+    input.addEventListener('change', e => {
+      const cat = /** @type {HTMLInputElement} */ (e.target).dataset.wfRateCat;
+      if (!workflow.rates_by_category) workflow.rates_by_category = { manual: 0, mhe: 0, hybrid: 0 };
+      workflow.rates_by_category[cat] = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
       renderContent();
     });
   });
@@ -2475,22 +2501,28 @@ async function exportWorkflowToXlsx() {
  * same sessionStorage handoff contract as the Quick Analysis push. */
 function pushWorkflowToCostModel() {
   const computed = computeCurrentWorkflowSteps();
-  const eligible = calc.workflowStepsToCmLines(computed);
+  const eligible = calc.workflowStepsToCmLines(computed, {
+    ratesByCategory: workflow.rates_by_category,
+  });
   if (eligible.length === 0) {
     alert('No steps with volume yet — set Target Volume/Day and pick templates first.');
     return;
   }
+  // UX0-1: never silently push $0 labor rates to the Cost Model.
+  if (eligible.every(l => !(l.hourly_rate > 0))) {
+    if (!confirm('No hourly rates are set — the Cost Model would receive $0 labor rates. Set the category rates in Workflow Parameters first, or push anyway?')) return;
+  }
   const templateMap = new Map();
   (refData.templates || []).forEach(t => templateMap.set(t.id, t));
   const cmLines = calc.convertToCmLaborLines(eligible, {
-    operatingDays: 250,
+    operatingDays: workflow.operating_days || 250,
     shiftHours: workflow.shift_hours,
     defaultBurdenPct: 30,
     templateMap,
   });
   const payload = {
     laborLines: cmLines,
-    operatingDays: 250,
+    operatingDays: workflow.operating_days || 250,
     shiftHours: workflow.shift_hours,
     source: 'workflow',
     workflowName: workflow.name || '',
@@ -2581,6 +2613,8 @@ function createEmptyWorkflow() {
     target_volume_per_day: 5000,
     shift_hours: 8,
     pfd_pct: 14,
+    operating_days: 250,
+    rates_by_category: { manual: 0, mhe: 0, hybrid: 0 },
     steps: [],
   };
 }
