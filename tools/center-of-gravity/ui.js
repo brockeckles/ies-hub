@@ -7,7 +7,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260611-sl1';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260703-p33';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260703-ls1';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
@@ -15,7 +15,7 @@ import { downloadCSV } from '../../shared/export.js?v=20260702-p1m1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
 import * as calc from './calc.js?v=20260702-p14a';
 import * as api from './api.js?v=20260504-auth1';
-import * as cmApi from '../cost-model/api.js?v=20260612-am1';
+import * as cmApi from '../cost-model/api.js?v=20260703-p33';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 
@@ -4109,6 +4109,7 @@ function _initCogMapBody() {
         .setContent(`<strong>Center ${i + 1}</strong><br>${c.nearestCity}<br>Location: ${calc.formatLatLng(c.lat, c.lng)}<br>Avg Distance: ${calc.formatMiles(c.avgWeightedDistance)}`)
         .openOn(mapInstance);
     });
+    overlay.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
     document.body.appendChild(overlay);
     _centerOverlays.push({ overlay, c });
   });

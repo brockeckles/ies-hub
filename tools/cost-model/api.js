@@ -144,7 +144,7 @@ export async function createModel(data) {
  * @param {Object} data — updated project data
  * @returns {Promise<any>}
  */
-export async function updateModel(id, data) {
+function _modelUpdatePayload(data) {
   // R12 (2026-04-30): writes storage_environment + industry_vertical split.
   const pd = data.projectDetails || {};
   const split = _splitEnvironment(pd, data);
@@ -160,7 +160,38 @@ export async function updateModel(id, data) {
     updated_at: new Date().toISOString(),
   };
   payload.deal_deals_id = pd.dealId || data.dealId || null;
-  return db.update('cost_model_projects', id, payload);
+  return payload;
+}
+
+export async function updateModel(id, data) {
+  return db.update('cost_model_projects', id, _modelUpdatePayload(data));
+}
+
+/**
+ * P3-3 optimistic concurrency (2026-07-03) — compare-and-swap update.
+ * Adds .eq('updated_at', expected) so the write only lands if nobody has
+ * saved since the caller loaded the row. 0 rows matched = conflict; the
+ * caller decides whether to overwrite (via plain updateModel) or abort.
+ * Falls back to an unguarded update when no baseline is known (legacy
+ * in-memory models loaded before this shipped).
+ * @returns {Promise<{row: any|null, conflict: boolean, currentUpdatedAt?: string|null}>}
+ */
+export async function updateModelGuarded(id, data, expectedUpdatedAt) {
+  const payload = _modelUpdatePayload(data);
+  if (!expectedUpdatedAt) {
+    return { row: await db.update('cost_model_projects', id, payload), conflict: false };
+  }
+  const { data: rows, error } = await db.from('cost_model_projects')
+    .update(payload).eq('id', id).eq('updated_at', expectedUpdatedAt).select();
+  if (error) throw error;
+  if (rows && rows.length) return { row: rows[0], conflict: false };
+  let currentUpdatedAt = null;
+  try {
+    const { data: cur } = await db.from('cost_model_projects')
+      .select('updated_at').eq('id', id).single();
+    currentUpdatedAt = cur?.updated_at || null;
+  } catch { /* row gone or unreadable — still a conflict */ }
+  return { row: null, conflict: true, currentUpdatedAt };
 }
 
 /**

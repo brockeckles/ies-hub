@@ -10,10 +10,11 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260702-p1m1';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
+import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260702-sec2';
 import * as calc from './calc.js?v=20260702-p1m1';
-import * as api from './api.js?v=20260612-am1';
+import * as api from './api.js?v=20260703-p33';
 import * as scenarios from './calc.scenarios.js?v=20260702-p1m1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260511-port8';
@@ -25,7 +26,7 @@ import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
 import * as shiftPlannerUi from './shift-planner-ui.js?v=20260702-p1e';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
-import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260512-slideover3';
+import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260703-p33';
 import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260703-ls1';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
@@ -56,7 +57,7 @@ import {
   // 2026-06-11 dirty-state extraction — state lives in state.js; ui.js
   // keeps the _markCmDirty wrapper for the chrome-refresh side effect.
   markDirty as _stateMarkDirty,
-  resetDirty,
+  resetDirty as _stateResetDirty,
   getIsDirty,
   setSavedMeta,
   getLastSavedAt,
@@ -188,8 +189,14 @@ let rootEl = null;
  *  - try/catch around the rail refresh so a transient render error never
  *    blocks the underlying state mutation.
  */
+/** P3-3 (2026-07-03): every dirty-clear routes through here so the hub-level
+ *  unsaved-guard stays in sync — all pre-existing resetDirty() call sites in
+ *  this file now resolve to this wrapper (it shadows the state.js import). */
+function resetDirty() { _stateResetDirty(); guardMarkClean('cost-model'); }
+
 function _markCmDirty() {
   if (!_stateMarkDirty()) return; // already dirty — idempotent (state.js owns the flag)
+  guardMarkDirty('cost-model');
   if (rootEl && viewMode === 'editor') {
     try { refreshToolChromeActions(rootEl, _buildCmChromeOpts()); } catch (_) {}
   }
@@ -1386,6 +1393,7 @@ function _flashShortcutToast(label, opts = {}) {
     transition: opacity 0.12s ease, transform 0.12s ease;
   `;
   el.textContent = mini ? label : '→ ' + label;
+  el.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
   document.body.appendChild(el);
   // Force a tick before transitioning in
   requestAnimationFrame(() => {
@@ -1452,6 +1460,7 @@ function _showKeyboardHelpOverlay() {
     </div>
   `;
   overlay.appendChild(panel);
+  overlay.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
   document.body.appendChild(overlay);
   panel.querySelector('#cm-kbd-help-close')?.addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
@@ -1522,6 +1531,7 @@ function _showDisclose(tile) {
   pop.id = 'cm-disclose-popover';
   pop.className = 'cm-disclose-popover';
   pop.innerHTML = html;
+  pop.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
   document.body.appendChild(pop);
   _discloseEl = pop;
   // Position above the tile, centered horizontally, with a small arrow.
@@ -9235,6 +9245,7 @@ async function openCompareModal(opts = {}) {
       <div id="cm-compare-result" style="margin-top:16px;"></div>
     </div>
   `;
+  overlay.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
   document.body.appendChild(overlay);
   overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
   // CM-PRC-3 — when entry was the Pricing Schedule's "Compare Pricing" button,
@@ -9637,6 +9648,7 @@ async function openLaborSeasonalityModal(idx) {
       <div id="cm-seasonality-status" style="margin-top:8px;font-size:11px;color:#666;"></div>
     </div>
   `;
+  overlay.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
   document.body.appendChild(overlay);
   const status = overlay.querySelector('#cm-seasonality-status');
   overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
@@ -10909,7 +10921,7 @@ function _launchToTool(target) {
       // state. Invisible to the cache-bust guard because the './tools/...'
       // path resolves module-relative in the scanner but page-relative at
       // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260703-ls1',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260703-p33',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {
@@ -11336,7 +11348,9 @@ async function handleAction(action, idx, btn) {
       });
       const out = calc.autoAssignBuckets(model, { overwrite: false });
       try { showToast(`Auto-assigned ${out.assigned} line${out.assigned===1?'':'s'} (${out.skipped} kept, ${out.unmatched} no match).`, out.assigned > 0 ? 'success' : 'info'); } catch {}
-      markDirty();
+      // P3-3 bonus fix: was bare markDirty() — a ReferenceError (the import is
+      // renamed _stateMarkDirty), so this action crashed on every fire.
+      _markCmDirty();
       render();
       return;
     }
@@ -11438,7 +11452,8 @@ async function handleAction(action, idx, btn) {
       if (model.facility) {
         delete model.facility.overrides;
       }
-      markDirty();
+      // P3-3 bonus fix: was bare markDirty() — ReferenceError, same as above.
+      _markCmDirty();
       break;
     }
     case 'cm-launch-wsc': {
@@ -11945,17 +11960,39 @@ async function handleSave() {
     // Lazy pin for projects that predate house-assumption pinning — captures
     // the guidance in force NOW as their baseline (reference only, no reseed).
     ensureHouseAssumptions(false);
+    let savedRow = null;
     if (model.id) {
-      await api.updateModel(model.id, model);
+      // P3-3 optimistic concurrency (2026-07-03): compare-and-swap on
+      // updated_at. If the DB row changed since we loaded it (another user,
+      // or a WSC/NetOpt writeback), the guarded update matches 0 rows and
+      // we ask before clobbering instead of silently last-write-wins.
+      const expected = getLastSavedAt();
+      const res = await api.updateModelGuarded(model.id, model, expected);
+      if (res.conflict) {
+        const when = res.currentUpdatedAt ? new Date(res.currentUpdatedAt).toLocaleString() : 'recently';
+        const ok = await showConfirm(
+          `This model changed in the database since you loaded it (${when}) — ` +
+          'another user or a linked-tool writeback saved a newer copy. Overwrite it with yours?'
+        );
+        if (!ok) {
+          showToast('Save cancelled — use Load to pick up the latest copy.', 'info');
+          return;
+        }
+        savedRow = await api.updateModel(model.id, model); // deliberate overwrite
+      } else {
+        savedRow = res.row;
+      }
     } else {
       const saved = await api.createModel(model);
       model.id = saved.id;
+      savedRow = saved;
     }
     resetDirty();
     // CM-SAVE-1 — Capture audit metadata for the toolbar chip.
     let _savedBy = getLastSavedBy();
     try { _savedBy = auth.getUser()?.email || _savedBy || null; } catch { /* ignore — chip falls back to time-only */ }
-    setSavedMeta(new Date().toISOString(), _savedBy);
+    // P3-3: store the SERVER updated_at — it is the CAS baseline for the next save.
+    setSavedMeta(savedRow?.updated_at || new Date().toISOString(), _savedBy);
     refreshSaveStateChip();
     bus.emit('cm:model-saved', { id: model.id });
 
@@ -13174,6 +13211,7 @@ async function openChannelArchetypePicker(targetChannelKey = null) {
       </div>
     </div>
   `;
+  overlay.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
   document.body.appendChild(overlay);
   overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
 
@@ -13403,6 +13441,7 @@ function openChannelManageModal() {
       </style>
     </div>
   `;
+  overlay.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
   document.body.appendChild(overlay);
 
   const wireBody = () => {

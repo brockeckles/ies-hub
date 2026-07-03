@@ -339,6 +339,7 @@ function pickCostModel(costModelsById) {
           <button type="button" id="sl-pick-ok" class="hub-btn hub-btn-primary hub-btn-sm">Link</button>
         </div>
       </div>`;
+    backdrop.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
     document.body.appendChild(backdrop);
     const done = (val) => { backdrop.remove(); resolve(val); };
     backdrop.querySelector('#sl-pick-cancel').addEventListener('click', () => done(null));

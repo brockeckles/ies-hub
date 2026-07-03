@@ -6,10 +6,10 @@
  *   #welcome, #overview, #deals, #designtools/cost-model, #designtools/fleet-modeler
  *
  * Usage:
- *   import { router } from './router.js?v=20260703-ls1';
+ *   import { router } from './router.js?v=20260703-p33';
  *
  *   router.register('designtools/cost-model', {
- *     load: () => import('../tools/cost-model/ui.js?v=20260703-ls1'),
+ *     load: () => import('../tools/cost-model/ui.js?v=20260703-p33'),
  *     title: 'Cost Model Builder',
  *   });
  *
@@ -116,6 +116,23 @@ class Router {
     if (this._active?.module?.unmount) {
       try { this._active.module.unmount(); }
       catch (err) { console.error(`[Router] Error unmounting "${this._active.key}":`, err); }
+    }
+
+    // P3-4 modal teardown (2026-07-03): sweep transient body-level overlays
+    // the outgoing view left open (modals, pickers, slide-overs). Views mark
+    // them data-hub-overlay at creation; a node may attach
+    // __hubOverlayTeardown for richer cleanup (the slide-over unmounts its
+    // embedded tool + drops its Esc listener). confirm-modal / toast / auth /
+    // tour / feedback-FAB are deliberately UNMARKED — a confirm legitimately
+    // renders mid-navigation (unsaved-guard prompt on hashchange).
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('body > [data-hub-overlay]').forEach(n => {
+        try { (typeof n.__hubOverlayTeardown === 'function') ? n.__hubOverlayTeardown() : n.remove(); }
+        catch { try { n.remove(); } catch { /* already gone */ } }
+      });
+      // CM's in-outlet modals lock body scroll; the outlet swap below kills
+      // the modal but not the lock. Nothing that survives navigation uses it.
+      document.body.style.overflow = '';
     }
 
     // P3-1 listener stacking (2026-07-03): the outlet node used to live

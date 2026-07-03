@@ -537,6 +537,7 @@ function openAddArtifactModal() {
       </div>
     </div>
   `;
+  overlay.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });

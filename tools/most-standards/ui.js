@@ -8,9 +8,10 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260703-ls1';
+import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260611-sl1';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260703-p33';
 // Note: MOST intentionally opts out of run-state tracking. Its Quick Analysis
 // and Workflow tabs recompute inline on every render — the primary "Run"
 // button is a convenience trigger rather than a discrete compute step, so a
@@ -297,6 +298,7 @@ async function enterTool(savedRow) {
   selectedElements = [];
   editorTemplate = null;
   editorElements = [];
+  guardMarkClean('most'); // fresh session — no pending edits
   filters = { search: '', processArea: '', laborCategory: '' };
   analysis = createEmptyAnalysis();
   workflow = createEmptyWorkflow();
@@ -387,6 +389,7 @@ async function enterTool(savedRow) {
  * Cleanup on unmount.
  */
 export function unmount() {
+  guardMarkClean('most'); // P3-3: never leave a stale dirty flag behind
   rootEl = null;
 }
 
@@ -1945,6 +1948,7 @@ function bindContentEvents(container) {
       const idx = parseInt(/** @type {HTMLInputElement} */ (e.target).dataset.elemIdx);
       const field = /** @type {HTMLInputElement} */ (e.target).dataset.elemField;
       if (editorElements[idx]) {
+        guardMarkDirty('most'); // P3-3: unsaved element edit
         if (field === 'is_variable') {
           editorElements[idx][field] = /** @type {HTMLInputElement} */ (e.target).checked;
           // Flipping the variable checkbox expands/collapses the detail
@@ -2009,6 +2013,7 @@ function bindContentEvents(container) {
       editorElements.splice(targetIdx, 0, moved);
       // Re-stamp sequence_order so save preserves it
       editorElements.forEach((el, i) => { el.sequence_order = i + 1; });
+      guardMarkDirty('most'); // P3-3: unsaved reorder
       renderContent();
     });
   });
@@ -2050,13 +2055,16 @@ function handleAction(action, idx) {
       editorTemplate = null;
       editorElements = [];
       editorDeletedElementIds = [];
+      guardMarkClean('most'); // explicit discard
       break;
     case 'add-element':
       editorElements.push(createEmptyElement());
+      guardMarkDirty('most');
       updateEditorMetrics();
       break;
     case 'delete-element': {
       const [removed] = editorElements.splice(idx, 1);
+      guardMarkDirty('most');
       // P2-2: remember persisted rows so save actually deletes them.
       if (removed && calc.isPersistedRowId(removed.id)) {
         editorDeletedElementIds.push(removed.id);
@@ -2141,6 +2149,7 @@ function showAllowanceProfileModal() {
   overlay.className = 'hub-modal-overlay';
   overlay.style.zIndex = '9999';
   overlay.innerHTML = renderAllowanceProfileModal(profiles);
+  overlay.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
   document.body.appendChild(overlay);
 
   const close = () => overlay.remove();
@@ -2692,6 +2701,7 @@ async function saveTemplateAction() {
     refData.templates = await api.listTemplates();
     editorTemplate = null;
     editorElements = [];
+    guardMarkClean('most'); // saved — nothing pending
     renderContent();
   } catch (err) {
     console.error('[MOST] Save template failed:', err);

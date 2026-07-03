@@ -24,7 +24,7 @@
  */
 
 import * as calc from './calc.js?v=20260702-p1b';
-import * as cmApi from '../cost-model/api.js?v=20260612-am1';
+import * as cmApi from '../cost-model/api.js?v=20260703-p33';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';

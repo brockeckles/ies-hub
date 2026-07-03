@@ -311,6 +311,7 @@ function _openMasterEditModal(table, row) {
       </form>
     </div>
   `;
+  overlay.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
   document.body.appendChild(overlay);
   _masterEditModal = overlay;
 
@@ -601,6 +602,7 @@ function renderInviteUserModal(opts = {}) {
       </div>
     </div>
   `;
+  overlay.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
   document.body.appendChild(overlay);
 
   const errorEl   = /** @type {HTMLElement} */ (overlay.querySelector('#iu-error'));

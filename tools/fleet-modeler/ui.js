@@ -7,9 +7,10 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260611-sl1';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260703-p33';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260703-ls1';
+import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260702-p1m1';
 import { splitCsvLine } from '../../shared/export.js?v=20260702-p1m1';
@@ -191,6 +192,7 @@ function applyNetOptHandoff(payload) {
 
 async function renderLanding() {
   if (!rootEl) return;
+  guardMarkClean('fleet'); // landing = nothing editable on screen
   await renderScenarioLanding(rootEl, {
     toolName: 'Fleet Modeler',
     toolKey: 'fleet',
@@ -274,6 +276,7 @@ function openEditor(savedRow) {
  * Cleanup.
  */
 export function unmount() {
+  guardMarkClean('fleet'); // P3-3: never leave a stale dirty flag behind
   if (mapInstance) { mapInstance.remove(); mapInstance = null; }
   if (typeof _offNetOptPush === 'function') { _offNetOptPush(); _offNetOptPush = null; } // 2026-06-10: targeted unsubscribe (bus.clear nuked all subscribers)
   runState.reset();
@@ -297,6 +300,11 @@ function _buildFleetChromeOpts() {
   const isModifiedFromRunState = runState.state(runStateInputs()) === 'dirty';
   const modified = !!activeScenarioId && isModifiedFromRunState;
   const stateName = draft ? 'draft' : (modified ? 'modified' : 'saved');
+  // P3-3 (2026-07-03): chrome opts rebuild on every state change, so this is
+  // the natural sync point for the hub-level unsaved-guard. Fleet's own
+  // definition of unsaved work = saved scenario whose inputs diverged since
+  // the last clean run (drafts are guarded by the in-tool onBack confirm).
+  if (modified) guardMarkDirty('fleet'); else guardMarkClean('fleet');
   const stateTitle = draft
     ? 'Brand-new scenario — Save to capture an audit timestamp'
     : (modified ? 'Inputs have diverged since the last run — re-run + save to capture' : 'Saved');

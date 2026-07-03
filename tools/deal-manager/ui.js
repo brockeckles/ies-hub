@@ -10,10 +10,10 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260703-ls1';
 import * as calc from './calc.js?v=20260703-lw3';
 import * as api from './api.js?v=20260703-hw1';
-import * as cmApi from '../cost-model/api.js?v=20260612-am1';
+import * as cmApi from '../cost-model/api.js?v=20260703-p33';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260611-sl1';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260703-p33';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 
 // ============================================================
@@ -1352,6 +1352,7 @@ async function openLinkCmModal(parentEl) {
       </div>
     </div>
   `;
+  overlay.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
   document.body.appendChild(overlay);
 
   // Close handlers (click outside card or X button)

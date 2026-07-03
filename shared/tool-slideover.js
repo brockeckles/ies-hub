@@ -106,6 +106,10 @@ export async function openToolInSlideOver(opts) {
   panel.appendChild(header);
   panel.appendChild(host);
   overlay.appendChild(panel);
+  overlay.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation
+  // P3-4: richer teardown than remove() — close() also unhooks the Esc
+  // listener and fires onClose (which unmounts the embedded tool).
+  overlay.__hubOverlayTeardown = () => close();
   document.body.appendChild(overlay);
 
   // Inject keyframes once (idempotent — the style tag has a fixed id).

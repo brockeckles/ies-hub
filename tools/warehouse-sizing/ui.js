@@ -7,17 +7,18 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260611-sl1';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260703-p33';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260703-ls1';
 import * as calc from './calc.js?v=20260702-p1b';
 import * as api from './api.js?v=20260418-sL';
-import * as cmApi from '../cost-model/api.js?v=20260612-am1';
+import * as cmApi from '../cost-model/api.js?v=20260703-p33';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { render3DView, disposeScene3d } from './ui-3d.js?v=20260703-ls1';
-import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260702-p1b';
+import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
+import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260703-p33';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260703-hw1';
 import { renderDashboard } from './ui-dashboard.js?v=20260702-p1b';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260702-p1b';
@@ -310,9 +311,14 @@ function renderShell() {
  *  save chip flips "Saved" → "Modified" in real time. Pre-fix: every isDirty=true
  *  site only re-rendered KPIs / content / config — the chrome (where the chip
  *  lives) stayed stale until a section change or save. */
+/** P3-3 (2026-07-03): all dirty-clears route through here so the hub-level
+ *  unsaved-guard (hash-nav / tab-close prompt) stays in sync. */
+function _clearDirty() { isDirty = false; guardMarkClean('wsc'); }
+
 function _markDirty() {
   const wasClean = !isDirty;
   isDirty = true;
+  guardMarkDirty('wsc');
   // Refresh ONLY the actions rail (save chip + buttons) — full refreshToolChrome
   // re-renders the sidebar mid-keystroke and destroys input focus (the
   // CM-INPUT-FOCUS-LOSS class of bug). The actions rail has no inputs.
@@ -430,7 +436,7 @@ function _makeShellEventsCtx() {
     get _wscDrawerOpen() { return _wscDrawerOpen; },
     set _wscDrawerOpen(v) { _wscDrawerOpen = v; },
     get isDirty() { return isDirty; },
-    set isDirty(v) { isDirty = v; },
+    set isDirty(v) { if (v) _markDirty(); else _clearDirty(); },
     get _originCm() { return _originCm; },
     set _originCm(v) { _originCm = v; },
     get _seededFromCm() { return _seededFromCm; },
@@ -501,7 +507,7 @@ async function handleSaveWsc() {
   try {
     const saved = await api.saveConfig({ ...facility, zones, volumes });
     facility.id = saved.id || saved[0]?.id || facility.id;
-    isDirty = false;
+    _clearDirty();
     showToast(`Saved "${facility.name || 'Untitled'}"`, 'success');
     refreshToolChrome(rootEl, _buildWscChromeOpts());
     _refreshWscKpis();
@@ -595,12 +601,12 @@ function _makeConfigCtx() {
     get viewMode() { return viewMode; },
     get isDirty() { return isDirty; },
     rootEl,
-    setDirty(v) { if (v) _markDirty(); else { isDirty = false; } },
+    setDirty(v) { if (v) _markDirty(); else { _clearDirty(); } },
     resetState() {
       facility = createDefaultFacility();
       zones = createDefaultZones();
       volumes = createDefaultVolumes();
-      isDirty = false;
+      _clearDirty();
     },
     refreshKpis: _refreshWscKpis,
     refreshContent: renderContentView,
