@@ -265,7 +265,6 @@ function renderToolShortcuts() {
   const tools = [
     { route: 'designtools/cost-model',       label: 'Cost Model Builder',         color: 'var(--ies-orange)' },
     { route: 'designtools/warehouse-sizing', label: 'Warehouse Sizing',           color: 'var(--ies-blue)' },
-    { route: 'designtools/network-opt',      label: 'Network Optimization',       color: 'var(--ies-teal)' },
     { route: 'designtools/fleet-modeler',    label: 'Fleet Modeler',              color: 'var(--ies-teal)' },
   ];
   return `

@@ -60,7 +60,8 @@ class GlobalSearch {
       { title: 'Warehouse Sizing Calculator', route: 'designtools/warehouse-sizing', section: 'Design Tools', keywords: ['warehouse', 'sqft', '3D', 'facility'] },
       { title: 'MOST Labor Standards', route: 'designtools/most-standards', section: 'Design Tools', keywords: ['MOST', 'labor', 'TMU', 'standards'] },
       { title: 'Center of Gravity', route: 'designtools/center-of-gravity', section: 'Design Tools', keywords: ['COG', 'location', 'clustering'] },
-      { title: 'Network Optimization', route: 'designtools/network-opt', section: 'Design Tools', keywords: ['TL', 'LTL', 'parcel', 'freight', 'lanes'] },
+      // UX0-5 (2026-07-03): NetOpt shelved — removed from search index (decision #9).
+
       { title: 'Fleet Modeler', route: 'designtools/fleet-modeler', section: 'Design Tools', keywords: ['fleet', 'trucks', 'routes', 'vehicles'] },
     ];
 

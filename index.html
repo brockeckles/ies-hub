@@ -423,7 +423,7 @@
         title: 'Design Tools',
         load: async () => ({
           mount(el) {
-            const tools = [
+            const _allTools = [
               { key: 'cost-model', name: 'Cost Model Builder', category: 'Solutions',
                 desc: 'Builder across Scope / Structure / Cost / Output / Analysis. Operating P&Ls, market rates and escalation, margin-impact and payback sensitivity. Pricing Schedule with override implications, What-If Studio, multi-year projections, scenario snapshots, Excel export.',
                 iconFill: '#ff3a00',
@@ -444,7 +444,13 @@
                 desc: 'Optimal facility siting from customer demand. Weighted-centroid solver, service-zone overlay, and candidate-market ranking with real estate + wage benchmarks.',
                 iconFill: '#20c997',
                 iconPath: '<circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 018 8c0 5.5-8 12-8 12s-8-6.5-8-12a8 8 0 018-8z"/>' },
-              { key: 'network-opt', name: 'Network Optimization', category: 'Logistics',
+              // UX0-5 / decision #9 (2026-07-03): NetOpt SHELVED — Brock's call.
+              // Prod usage: 3 configs, none touched since 2026-04-26; COG covers
+              // fixed-network costing, mode mix, and shares transport-rates.
+              // Code + netopt_configs tables + route kept intact for reversal;
+              // card hidden via `shelved` flag. Contract rate-card CSV upload
+              // is the one distinct capability — queued for COG's freight panel.
+              { key: 'network-opt', name: 'Network Optimization', category: 'Logistics', shelved: true,
                 desc: 'TL / LTL / Parcel freight mix optimizer. Exhaustive + greedy network optimization (frequency-driven shipment costing) with demand heatmap, flow polylines, sensitivity chart, and CSV rate-card upload. Compare k-DC scenarios.',
                 iconFill: '#20c997',
                 iconPath: '<circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="18" r="3"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="18" y1="9" x2="18" y2="15"/><line x1="9" y1="18" x2="15" y2="18"/>' },
@@ -454,6 +460,9 @@
                 iconPath: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>' },
             ];
 
+            // UX0-5: shelved tools stay in the registry (routes work for
+            // reversal/debugging) but disappear from the landing catalog.
+            const tools = _allTools.filter(t => !t.shelved);
             const categories = ['Solutions', 'Engineering', 'Logistics'];
             const categoryDesc = {
               Solutions:   'Deal-facing tools — pricing, comparison, and commercial artifacts.',

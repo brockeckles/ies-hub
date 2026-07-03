@@ -2900,9 +2900,10 @@ function renderAnalysis(el) {
         <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-export-geojson" style="display:flex;align-items:center;gap:6px;" title="GeoJSON file with centers + assignments — opens directly in QGIS, kepler.gl, or any GIS tool">
           <span>↓ Export GeoJSON</span>
         </button>
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-push-netopt" style="display:flex;align-items:center;gap:6px;">
-          <span>Send to NetOpt →</span>
-        </button>
+        <!-- UX0-5 (2026-07-03): Send-to-NetOpt hidden — NetOpt shelved
+             (decision #9). Receive side never honored mode mix / weights
+             (P4-2), so the handoff silently understated parcel-heavy
+             networks. Handler left in place for reversal. -->
       </div>
 
       <!-- KPI Bar -->
