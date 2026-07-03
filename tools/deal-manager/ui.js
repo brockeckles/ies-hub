@@ -1195,7 +1195,7 @@ function renderSites(el) {
                   <div>
                     <div style="font-size:11px;color:var(--ies-gray-400);">Pricing</div>
                     <select data-site-field="pricingModel" data-site-id="${s.id}" class="hub-input" style="font-weight:600;font-size:13px;padding:3px 6px;width:100%;">
-                      ${Object.keys(calc.DEFAULT_PRICING_MARKUPS).map(pm => `<option value="${pm}"${(s.pricingModel || 'cost-plus') === pm ? ' selected' : ''}>${pm}</option>`).join('')}
+                      ${(() => { const cur = s.pricingModel || 'cost-plus'; const known = Object.keys(calc.DEFAULT_PRICING_MARKUPS); const opts = known.includes(cur) ? known : [cur, ...known]; return opts.map(pm => `<option value="${pm}"${cur === pm ? ' selected' : ''}>${pm}</option>`).join(''); })()}
                     </select>
                   </div>
                   <div>

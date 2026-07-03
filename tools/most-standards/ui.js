@@ -17,7 +17,7 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202606
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
 import * as calc from './calc.js?v=20260702-p23a';
-import * as api from './api.js?v=20260702-p23a';
+import * as api from './api.js?v=20260703-lw1';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -1423,7 +1423,7 @@ function renderAnalysis() {
                 <option value="">— Manual —</option>
                 ${Object.entries(tplsByArea).map(([area, tpls]) =>
                   `<optgroup label="${area}">
-                    ${tpls.map(t => `<option value="${t.id}"${line.template_id === t.id ? ' selected' : ''}>${escapeHtml(getMostTplName(t))}</option>`).join('')}
+                    ${tpls.map(t => `<option value="${t.id}"${String(line.template_id) === String(t.id) ? ' selected' : ''}>${escapeHtml(getMostTplName(t))}</option>`).join('')}
                   </optgroup>`
                 ).join('')}
               </select>
@@ -1599,7 +1599,7 @@ function renderWorkflowComposer() {
                 <option value="">— Select Template —</option>
                 ${Object.entries(tplsByArea).map(([area, tpls]) =>
                   `<optgroup label="${area}">
-                    ${tpls.map(t => `<option value="${t.id}"${step.template_id === t.id ? ' selected' : ''}>${escapeHtml(getMostTplName(t))}</option>`).join('')}
+                    ${tpls.map(t => `<option value="${t.id}"${String(step.template_id) === String(t.id) ? ' selected' : ''}>${escapeHtml(getMostTplName(t))}</option>`).join('')}
                   </optgroup>`
                 ).join('')}
               </select>
@@ -1801,7 +1801,7 @@ function bindContentEvents(container) {
     select.addEventListener('change', e => {
       const idx = parseInt(/** @type {HTMLSelectElement} */ (e.target).dataset.idx);
       const tplId = /** @type {HTMLSelectElement} */ (e.target).value;
-      const tpl = (refData.templates || []).find(t => t.id === tplId);
+      const tpl = (refData.templates || []).find(t => String(t.id) === String(tplId));
       if (tpl && analysis.lines[idx]) {
         analysis.lines[idx].template_id = tpl.id;
         analysis.lines[idx].activity_name = getMostTplName(tpl);
@@ -1907,7 +1907,7 @@ function bindContentEvents(container) {
     select.addEventListener('change', e => {
       const idx = parseInt(/** @type {HTMLSelectElement} */ (e.target).dataset.idx);
       const tplId = /** @type {HTMLSelectElement} */ (e.target).value;
-      const tpl = (refData.templates || []).find(t => t.id === tplId);
+      const tpl = (refData.templates || []).find(t => String(t.id) === String(tplId));
       if (tpl && workflow.steps[idx]) {
         workflow.steps[idx].template_id = tpl.id;
         workflow.steps[idx].step_name = getMostTplName(tpl);

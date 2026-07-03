@@ -183,6 +183,25 @@ await tAsync('stub proves the old bug: raw editor element (UUID id) fails bigint
     assert(api.includes('{ sequence_order: u.sequence }') && !api.includes('{ sequence: u.sequence }')));
   t('api element writes are sanitized', () =>
     assert(api.split('sanitizeElementForWrite(').length >= 3));
+
+  // 2026-07-03 live-walk regressions — BIGSERIAL ids are numbers, select
+  // values are strings; strict === silently no-ops the template pickers.
+  t('template pickers compare ids type-safely (String() both sides)', () =>
+    assert(!ui.includes('find(t => t.id === tplId)')
+        && ui.split('find(t => String(t.id) === String(tplId))').length >= 3));
+  t('workflow/analysis selected-option compare is type-safe', () =>
+    assert(!ui.includes('step.template_id === t.id')
+        && !ui.includes('line.template_id === t.id')));
+  t('listTemplates stamps derived element_count (list showed 0 for all)', () =>
+    assert(api.includes("element_count = counts[t.id] || 0")));
+
+  // DM→CM handoffs used a section key that no longer exists ('projectDetails'
+  // → renamed 'setup'); renderSection silently blanked the canvas.
+  const cmUi = readFileSync('./tools/cost-model/ui.js', 'utf8');
+  t("cost-model handoffs no longer target dead 'projectDetails' section", () =>
+    assert(!cmUi.includes("activeSection = 'projectDetails'")));
+  t('cost-model renderSection has unknown-key fallback', () =>
+    assert(cmUi.includes('Unknown section key')));
 }
 
 console.log(`test-most-template-editor: ${pass} passed, ${fail} failed.`);

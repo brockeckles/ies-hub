@@ -27,7 +27,17 @@ export async function listTemplates(filters = {}) {
   if (filters.labor_category) query = query.eq('labor_category', filters.labor_category);
   const { data, error } = await query.order('process_area').order('activity_name');
   if (error) throw error;
-  return data || [];
+  const templates = data || [];
+  // 2026-07-03 — element_count is derived, not a column; without this the
+  // editor list rendered 0 for every template. One lightweight query, counted
+  // client-side (avoids PostgREST aggregate-support assumptions).
+  try {
+    const { data: elRows } = await db.from('ref_most_elements').select('template_id');
+    const counts = {};
+    for (const r of (elRows || [])) counts[r.template_id] = (counts[r.template_id] || 0) + 1;
+    for (const t of templates) t.element_count = counts[t.id] || 0;
+  } catch { /* count is cosmetic — never fail the list for it */ }
+  return templates;
 }
 
 /**

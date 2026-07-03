@@ -739,7 +739,7 @@ export async function mount(el) {
           resetDirty();
           userHasInteracted = setUserHasInteracted(false);
           viewMode = 'editor';
-          activeSection = 'projectDetails';
+          activeSection = 'setup';
           // 2026-04-30 (F1) — Phase 5.4 cross-tool drillback consumes the
           // focus hint here too. mount()'s direct hydrate path bypasses
           // loadModelByCmId, so without this the chip click would never
@@ -777,7 +777,7 @@ export async function mount(el) {
           resetDirty();
           userHasInteracted = setUserHasInteracted(false);
           viewMode = 'editor';
-          activeSection = 'projectDetails';
+          activeSection = 'setup';
         }
         if (model && model.projectDetails) {
           model.projectDetails.dealId = payload.dealId;
@@ -2914,6 +2914,12 @@ function renderSection() {
     linked: renderLinkedDesigns,
   };
 
+  // 2026-07-03 — defensive: unknown section keys (e.g. stale handoff hints)
+  // must not silently blank the canvas. Fall back to the first section.
+  if (!renderers[activeSection]) {
+    console.warn(`[CM] Unknown section key "${activeSection}" — falling back to setup`);
+    activeSection = 'setup';
+  }
   const render = renderers[activeSection];
   if (render) {
     container.innerHTML = render();
