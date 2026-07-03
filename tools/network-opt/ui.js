@@ -15,7 +15,7 @@ import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillbac
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260702-p1m1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
-import * as calc from './calc.js?v=20260702-p14a';
+import * as calc from './calc.js?v=20260702-p23a';
 import * as api from './api.js?v=20260702-sec2';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
@@ -1667,8 +1667,10 @@ function renderDemand(el) {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
         <h3 class="text-section" style="margin:0;">Demand Points</h3>
         <div style="display:flex;gap:8px;">
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-upload-demand-csv" title="Upload demand points from CSV — columns: lat+lng, zip, or city/state, plus demand/volume (P2-3b)">⬆ Upload CSV</button>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-add-demand">+ Add Point</button>
         </div>
+        <input type="file" id="no-demand-csv-input" accept=".csv,text/csv" style="display:none;"/>
       </div>
       ${channelTotals.size > 0 ? `
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 12px;font-size:12px;">
@@ -1844,6 +1846,46 @@ function renderDemand(el) {
     demands.push({ id: 'd' + Date.now(), zip3: '', lat: 39.83, lng: -98.58, annualDemand: 10000, maxDays: 3, avgWeight: 25, nmfcClass: 100, hazmat: false, seasonality: 'uniform', frequency: 'weekly' });
     markDirty();
     renderDemand(el);
+  });
+
+  // P2-3b — demand CSV upload (NetOpt previously had NO demand ingestion;
+  // the only upload was the rate card).
+  el.querySelector('#no-upload-demand-csv')?.addEventListener('click', () => {
+    el.querySelector('#no-demand-csv-input')?.click();
+  });
+  el.querySelector('#no-demand-csv-input')?.addEventListener('change', (e) => {
+    const file = /** @type {HTMLInputElement} */ (e.currentTarget).files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        // Lazy-load COG's ZIP3 centroid table (949 entries) only when a CSV
+        // actually arrives — no static cross-tool dependency.
+        const cogCalc = await import('../center-of-gravity/calc.js?v=20260702-p14a');
+        const parsed = calc.parseDemandCsv(String(ev.target?.result || ''), { zip3Lookup: cogCalc.ZIP3_CENTROIDS });
+        if (parsed.demands.length === 0) {
+          const first = parsed.errors[0];
+          showToast(`No usable rows${first ? ` — ${first.reason}` : ''}`, 'error');
+          return;
+        }
+        let idSeq = Date.now();
+        for (const d of parsed.demands) demands.push({ id: 'd' + (idSeq++), ...d });
+        markDirty();
+        if (parsed.errors.length) {
+          // Surface skipped rows — never silently drop (COG wizard lesson).
+          console.warn('[NetOpt] Demand CSV skipped rows:', parsed.errors);
+          showToast(`Added ${parsed.demands.length} demand points · skipped ${parsed.errors.length} (see console)`, 'info');
+        } else {
+          showToast(`Added ${parsed.demands.length} demand points`, 'success');
+        }
+        renderDemand(el);
+      } catch (err) {
+        console.error('[NetOpt] Demand CSV import failed:', err);
+        showToast('Demand CSV import failed: ' + (err.message || 'unknown'), 'error');
+      }
+    };
+    reader.onerror = () => showToast('CSV read failed', 'error');
+    reader.readAsText(file);
   });
 }
 

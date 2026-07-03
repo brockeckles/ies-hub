@@ -923,3 +923,95 @@ export async function saveTemplateElements(apiLike, templateId, elements, delete
   }
   return elements;
 }
+
+// ============================================================
+// P2-3a (2026-07-02): WORKFLOW COMPOSER PERSISTENCE HELPERS
+// ============================================================
+// The Workflow Composer had no persistence, no export, no push-to-CM — an
+// SD built a bottleneck model and kept nothing. Workflow scenarios persist
+// in most_analyses alongside Quick Analysis rows (established jsonb-stash
+// pattern — no migration), discriminated by analysis_data.kind='workflow'.
+
+/** Durable per-step fields — derived fields (adjusted_uph, fte, …) are
+ * recomputed on load so saved workflows always reflect the current engine. */
+export const WORKFLOW_STEP_DURABLE_FIELDS = [
+  'template_id', 'step_name', 'process_area', 'labor_category',
+  'base_uph', 'volume_ratio',
+];
+
+/**
+ * Serialize a workflow into a most_analyses.analysis_data payload.
+ * @param {Object} workflow — {name, target_volume_per_day, shift_hours, pfd_pct, productivity_pct?, steps[]}
+ * @returns {Object} analysis_data jsonb payload with kind discriminator
+ */
+export function serializeWorkflow(workflow) {
+  const wf = workflow || {};
+  return {
+    kind: 'workflow',
+    workflow: {
+      name: wf.name || 'Untitled Workflow',
+      target_volume_per_day: Number(wf.target_volume_per_day) || 0,
+      shift_hours: Number(wf.shift_hours) || 8,
+      pfd_pct: Number(wf.pfd_pct) || 0,
+      productivity_pct: wf.productivity_pct == null ? null : Number(wf.productivity_pct),
+      steps: (wf.steps || []).map(s => {
+        const out = {};
+        for (const k of WORKFLOW_STEP_DURABLE_FIELDS) {
+          if (s && s[k] !== undefined) out[k] = s[k];
+        }
+        return out;
+      }),
+    },
+  };
+}
+
+/**
+ * Rebuild an editable workflow object from a persisted analysis_data payload.
+ * Inverse of serializeWorkflow; defaults mirror the composer's empty state.
+ * @param {Object} data — most_analyses.analysis_data (kind='workflow')
+ * @param {string|null} [rowId] — most_analyses row id (kept for update-in-place)
+ * @returns {Object} workflow state object
+ */
+export function workflowFromAnalysisData(data, rowId = null) {
+  const wf = (data && data.workflow) || {};
+  return {
+    id: rowId,
+    name: wf.name || 'Untitled Workflow',
+    target_volume_per_day: Number(wf.target_volume_per_day) || 0,
+    shift_hours: Number(wf.shift_hours) || 8,
+    pfd_pct: Number(wf.pfd_pct) || 14,
+    productivity_pct: wf.productivity_pct == null ? null : Number(wf.productivity_pct),
+    steps: (wf.steps || []).map((s, i) => ({
+      id: `wf-${i}-${s.template_id || 'manual'}`,
+      template_id: s.template_id ?? null,
+      step_name: s.step_name || '',
+      process_area: s.process_area || '',
+      labor_category: s.labor_category || 'manual',
+      base_uph: Number(s.base_uph) || 0,
+      volume_ratio: s.volume_ratio == null ? 1 : Number(s.volume_ratio),
+    })),
+  };
+}
+
+/**
+ * Adapt computed workflow steps (computeWorkflowStep output merged onto
+ * step) to the line shape convertToCmLaborLines expects, so a workflow can
+ * push to the Cost Model exactly like a Quick Analysis.
+ * @param {Object[]} computedSteps
+ * @returns {Object[]}
+ */
+export function workflowStepsToCmLines(computedSteps) {
+  return (computedSteps || [])
+    .filter(s => (s.daily_volume || 0) > 0 && (s.adjusted_uph || 0) > 0)
+    .map(s => ({
+      activity_name: s.step_name || 'Workflow step',
+      process_area: s.process_area || '',
+      labor_category: s.labor_category || 'manual',
+      template_id: s.template_id || '',
+      base_uph: s.base_uph || 0,
+      adjusted_uph: s.adjusted_uph || 0,
+      daily_volume: s.daily_volume || 0,
+      hours_per_day: s.hours_per_day || 0,
+      hourly_rate: s.hourly_rate || 0,
+    }));
+}

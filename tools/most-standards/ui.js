@@ -16,8 +16,8 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202606
 // button is a convenience trigger rather than a discrete compute step, so a
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
-import * as calc from './calc.js?v=20260702-p1m1';
-import * as api from './api.js?v=20260702-p1m1';
+import * as calc from './calc.js?v=20260702-p23a';
+import * as api from './api.js?v=20260702-p23a';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -63,6 +63,9 @@ let editorDeletedElementIds = [];
 
 /** Saved scenarios for Quick Analysis (Supabase-backed via api.most_analyses) */
 let savedScenarios = [];
+/** P2-3a — saved Workflow Composer scenarios (most_analyses rows with
+ * analysis_data.kind='workflow'). */
+let workflowScenarios = [];
 
 /**
  * Load saved scenarios from Supabase. Falls back to legacy localStorage
@@ -72,7 +75,17 @@ let savedScenarios = [];
 async function loadSavedScenarios() {
   try {
     const rows = await api.listAnalyses();
-    savedScenarios = rows.map(row => analysisRowToScenario(row));
+    // P2-3a: workflow scenarios share most_analyses — partition on the
+    // jsonb kind discriminator so neither list shows the other's rows.
+    const isWf = (r) => r.analysis_data && r.analysis_data.kind === 'workflow';
+    savedScenarios = rows.filter(r => !isWf(r)).map(row => analysisRowToScenario(row));
+    workflowScenarios = rows.filter(isWf).map(row => ({
+      id: row.id,
+      name: row.name || 'Untitled Workflow',
+      stepCount: (row.analysis_data.workflow?.steps || []).length,
+      timestamp: row.updated_at ? new Date(row.updated_at).toLocaleString() : '',
+      data: row.analysis_data,
+    }));
 
     // One-shot migration of legacy localStorage scenarios: push any local-only
     // entries up to Supabase, then clear the cache so we don't re-import.
@@ -91,7 +104,7 @@ async function loadSavedScenarios() {
           });
         }
         const migrated = await api.listAnalyses();
-        savedScenarios = migrated.map(analysisRowToScenario);
+        savedScenarios = migrated.filter(r => !(r.analysis_data && r.analysis_data.kind === 'workflow')).map(analysisRowToScenario);
         localStorage.removeItem('most_scenarios');
         console.info('[MOST] Migrated', legacy.length, 'localStorage scenarios to Supabase');
       }
@@ -412,6 +425,10 @@ function _handleMostAction(actionId) {
     saveCurrentScenario();
     return;
   }
+  if (actionId === 'most-save-workflow') {
+    saveCurrentWorkflow(false);
+    return;
+  }
   if (actionId === 'most-run-analysis' || actionId === 'most-run-workflow') {
     // Analysis + Workflow recompute inline on every render — "Run" is a
     // deliberate recompute trigger (see the run-state opt-out note at top).
@@ -729,9 +746,13 @@ function _buildMostChromeOpts() {
     });
   }
   if (activeTab === 'workflow') {
-    // P2-2: no Save here — Workflow Composer has no persistence (P2-3);
-    // the old chrome Save was a dead selector, and wiring it to the
-    // analysis-scenario saver would save the wrong object.
+    // P2-3a: Save is back and REAL now — routes to saveCurrentWorkflow
+    // (P2-2 had stripped the dead selector while persistence didn't exist).
+    actions.push({
+      id: 'most-save-workflow',
+      label: '\u{1F4BE} Save',
+      title: 'Save this workflow',
+    });
     actions.push({
       id: 'most-run-workflow',
       label: 'Run Workflow',
@@ -1609,6 +1630,31 @@ function renderWorkflowComposer() {
 
     <!-- Workflow Summary -->
     ${computedSteps.length > 0 ? renderWorkflowSummary(wfResult, computedSteps) : ''}
+
+    <!-- P2-3a: persistence + export + push (the composer previously kept nothing) -->
+    <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
+      <button class="cm-add-row-btn" data-action="save-workflow" style="font-size:12px; padding:6px 12px;">💾 ${workflow.id ? 'Update' : 'Save'} Workflow</button>
+      <button class="cm-add-row-btn" data-action="save-workflow-as" style="font-size:12px; padding:6px 12px;" ${workflow.id ? '' : 'hidden'}>Save As New</button>
+      <button class="cm-add-row-btn" data-action="most-wf-export-xlsx" style="font-size:12px; padding:6px 12px;" title="Export this workflow to Excel (.xlsx)">⬇ Export Excel</button>
+      <button class="cm-add-row-btn" data-action="push-wf-to-cm" style="font-size:12px; padding:6px 12px;" title="Send workflow steps to the Cost Model as labor lines">→ Push to Cost Model</button>
+    </div>
+
+    <div style="margin-top:20px;">
+      <div style="font-size:13px; font-weight:700; color:var(--ies-navy); margin-bottom:8px;">Saved Workflows</div>
+      ${workflowScenarios.length === 0
+        ? '<div style="text-align:center; padding:16px; color:var(--ies-gray-400); border:1px dashed var(--ies-gray-200); border-radius:10px;">No saved workflows yet.</div>'
+        : `<div style="display:flex; flex-direction:column; gap:6px;">
+            ${workflowScenarios.map((w, idx) => `
+              <div style="display:flex; align-items:center; gap:12px; padding:8px 12px; border:1px solid var(--ies-gray-200); border-radius:8px;${workflow.id === w.id ? ' background:var(--ies-gray-50); border-color:var(--ies-blue);' : ''}">
+                <div style="flex:1;">
+                  <span style="font-weight:600; font-size:13px;">${escapeHtml(w.name)}</span>
+                  <span style="font-size:11px; color:var(--ies-gray-400); margin-left:8px;">${w.stepCount} steps · ${escapeHtml(w.timestamp)}</span>
+                </div>
+                <button class="most-icon-btn" data-action="load-workflow" data-idx="${idx}" title="Load">${ICON.pencil}</button>
+                <button class="most-icon-btn most-icon-btn-danger" data-action="delete-workflow" data-idx="${idx}" title="Delete">${ICON.trash}</button>
+              </div>`).join('')}
+          </div>`}
+    </div>
   `;
 }
 
@@ -2043,6 +2089,28 @@ function handleAction(action, idx) {
       pushToCostModel();
       return; // don't re-render
 
+    // P2-3a -- Workflow Composer persistence
+    case 'save-workflow':
+      saveCurrentWorkflow(false);
+      return;
+    case 'save-workflow-as':
+      saveCurrentWorkflow(true);
+      return;
+    case 'load-workflow': {
+      const w = workflowScenarios[idx];
+      if (w) workflow = calc.workflowFromAnalysisData(w.data, w.id);
+      break;
+    }
+    case 'delete-workflow':
+      deleteWorkflowScenario(idx);
+      return;
+    case 'most-wf-export-xlsx':
+      exportWorkflowToXlsx();
+      return;
+    case 'push-wf-to-cm':
+      pushWorkflowToCostModel();
+      return;
+
     // MOS-F5: Allowance profile CRUD
     case 'manage-allowance-profiles':
       showAllowanceProfileModal();
@@ -2280,6 +2348,139 @@ function pushToCostModel() {
   bus.emit('most:push-to-cm', payload); // still fire for the in-session case
 
   // Navigate the user to CM so they land on the receiving end of the push.
+  window.location.hash = '#designtools/cost-model';
+}
+
+// ============================================================
+// P2-3a — WORKFLOW COMPOSER PERSISTENCE / EXPORT / PUSH
+// ============================================================
+
+/** Compute derived fields for the current workflow's steps (same math the
+ * composer renders with). */
+function computeCurrentWorkflowSteps() {
+  const pfd = workflow.pfd_pct || 14;
+  const productivity = workflow.productivity_pct == null ? 100 : workflow.productivity_pct;
+  return (workflow.steps || []).map(step => ({
+    ...step,
+    ...calc.computeWorkflowStep({
+      base_uph: step.base_uph,
+      pfd_pct: pfd,
+      productivity_pct: productivity,
+      target_volume: workflow.target_volume_per_day,
+      volume_ratio: step.volume_ratio ?? 1,
+      shift_hours: workflow.shift_hours,
+    }),
+  }));
+}
+
+/**
+ * Save (or Save-As) the current workflow to most_analyses.
+ * @param {boolean} asNew — true forces a new row even when workflow.id is set
+ */
+async function saveCurrentWorkflow(asNew) {
+  if ((workflow.steps || []).length === 0) {
+    alert('Add at least one step before saving.');
+    return;
+  }
+  const proposed = workflow.name && workflow.name !== 'New Workflow'
+    ? workflow.name
+    : `Workflow ${workflowScenarios.length + 1}`;
+  const name = await showPrompt('Workflow name:', proposed);
+  if (!name) return;
+  try {
+    workflow.name = name;
+    const saved = await api.saveWorkflow({ ...workflow, id: asNew ? null : workflow.id });
+    workflow.id = saved?.id || workflow.id;
+    await loadSavedScenarios();
+    renderContent();
+  } catch (err) {
+    console.error('[MOST] Save workflow failed:', err);
+    alert('Could not save workflow: ' + (err.message || 'unknown'));
+  }
+}
+
+async function deleteWorkflowScenario(idx) {
+  const w = workflowScenarios[idx];
+  if (!w) return;
+  if (!(await showConfirm(`Delete workflow "${w.name}"?`))) return;
+  try {
+    await api.deleteAnalysis(w.id);
+    if (workflow.id === w.id) workflow.id = null;
+    await loadSavedScenarios();
+    renderContent();
+  } catch (err) {
+    console.error('[MOST] Delete workflow failed:', err);
+    alert('Could not delete workflow: ' + (err.message || 'unknown'));
+  }
+}
+
+/** Export the current workflow (steps + summary) to a 2-sheet XLSX. */
+async function exportWorkflowToXlsx() {
+  const exp = await import('../../shared/export.js?v=20260702-p1m1');
+  const computed = computeCurrentWorkflowSteps();
+  if (computed.length === 0) {
+    alert('Add at least one step before exporting.');
+    return;
+  }
+  const wfResult = calc.analyzeWorkflow(computed);
+  const stepRows = computed.map((st, i) => ({
+    seq: i + 1,
+    step: st.step_name || '',
+    process_area: st.process_area || '',
+    labor_category: st.labor_category || 'manual',
+    base_uph: st.base_uph || 0,
+    adjusted_uph: st.adjusted_uph || 0,
+    volume_ratio: st.volume_ratio ?? 1,
+    daily_volume: st.daily_volume || 0,
+    hours_per_day: st.hours_per_day || 0,
+    fte: st.fte || 0,
+  }));
+  const summaryRows = [
+    { metric: 'Workflow', value: workflow.name || '' },
+    { metric: 'Target volume/day', value: workflow.target_volume_per_day || 0 },
+    { metric: 'Shift hours', value: workflow.shift_hours || 0 },
+    { metric: 'PFD %', value: workflow.pfd_pct || 0 },
+    { metric: 'Bottleneck step', value: wfResult.bottleneckStep || '—' },
+    { metric: 'Bottleneck UPH (step)', value: wfResult.bottleneckUph || 0 },
+    { metric: 'Bottleneck UPH (whole flow)', value: wfResult.bottleneckThroughputUph || 0 },
+    { metric: 'Total FTEs', value: wfResult.totalFtes || 0 },
+    { metric: 'Total hours/day', value: wfResult.totalHoursPerDay || 0 },
+  ];
+  exp.downloadXLSX({
+    filename: `most-workflow-${(workflow.name || 'untitled').replace(/[^\w-]+/g, '_')}.xlsx`,
+    sheets: [
+      { name: 'Steps', rows: stepRows },
+      { name: 'Summary', rows: summaryRows },
+    ],
+  });
+}
+
+/** Push the workflow's computed steps to the Cost Model as labor lines —
+ * same sessionStorage handoff contract as the Quick Analysis push. */
+function pushWorkflowToCostModel() {
+  const computed = computeCurrentWorkflowSteps();
+  const eligible = calc.workflowStepsToCmLines(computed);
+  if (eligible.length === 0) {
+    alert('No steps with volume yet — set Target Volume/Day and pick templates first.');
+    return;
+  }
+  const templateMap = new Map();
+  (refData.templates || []).forEach(t => templateMap.set(t.id, t));
+  const cmLines = calc.convertToCmLaborLines(eligible, {
+    operatingDays: 250,
+    shiftHours: workflow.shift_hours,
+    defaultBurdenPct: 30,
+    templateMap,
+  });
+  const payload = {
+    laborLines: cmLines,
+    operatingDays: 250,
+    shiftHours: workflow.shift_hours,
+    source: 'workflow',
+    workflowName: workflow.name || '',
+  };
+  try { sessionStorage.setItem('most_pending_push', JSON.stringify({ ...payload, at: Date.now() })); } catch {}
+  bus.emit('most:push-to-cm', payload);
   window.location.hash = '#designtools/cost-model';
 }
 

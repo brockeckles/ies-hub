@@ -1854,3 +1854,119 @@ export function runScenario(params) {
     errors: [],
   };
 }
+
+// ============================================================
+// P2-3b (2026-07-02): DEMAND CSV INGESTION
+// ============================================================
+// NetOpt previously had NO demand upload at all — the only CSV upload was
+// the rate card, so an engineer with a customer ZIP/volume file had to
+// detour through COG and push across. This is the direct path.
+
+import { splitCsvLine } from '../../shared/export.js?v=20260702-p1m1';
+
+/** Header aliases → canonical demand fields (all compared lowercased,
+ * spaces/dashes normalized to underscores). */
+export const DEMAND_CSV_HEADER_ALIASES = {
+  zip3: 'zip', zip: 'zip', zip5: 'zip', zipcode: 'zip', zip_code: 'zip', postal: 'zip', postal_code: 'zip',
+  lat: 'lat', latitude: 'lat',
+  lng: 'lng', lon: 'lng', long: 'lng', longitude: 'lng',
+  city: 'city', state: 'state', st: 'state',
+  demand: 'annualDemand', annual_demand: 'annualDemand', volume: 'annualDemand',
+  annual_volume: 'annualDemand', units: 'annualDemand', annual_units: 'annualDemand', qty: 'annualDemand',
+  weight: 'avgWeight', avg_weight: 'avgWeight', avg_weight_lbs: 'avgWeight', avg_wt: 'avgWeight',
+  channel: 'channelKey', channel_key: 'channelKey',
+  max_days: 'maxDays', sla_days: 'maxDays', sla: 'maxDays',
+  nmfc: 'nmfcClass', nmfc_class: 'nmfcClass', freight_class: 'nmfcClass', class: 'nmfcClass',
+  frequency: 'frequency', cadence: 'frequency',
+  name: 'name', location: 'name', customer: 'name',
+};
+
+/**
+ * Parse a demand-points CSV into normalized demand rows.
+ *
+ * Coordinate resolution priority per row:
+ *   1. explicit lat + lng columns
+ *   2. ZIP (5-digit truncated to ZIP3) via opts.zip3Lookup — pass COG's
+ *      ZIP3_CENTROIDS ({'750': [lat, lng, label], …})
+ *   3. city + state via the internal metro gazetteer (lookupCityLatLng)
+ * Rows that resolve nothing land in `errors` with a reason — surface them,
+ * never silently drop (the COG upload wizard's excluded-row lesson).
+ *
+ * @param {string} text — raw CSV text (header row required)
+ * @param {{ zip3Lookup?: Object }} [opts]
+ * @returns {{ demands: Object[], errors: Array<{line:number, reason:string, raw:string}>, headerMap: Object }}
+ */
+export function parseDemandCsv(text, opts = {}) {
+  const zipTable = opts.zip3Lookup || null;
+  const out = { demands: [], errors: [], headerMap: {} };
+  const lines = String(text || '').split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (lines.length < 2) {
+    out.errors.push({ line: 0, reason: 'CSV needs a header row and at least one data row', raw: '' });
+    return out;
+  }
+  const norm = (h) => String(h || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+  const headers = splitCsvLine(lines[0]).map(h => DEMAND_CSV_HEADER_ALIASES[norm(h)] || null);
+  headers.forEach((h, i) => { if (h) out.headerMap[h] = i; });
+  if (out.headerMap.annualDemand == null) {
+    out.errors.push({ line: 1, reason: 'No demand/volume column found (accepted: demand, annual_demand, volume, units, qty)', raw: lines[0] });
+    return out;
+  }
+  const hasCoords = out.headerMap.lat != null && out.headerMap.lng != null;
+  const hasZip = out.headerMap.zip != null;
+  const hasCity = out.headerMap.city != null;
+  if (!hasCoords && !hasZip && !hasCity) {
+    out.errors.push({ line: 1, reason: 'No location columns found (need lat+lng, zip, or city[+state])', raw: lines[0] });
+    return out;
+  }
+
+  for (let i = 1; i < lines.length; i++) {
+    const vals = splitCsvLine(lines[i]).map(v => v.trim());
+    const get = (field) => out.headerMap[field] != null ? vals[out.headerMap[field]] : undefined;
+    const annualDemand = Number(String(get('annualDemand') ?? '').replace(/[,$\s]/g, ''));
+    if (!Number.isFinite(annualDemand) || annualDemand <= 0) {
+      out.errors.push({ line: i + 1, reason: 'Missing or non-positive demand', raw: lines[i] });
+      continue;
+    }
+    // Blank cells must read as MISSING, not 0 — Number('') === 0 and (0,0)
+    // is a real (if oceanic) coordinate, so a blank lat/lng column would
+    // otherwise swallow rows that should fall through to ZIP/city.
+    const numOrNaN = (v) => (v == null || String(v).trim() === '') ? NaN : Number(v);
+    let lat = numOrNaN(get('lat')), lng = numOrNaN(get('lng'));
+    let zip3 = '';
+    const zipRaw = String(get('zip') || '').replace(/[^0-9]/g, '');
+    if (zipRaw.length >= 3) zip3 = zipRaw.slice(0, 3);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      // ZIP3 centroid
+      if (zip3 && zipTable && zipTable[zip3]) {
+        lat = Number(zipTable[zip3][0]);
+        lng = Number(zipTable[zip3][1]);
+      } else {
+        const city = get('city');
+        const state = get('state');
+        const hit = city ? lookupCityLatLng(city, state) : null;
+        if (hit) { lat = hit.lat; lng = hit.lng; }
+      }
+    }
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      out.errors.push({ line: i + 1, reason: zip3 ? `Unresolvable location (ZIP3 ${zip3} not in centroid table)` : 'Unresolvable location (no valid lat/lng, ZIP, or known city)', raw: lines[i] });
+      continue;
+    }
+    const maxDays = Number(get('maxDays'));
+    const avgWeight = Number(String(get('avgWeight') ?? '').replace(/[,$\s]/g, ''));
+    const nmfc = Number(get('nmfcClass'));
+    out.demands.push(normalizeDemand({
+      name: get('name') || undefined,
+      zip3,
+      lat, lng,
+      annualDemand,
+      maxDays: Number.isFinite(maxDays) && maxDays > 0 ? maxDays : 3,
+      avgWeight: Number.isFinite(avgWeight) && avgWeight > 0 ? avgWeight : 25,
+      nmfcClass: Number.isFinite(nmfc) && nmfc > 0 ? nmfc : 100,
+      channelKey: (get('channelKey') || '').trim(),
+      frequency: (get('frequency') || 'weekly').toLowerCase(),
+      seasonality: 'uniform',
+      hazmat: false,
+    }));
+  }
+  return out;
+}
