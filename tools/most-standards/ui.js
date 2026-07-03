@@ -303,11 +303,18 @@ async function enterTool(savedRow) {
 
   // Opening a saved analysis from the landing: hydrate the Quick Analysis
   // state from the row (same mapping the in-tool saved list uses) and land
-  // straight on the Analysis tab.
+  // straight on the Analysis tab. P2-3a workflow rows share most_analyses —
+  // discriminate on kind (2026-07-03: previously hydrated workflows as an
+  // EMPTY Quick Analysis) and land those on the Workflow Composer instead.
   if (savedRow) {
     try {
-      analysis = JSON.parse(JSON.stringify(analysisRowToScenario(savedRow).data));
-      activeTab = 'analysis';
+      if (savedRow.analysis_data && savedRow.analysis_data.kind === 'workflow') {
+        workflow = calc.workflowFromAnalysisData(savedRow.analysis_data, savedRow.id);
+        activeTab = 'workflow';
+      } else {
+        analysis = JSON.parse(JSON.stringify(analysisRowToScenario(savedRow).data));
+        activeTab = 'analysis';
+      }
     } catch (err) {
       console.warn('[MOST] Failed to hydrate saved analysis — opening fresh:', err);
     }

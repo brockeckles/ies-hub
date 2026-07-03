@@ -202,6 +202,9 @@ await tAsync('stub proves the old bug: raw editor element (UUID id) fails bigint
     assert(!cmUi.includes("activeSection = 'projectDetails'")));
   t('cost-model renderSection has unknown-key fallback', () =>
     assert(cmUi.includes('Unknown section key')));
+  t('landing open discriminates workflow rows (kind) → composer, not empty QA', () =>
+    assert(/savedRow\.analysis_data\.kind === 'workflow'/.test(ui)
+        && /workflowFromAnalysisData\(savedRow\.analysis_data/.test(ui)));
 }
 
 console.log(`test-most-template-editor: ${pass} passed, ${fail} failed.`);
