@@ -8,7 +8,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260703-ls1';
-import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
+import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260703-p33';

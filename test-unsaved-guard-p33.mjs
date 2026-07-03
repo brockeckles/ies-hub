@@ -16,7 +16,7 @@ function t(name, fn) {
 }
 
 // ── functional: registry round-trip (node-safe — wire() skips w/o document)
-const guard = await import('./shared/unsaved-guard.js?v=20260513-port29');
+const guard = await import('./shared/unsaved-guard.js?v=20260703-p34');
 t('guard registry round-trip: dirty → listed → clean', () => {
   guard.markDirty('x'); 
   if (!guard.hasDirty() || !guard.listDirty().includes('x')) return false;
@@ -94,6 +94,22 @@ t('conflict path asks before clobbering; decline aborts the save', () =>
   /if \(res\.conflict\) \{[\s\S]{0,700}await showConfirm\([\s\S]{0,400}if \(!ok\) \{[\s\S]{0,200}return;/.test(cm));
 t('save stores the SERVER updated_at as the next CAS baseline', () =>
   cm.includes('setSavedMeta(savedRow?.updated_at || new Date().toISOString(), _savedBy);'));
+
+// ── live-walk fix: router sequences the prompt BEFORE unmount ────────────
+const guardSrc = readFileSync('./shared/unsaved-guard.js', 'utf8');
+const routerSrc = readFileSync('./shared/router.js', 'utf8');
+t('guard no longer owns a hashchange listener (it raced the router — Cancel lost editor state)', () =>
+  !guardSrc.includes("addEventListener('hashchange'")
+  && guardSrc.includes('export async function confirmLeaveIfDirty()'));
+t('guard keeps the beforeunload tab-close prompt', () =>
+  guardSrc.includes("addEventListener('beforeunload'"));
+t('router consults confirmLeaveIfDirty before any unmount/sweep/swap', () => {
+  const i = routerSrc.indexOf('await confirmLeaveIfDirty()');
+  const j = routerSrc.indexOf('this._active.module.unmount()');
+  return i > 0 && j > 0 && i < j;
+});
+t('router revert path cannot re-prompt (guardReverting early-return)', () =>
+  /if \(this\._guardReverting\) \{\s*\n\s*this\._guardReverting = false;\s*\n\s*return;/.test(routerSrc));
 
 console.log(`test-unsaved-guard-p33: ${pass} passed, ${fail} failed.`);
 if (fail) process.exit(1);

@@ -45,7 +45,7 @@ globalThis.window = globalThis.window || {
   location: { hash: '#overview' },
 };
 
-const { Router } = await import('./shared/router.js?v=20260703-ls1');
+const { Router } = await import('./shared/router.js?v=20260703-p34');
 
 await ta('router mounts each navigation into a FRESH outlet node (listeners die with the old one)', async () => {
   const r = new Router();

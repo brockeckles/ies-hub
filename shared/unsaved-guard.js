@@ -6,7 +6,7 @@
  * guard prompts the user to confirm losing changes.
  *
  * Usage:
- *   import { markDirty, markClean } from './shared/unsaved-guard.js?v=20260513-port29';
+ *   import { markDirty, markClean } from './shared/unsaved-guard.js?v=20260703-p34';
  *
  *   // When user edits something:
  *   markDirty('cost-model');
@@ -73,27 +73,28 @@ function wire() {
     return '';
   });
 
-  // Internal hash-change navigation — intercept and confirm.
-  window.addEventListener('hashchange', async (e) => {
-    if (!dirty.size) return;
-    // Avoid reentry: if we're in the middle of reverting, bail.
-    if (window.__hubGuardReverting) {
-      window.__hubGuardReverting = false;
-      return;
-    }
-    // eslint-disable-next-line no-alert
-    const ok = (await showConfirm(
-      `You have unsaved changes in ${describeDirty()}. Leave anyway?`
-    ));
-    if (!ok) {
-      // Revert the hash silently.
-      window.__hubGuardReverting = true;
-      window.history.back();
-    } else {
-      // User accepted — clear the registry so we don't re-prompt.
-      clearAll();
-    }
-  });
+  // P3-3 live-walk fix (2026-07-03): the guard's OWN hashchange listener is
+  // gone. It raced the router — the router unmounted + remounted the next
+  // view while showConfirm was still pending, so "Cancel" reverted the hash
+  // but landed the user on the tool's LANDING page (module remount), and
+  // re-opening the model reloaded from DB — the edit the prompt promised to
+  // protect was already gone. The router now consults confirmLeaveIfDirty()
+  // synchronously-in-sequence BEFORE unmounting (shared/router.js), so
+  // Cancel truly means "nothing moves".
+}
+
+/**
+ * Ask the user to confirm leaving when anything is dirty.
+ * Called by the router BEFORE it unmounts the active view.
+ * @returns {Promise<boolean>} true = proceed (registry cleared), false = stay
+ */
+export async function confirmLeaveIfDirty() {
+  if (!dirty.size) return true;
+  const ok = await showConfirm(
+    `You have unsaved changes in ${describeDirty()}. Leave anyway?`
+  );
+  if (ok) clearAll();
+  return ok;
 }
 
 function describeDirty() {

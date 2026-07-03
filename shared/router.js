@@ -6,10 +6,10 @@
  *   #welcome, #overview, #deals, #designtools/cost-model, #designtools/fleet-modeler
  *
  * Usage:
- *   import { router } from './router.js?v=20260703-p33';
+ *   import { router } from './router.js?v=20260703-p34';
  *
  *   router.register('designtools/cost-model', {
- *     load: () => import('../tools/cost-model/ui.js?v=20260703-p33'),
+ *     load: () => import('../tools/cost-model/ui.js?v=20260703-p34'),
  *     title: 'Cost Model Builder',
  *   });
  *
@@ -19,6 +19,7 @@
  */
 
 import { bus } from './event-bus.js?v=20260418-sK';
+import { confirmLeaveIfDirty } from './unsaved-guard.js?v=20260703-p34';
 import { escapeHtml as _h } from './escape.js?v=20260702-sec2';
 
 /**
@@ -98,6 +99,22 @@ class Router {
   // ---- Internal ----
 
   async _onHashChange() {
+    // P3-3 live-walk fix (2026-07-03): consult the unsaved-guard BEFORE
+    // unmounting. The guard's old standalone hashchange listener raced this
+    // handler — the view was already unmounted/remounted by the time the
+    // user answered, so Cancel lost their editor state anyway. Sequenced
+    // here, Cancel reverts the hash and the active view never unmounts.
+    if (this._guardReverting) {
+      this._guardReverting = false;
+      return; // hash restored to the view that's already mounted — nothing to do
+    }
+    const okToLeave = await confirmLeaveIfDirty();
+    if (!okToLeave) {
+      this._guardReverting = true;
+      window.history.back();
+      return;
+    }
+
     const rawKey = this.current();
     // Strip query string ("#marketmap?series=diesel" → "marketmap") so route
     // matching ignores deep-link parameters. Modules can still read the params

@@ -17,7 +17,7 @@ import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillbac
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { render3DView, disposeScene3d } from './ui-3d.js?v=20260703-ls1';
-import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
+import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260703-p33';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260703-hw1';
 import { renderDashboard } from './ui-dashboard.js?v=20260702-p1b';

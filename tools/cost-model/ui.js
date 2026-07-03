@@ -10,7 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260702-p1m1';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
-import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260513-port29';
+import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260702-sec2';
 import * as calc from './calc.js?v=20260702-p1m1';
@@ -10921,7 +10921,7 @@ function _launchToTool(target) {
       // state. Invisible to the cache-bust guard because the './tools/...'
       // path resolves module-relative in the scanner but page-relative at
       // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260703-p33',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260703-p34',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {
