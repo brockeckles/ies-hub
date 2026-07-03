@@ -8,7 +8,7 @@
 import { db } from '../../shared/supabase.js?v=20260429-demo-s3';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 // P2-1 (2026-07-03) — pure site-field→CM-column mapper
-import { siteToCmColumns, NEW_SITE_DEFAULTS } from './calc.js?v=20260703-p21a';
+import { siteToCmColumns, NEW_SITE_DEFAULTS } from './calc.js?v=20260703-lw3';
 
 // ============================================================
 // DEALS
@@ -86,6 +86,27 @@ export async function saveDeal(deal) {
  *   }>
  * }>}
  */
+/**
+ * Load persisted DOS element statuses for a deal → { element_id: status }.
+ * Same table + key vocabulary the hub deal-management tool writes
+ * (deal_dos_status, element_id = `t<stage>-<templateRowId>`).
+ * @param {string} dealId
+ * @returns {Promise<Record<string, string>>}
+ */
+export async function loadDosStatus(dealId) {
+  if (!dealId) return {};
+  const { data, error } = await db.from('deal_dos_status')
+    .select('element_id, status')
+    .eq('deal_id', dealId);
+  if (error) throw error;
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const r of (data || [])) {
+    if (r.element_id) out[r.element_id] = r.status;
+  }
+  return out;
+}
+
 export async function fetchStageTemplates() {
   // Pick the active template version (MVP: assume single active version).
   const { data: tvRows, error: tvErr } = await db.from('template_versions')

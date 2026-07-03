@@ -2,7 +2,7 @@
  * P2-1 (2026-07-03) — DM site editing (Brock's build-it-out call).
  * Pure mapper pins + schema-column verification + source wiring scans.
  */
-import { siteToCmColumns, SITE_TO_CM_COLUMNS, NEW_SITE_DEFAULTS, computeDealFinancials } from './tools/deal-manager/calc.js';
+import { siteToCmColumns, SITE_TO_CM_COLUMNS, NEW_SITE_DEFAULTS, computeDealFinancials, dosStatusKey, normalizeDosStatus, computeStageProgress, computeOverallProgress } from './tools/deal-manager/calc.js';
 import { readFileSync, readdirSync } from 'node:fs';
 
 let pass = 0, fail = 0;
@@ -65,6 +65,33 @@ t('every SITE_TO_CM_COLUMNS target column exists in cost_model_projects DDL', ()
   t('openDeal + edits hydrate activeDeal._sites; Compare fetches unhydrated deals', () =>
     ui.includes('activeDeal._sites = sites') && ui.includes('d._sites = await api.listSites(d.id)'));
   t('demo deal stays memory-only', () => ui.includes("String(activeDeal?.id) === 'demo-deal-1'"));
+
+  // ── DOS Progress wired to deal_dos_status (2026-07-03, Brock) ───────────
+  t('dosStatusKey matches the hub write vocabulary t<stage>-<tplId>', () =>
+    dosStatusKey(3, 17) === 't3-17' && dosStatusKey(1, '9') === 't1-9');
+  t('normalizeDosStatus maps hub hyphens → DM underscores, unknown → not_started', () =>
+    normalizeDosStatus('complete') === 'complete'
+    && normalizeDosStatus('in-progress') === 'in_progress'
+    && normalizeDosStatus('in_progress') === 'in_progress'
+    && normalizeDosStatus('blocked') === 'blocked'
+    && normalizeDosStatus('pending') === 'not_started'
+    && normalizeDosStatus(undefined) === 'not_started');
+  t('empty status map computes 0% overall (no fabricated progress)', () => {
+    const stages = [
+      { stageNumber: 1, stageName: 'S1', elements: [{ status: 'not_started' }, { status: 'not_started' }] },
+      { stageNumber: 2, stageName: 'S2', elements: [{ status: 'not_started' }] },
+    ];
+    const overall = computeOverallProgress(computeStageProgress(stages));
+    return overall.overallPct === 0 && overall.currentStage === 'S1';
+  });
+  t('ui builds real-deal DOS from statusMap (no unconditional 60/20/20 seed)', () =>
+    ui.includes('calc.normalizeDosStatus(statusMap[calc.dosStatusKey(')
+    && ui.includes('await api.loadDosStatus(id)')
+    && ui.includes('buildDosStagesFromTemplates(tplBundle, dosStatusMap)'));
+  t('api.loadDosStatus reads deal_dos_status keyed by element_id', () => {
+    const apiSrc = readFileSync('./tools/deal-manager/api.js', 'utf8');
+    return apiSrc.includes("from('deal_dos_status')") && apiSrc.includes("out[r.element_id] = r.status");
+  });
 }
 
 console.log(`test-dm-site-editing: ${pass} passed, ${fail} failed.`);

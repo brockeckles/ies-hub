@@ -392,6 +392,31 @@ export function generateMultiYearPL(fin, years = DEFAULT_CONTRACT_YEARS, escalat
  * @param {import('./types.js?v=20260418-sL').DosStage[]} stages
  * @returns {import('./types.js?v=20260418-sL').StageProgress[]}
  */
+/**
+ * Canonical deal_dos_status.element_id key — MUST match the hub
+ * deal-management tool, which writes rows as `t<stageNumber>-<templateRowId>`
+ * (see hub/deal-management/api.js fetchActivityTemplates).
+ * @param {number} stageNumber
+ * @param {number|string} elementTemplateId
+ */
+export function dosStatusKey(stageNumber, elementTemplateId) {
+  return `t${stageNumber}-${elementTemplateId}`;
+}
+
+/**
+ * Normalize a persisted DOS status (hub vocabulary, hyphenated) into the
+ * Multi-Site Analyzer's internal vocabulary (underscored). Unknown / missing
+ * values are not_started — an empty deal_dos_status table must read as 0%.
+ * @param {string|null|undefined} raw
+ * @returns {'complete'|'in_progress'|'blocked'|'not_started'}
+ */
+export function normalizeDosStatus(raw) {
+  if (raw === 'complete') return 'complete';
+  if (raw === 'in-progress' || raw === 'in_progress') return 'in_progress';
+  if (raw === 'blocked') return 'blocked';
+  return 'not_started';
+}
+
 export function computeStageProgress(stages) {
   return stages.map(stage => {
     const total = stage.elements.length;

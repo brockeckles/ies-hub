@@ -8,8 +8,8 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260610-life1';
-import * as calc from './calc.js?v=20260703-p21a';
-import * as api from './api.js?v=20260703-p21a';
+import * as calc from './calc.js?v=20260703-lw3';
+import * as api from './api.js?v=20260703-lw3';
 import * as cmApi from '../cost-model/api.js?v=20260612-am1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
@@ -921,11 +921,20 @@ async function ensureStageTemplates() {
 
 /**
  * Build the in-memory `dosStages` array (UI shape) from the loaded template
- * bundle. Element status is seeded for new deals (60% complete / 20% in
- * progress / 20% not started) — once persistence wires through, this will
- * read from `project_elements` rather than the seed pattern.
+ * bundle.
+ *
+ * 2026-07-03 (Brock): real deals now read persisted statuses from
+ * deal_dos_status via `statusMap` (element_id `t<stage>-<tplId>` — the hub
+ * deal-management tool's write vocabulary) instead of the fabricated
+ * 60/20/20 seed. The seed survives ONLY for the demo deal (statusMap null),
+ * where representative progress is the point.
+ *
+ * @param {Object} bundle
+ * @param {Record<string,string>|null} [statusMap] persisted statuses for a
+ *   real deal ({} = wired but nothing recorded → everything not_started);
+ *   null = demo deal → keep the representative seed.
  */
-function buildDosStagesFromTemplates(bundle) {
+function buildDosStagesFromTemplates(bundle, statusMap = null) {
   if (!bundle || !Array.isArray(bundle.stages)) return [];
   return bundle.stages.map(stage => ({
     stageNumber: stage.stage_number,
@@ -943,12 +952,14 @@ function buildDosStagesFromTemplates(bundle) {
       name: el.element_name || `Element ${i + 1}`,
       elementType: el.element_type || 'deliverable',
       workstream: el.responsible_workstream || 'solutions',
-      // Seed status — placeholder until project_elements persistence lands.
-      status: /** @type {const} */ (
-        i < Math.floor((stage.element_count || 0) * 0.6) ? 'complete'
-        : i < Math.floor((stage.element_count || 0) * 0.8) ? 'in_progress'
-        : 'not_started'
-      ),
+      status: statusMap
+        ? calc.normalizeDosStatus(statusMap[calc.dosStatusKey(stage.stage_number, el.id)])
+        // Demo-deal representative seed (60% complete / 20% in progress).
+        : /** @type {const} */ (
+          i < Math.floor((stage.element_count || 0) * 0.6) ? 'complete'
+          : i < Math.floor((stage.element_count || 0) * 0.8) ? 'in_progress'
+          : 'not_started'
+        ),
     })),
   }));
 }
@@ -982,7 +993,18 @@ async function openDeal(id) {
   // Falls back to calc.DOS_STAGES constant when the DB query errors (offline,
   // staging schema drift, RLS denial). Memoized via ensureStageTemplates().
   const tplBundle = await ensureStageTemplates();
-  dosStages = buildDosStagesFromTemplates(tplBundle);
+  // 2026-07-03 — real deals hydrate persisted DOS statuses (deal_dos_status);
+  // a read failure degrades to {} (all not_started), never the fake seed.
+  let dosStatusMap = null;
+  if (id !== 'demo-deal-1') {
+    try {
+      dosStatusMap = await api.loadDosStatus(id);
+    } catch (err) {
+      console.warn('[DM] loadDosStatus failed — DOS card shows not-started:', err);
+      dosStatusMap = {};
+    }
+  }
+  dosStages = buildDosStagesFromTemplates(tplBundle, dosStatusMap);
 
   // 2026-04-29 (Brock): land on Sites for empty deals so the natural next
   // step (linking cost models / adding sites) is right there. For already-
