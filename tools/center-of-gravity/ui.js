@@ -315,6 +315,22 @@ function markDirty() {
 }
 
 /**
+ * UX0-4 (2026-07-03) — Auto (recommended) k. When config.kAuto is on, run
+ * the sensitivity sweep FIRST and adopt its recommended k before solving,
+ * instead of solving at a stale k and telling the user to run again.
+ * Returns the sweep so callers can reuse it (avoids a duplicate sweep).
+ * @param {Array} solvePts
+ * @returns {Array|null} sensitivity results when auto ran, else null
+ */
+function _resolveAutoK(solvePts) {
+  if (!config.kAuto) return null;
+  const sweep = calc.sensitivityAnalysis(solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), config);
+  const rec = (sweep || []).find(d => d.isRecommended) || (sweep || []).find(d => d.recommended);
+  if (rec && rec.k >= 1) config.numCenters = rec.k;
+  return sweep;
+}
+
+/**
  * COG-F4 — recompute centers + sensitivity in place without a full re-render
  * of the editor shell. Mirrors the body of the `cog-run` click handler.
  */
@@ -322,6 +338,7 @@ function runOptimizeAndRender() {
   if (!rootEl) return;
   const _solvePts = _pointsForSolve();
   if (!_solvePts.length) return; // nothing to solve against
+  const _autoSweep = _resolveAutoK(_solvePts);
   cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10, (config.snapToCandidates ? (config.candidateFacilities || []).filter(c => c.locked) : []));
       if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
         cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
@@ -329,7 +346,7 @@ function runOptimizeAndRender() {
   calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
   _enrichCogResultWithCost(cogResult, _solvePts);
   calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
-  sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), config);
+  sensitivityData = _autoSweep || calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), config);
   runState.markClean(runStateInputs());
   updateRunButtonState();
   // Re-render content without flipping tabs out from under the user.
@@ -968,6 +985,7 @@ async function bindShellEvents() {
         requestAnimationFrame(() => {
           try {
             const _solvePts = _pointsForSolve();
+            const _autoSweep = _resolveAutoK(_solvePts);
             cogResult = calc.kMeansCog(_solvePts, config.numCenters, config.maxIterations, config.kmeansRestarts ?? 10, (config.snapToCandidates ? (config.candidateFacilities || []).filter(c => c.locked) : []));
             if (config.snapToCandidates && (config.candidateFacilities || []).length > 0) {
               cogResult = calc.snapCentersToCandidates(cogResult, _solvePts, config.candidateFacilities);
@@ -975,7 +993,7 @@ async function bindShellEvents() {
             calc.applyCapacityConstraints(cogResult, _solvePts, config.capacityPerDC ?? 0);
             _enrichCogResultWithCost(cogResult, _solvePts);
             calc.flagServiceViolations(cogResult, _solvePts, config.maxServiceMiles ?? 0, config.roadFactor ?? 1.22);
-            sensitivityData = calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), config);
+            sensitivityData = _autoSweep || calc.sensitivityAnalysis(_solvePts, Math.max(config.numCenters, config.sensitivityMaxK ?? 8), config);
             activePhase = 'run';
             runSubTab = 'numbers';
             runState.markClean(runStateInputs());
@@ -1959,9 +1977,13 @@ function renderParametersPhase(el) {
         <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
           <div style="display:flex;align-items:center;gap:8px;">
             <label style="font-size:13px;font-weight:600;">Centers (k):</label>
-            <input type="number" value="${config.numCenters}" min="1" max="20" id="cog-k"
-                   style="width:70px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:14px;font-weight:700;text-align:center;color:var(--ies-blue);">
-            <span style="font-size:11px;color:var(--ies-gray-400);">How many DC locations to optimize for</span>
+            <input type="number" value="${config.numCenters}" min="1" max="20" id="cog-k" ${config.kAuto ? 'disabled' : ''}
+                   style="width:70px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:14px;font-weight:700;text-align:center;color:var(--ies-blue);${config.kAuto ? 'opacity:.55;' : ''}">
+            <label style="font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px;cursor:pointer;" title="Solve k from the sensitivity sweep's recommended elbow instead of a fixed count. Uncheck to pin k manually.">
+              <input type="checkbox" id="cog-k-auto" ${config.kAuto ? 'checked' : ''} style="cursor:pointer;">
+              Auto (recommended)
+            </label>
+            <span style="font-size:11px;color:var(--ies-gray-400);">${config.kAuto ? 'k adopts the sweep recommendation on Run' : 'How many DC locations to optimize for'}</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <label style="font-size:13px;font-weight:600;" title="Unit your demand 'weight' values are in. Math doesn't care which unit you pick — capacity below must use the same one. Drives label text everywhere weight appears.">Weight Unit:</label>
@@ -2033,6 +2055,25 @@ function renderParametersPhase(el) {
             <input type="number" value="${config.capacityPerDC ?? 0}" step="100000" min="0" id="cog-capacity"
                    style="width:120px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
             <span style="font-size:11px;color:var(--ies-gray-400);">0 = off · ${(calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'units')}/yr · typical 1.5M small / 5M med / 15M large</span>
+          </div>
+          <!-- UX0-4 (2026-07-03): Planning horizon inputs. E3 shipped 2026-05-29
+               with change-handlers + Analysis projection table but the inputs
+               themselves were never rendered — the Analysis footnote pointed at
+               a section that didn't exist. -->
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;" data-cog-horizon-group>
+            <label style="font-size:13px;font-weight:600;" title="Multi-year planning horizon. 1 = single-year analysis (no projection table). 2-10 years adds a growth/escalation/NPV projection to the Analysis tab.">Horizon (yrs):</label>
+            <input type="number" value="${config.analysisHorizonYears ?? 1}" min="1" max="10" step="1" id="cog-horizon-years"
+                   style="width:60px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <label style="font-size:13px;font-weight:600;" title="Annual demand growth applied to transport cost in out-years.">Growth %/yr:</label>
+            <input type="number" value="${config.annualGrowthPct ?? 5}" step="0.5" id="cog-annual-growth"
+                   style="width:65px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <label style="font-size:13px;font-weight:600;" title="Annual cost escalation (rate inflation) applied in out-years.">Escalation %/yr:</label>
+            <input type="number" value="${config.annualEscalationPct ?? 3}" step="0.5" min="0" id="cog-annual-escalation"
+                   style="width:65px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <label style="font-size:13px;font-weight:600;" title="Discount rate for NPV of the multi-year cost stream. Use the customer WACC.">Discount %:</label>
+            <input type="number" value="${config.discountRatePct ?? 8}" step="0.5" min="0" id="cog-discount-rate"
+                   style="width:65px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+            <span style="font-size:11px;color:var(--ies-gray-400);">Horizon 1 = single-year · 2+ adds the projection + NPV table on Analysis</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;" title="When ON, demand points whose lat/lng falls inside AK (51-72°N, -180 to -130°W), HI (18-23°N, -161 to -154°W), or PR (17.5-18.7°N, -67.5 to -65.3°W) bounding boxes are dropped before solving. Prevents a single offshore customer from dragging the centroid offshore.">
@@ -2292,7 +2333,13 @@ function renderParametersPhase(el) {
   // Bind config inputs (lifted from old renderPoints).
   el.querySelector('#cog-k')?.addEventListener('change', (e) => {
     config.numCenters = Math.max(1, Math.min(20, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 1));
+    config.kAuto = false; // manual k pins the count (UX0-4)
     markDirty();
+  });
+  el.querySelector('#cog-k-auto')?.addEventListener('change', (e) => {
+    config.kAuto = /** @type {HTMLInputElement} */ (e.target).checked;
+    markDirty();
+    renderContent(); // reflect disabled state on the k input
   });
   el.querySelector('#cog-cpm')?.addEventListener('change', (e) => {
     config.transportCostPerMile = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 2.85;

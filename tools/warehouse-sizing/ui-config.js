@@ -47,7 +47,7 @@ export function renderConfigHtml(ctx) {
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ies-gray-500);margin-bottom:6px;">Sizing Mode</div>
       <div role="radiogroup" aria-label="Sizing mode" style="display:flex;gap:6px;">
         <button type="button" role="radio" aria-checked="${mode === 'design'}" data-wsc-mode="design"
-                title="Inventory drives building dimensions. The engine sizes the ctx.facility from your peak units / mix / dock throughput. The 2D/3D rendering uses the sized footprint exactly. Use this for greenfield design or when you don't yet have a candidate building."
+                title="Inventory drives building dimensions. The engine sizes the facility from your peak units / mix / dock throughput. The 2D/3D rendering uses the sized footprint exactly. Use this for greenfield design or when you don't yet have a candidate building."
                 style="flex:1;padding:8px 10px;font-size:12px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid ${mode === 'design' ? 'var(--ies-blue,#0047AB)' : 'var(--ies-gray-200)'};background:${mode === 'design' ? 'var(--ies-blue,#0047AB)' : '#fff'};color:${mode === 'design' ? '#fff' : 'var(--ies-gray-700)'};transition:all .12s;">
           Design
           <div style="font-size:10px;font-weight:500;margin-top:2px;color:${mode === 'design' ? 'rgba(255,255,255,.85)' : 'var(--ies-gray-500)'};">Inventory → building</div>
@@ -266,14 +266,14 @@ export function renderConfigHtml(ctx) {
           return `
             <div class="wsc-channel-alloc-row" data-channel-key="${escapeAttr(c.channelKey)}" style="display:flex;flex-direction:column;gap:4px;padding:8px 0;border-top:1px solid var(--ies-gray-100);">
               <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;">
-                <span>${escapeHtml(c.name || c.channelKey)} ${isOverridden ? '<span style="color:var(--ies-blue);font-weight:700;" title="Channel override active">●</span>' : '<span style="color:var(--ies-gray-400);" title="Inheriting ctx.facility allocation">○</span>'}</span>
+                <span>${escapeHtml(c.name || c.channelKey)} ${isOverridden ? '<span style="color:var(--ies-blue);font-weight:700;" title="Channel override active">●</span>' : '<span style="color:var(--ies-gray-400);" title="Inheriting facility-level allocation">○</span>'}</span>
                 <span style="color:${totalOk ? 'var(--ies-gray-500)' : 'var(--ies-orange)'};">${total}%${totalOk ? '' : ' ⚠'}</span>
               </div>
               <div style="display:grid;grid-template-columns:repeat(3,1fr) auto;gap:4px;">
                 <input type="number" min="0" max="100" value="${fp}" data-channel-alloc="fullPallet" data-channel-key="${escapeAttr(c.channelKey)}" title="Full Pallet %" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;" />
                 <input type="number" min="0" max="100" value="${cp}" data-channel-alloc="cartonOnPallet" data-channel-key="${escapeAttr(c.channelKey)}" title="Carton on Pallet %" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;" />
                 <input type="number" min="0" max="100" value="${cs}" data-channel-alloc="cartonOnShelving" data-channel-key="${escapeAttr(c.channelKey)}" title="Carton Shelving %" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;" />
-                ${isOverridden ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-channel-alloc-reset="${escapeAttr(c.channelKey)}" title="Reset this channel to inherit the ctx.facility-level allocation" style="font-size:10px;padding:2px 6px;">↻</button>` : '<span></span>'}
+                ${isOverridden ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-channel-alloc-reset="${escapeAttr(c.channelKey)}" title="Reset this channel to inherit the facility-level allocation" style="font-size:10px;padding:2px 6px;">↻</button>` : '<span></span>'}
               </div>
             </div>`;
         }).join('');
@@ -281,7 +281,7 @@ export function renderConfigHtml(ctx) {
           <details class="wsc-channel-allocs" style="margin-top:14px;border-top:1px solid var(--ies-gray-200);padding-top:8px;" open>
             <summary style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);cursor:pointer;">Per-channel allocation overrides</summary>
             <div style="display:flex;flex-direction:column;gap:0;margin-top:6px;font-size:11px;color:var(--ies-gray-600);">
-              <div style="font-size:10px;color:var(--ies-gray-400);font-weight:500;text-transform:none;letter-spacing:0;line-height:1.4;padding-bottom:4px;">Reserve / Case Pick / Each Pick — must sum to 100. ● = overridden, ○ = inheriting ctx.facility allocation.</div>
+              <div style="font-size:10px;color:var(--ies-gray-400);font-weight:500;text-transform:none;letter-spacing:0;line-height:1.4;padding-bottom:4px;">Reserve / Case Pick / Each Pick — must sum to 100. ● = overridden, ○ = inheriting the facility-level allocation.</div>
               ${rows}
             </div>
           </details>`;
@@ -531,7 +531,7 @@ export function renderConfigHtml(ctx) {
 
       <!-- Optional ctx.zones (VAS / Returns / Chargeback) -->
       <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Optional ctx.zones</div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Optional Zones</div>
         <div class="wsc-config-field" style="margin-bottom:8px;">
           <label style="display:flex; align-items:center; gap:6px;">
             <input type="checkbox" ${ctx.zones.optionalZones?.vas?.enabled ? 'checked' : ''} data-opt="vas-enabled" style="margin:0;" />
@@ -571,8 +571,8 @@ export function renderConfigHtml(ctx) {
 
       <!-- Custom ctx.zones -->
       <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Custom ctx.zones</div>
-        <div id="wsc-custom-ctx.zones-list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Custom Zones</div>
+        <div id="wsc-custom-zones-list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
           ${(ctx.zones.customZones || []).map((z, i) => `
             <div style="display:flex; gap:4px; align-items:center;">
               <input type="text" value="${z.name}" data-custom-name="${i}" placeholder="Zone name" style="flex:1; padding:4px 6px; border:1px solid var(--ies-gray-200); border-radius:4px; font-size:11px;" />

@@ -60,6 +60,10 @@ export {
 /** @type {import('./types.js?v=20260418-sP').CogConfig} */
 export const DEFAULT_CONFIG = {
   numCenters: 1,
+  // UX0-4 (2026-07-03): solve k from the sensitivity sweep's recommendation
+  // by default — the old fixed k=1 guaranteed a run-again loop even though
+  // the sweep already knew the recommended k. Manual k edits switch it off.
+  kAuto: true,
   maxIterations: 100,
   includeSupply: false,
   transportCostPerMile: DEFAULT_TL_RATE_PER_MILE,

@@ -265,7 +265,7 @@ export function renderPlan(pctx) {
         </div>
         ${editing ? `
           <div style="margin-top:8px;padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;color:#1e3a8a;">
-            <strong>Edit mode:</strong> drag Office, Ship Staging, or Forward Pick pctx.zones to reposition them. Snaps to 5 ft. Save the model to persist.
+            <strong>Edit mode:</strong> drag Office, Ship Staging, or Forward Pick zones to reposition them. Snaps to 5 ft. Save the model to persist.
           </div>
         ` : ''}
         ${_measureMode ? `

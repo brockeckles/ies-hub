@@ -64,7 +64,7 @@ export function renderDashboard(ctx) {
       <div class="hub-kpi-item"><div class="hub-kpi-label">Storage SF</div><div class="hub-kpi-value">${calc.formatSqft(sized.storageSqft)}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Gross Positions</div><div class="hub-kpi-value" title="Designed positions + ${sized.utilization.designed > 0 ? Math.round((sized.positions.surgePositions / sized.utilization.designed) * 100) : 0}% surge buffer">${sized.positions.grossPositions.toLocaleString()}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Rack Levels</div><div class="hub-kpi-value">${sized.rackLevels}</div></div>
-      <div class="hub-kpi-item"><div class="hub-kpi-label">SF / Position</div><div class="hub-kpi-value" title="Total ctx.facility SF / gross positions. Lower = denser. Selective racking 8-12; VNA 5-8; Drive-in 3-5.">${sized.sfPerPosition.toFixed(1)}</div></div>
+      <div class="hub-kpi-item"><div class="hub-kpi-label">SF / Position</div><div class="hub-kpi-value" title="Total facility SF / gross positions. Lower = denser. Selective racking 8-12; VNA 5-8; Drive-in 3-5.">${sized.sfPerPosition.toFixed(1)}</div></div>
       <div class="hub-kpi-item"><div class="hub-kpi-label">Dock Doors</div><div class="hub-kpi-value" title="${sized.dock.inboundDoors} in${sized.dock.inboundDoorsExplicit ? ' (explicit)' : ` (derived; throughput suggests ${sized.dock.inboundDoorsDerived})`} + ${sized.dock.outboundDoors} out${sized.dock.outboundDoorsExplicit ? ' (explicit)' : ` (derived; throughput suggests ${sized.dock.outboundDoorsDerived})`}${(sized.dock.inboundDoorsExplicit || sized.dock.outboundDoorsExplicit) ? '' : ', +25% surge buffer'}">${sized.dock.totalDoors}</div></div>
     </div>
 
@@ -226,7 +226,7 @@ export function renderDashboard(ctx) {
           })()}
 
           ${byChannel.length > 0 ? `
-            <tr><td colspan="2" style="padding-top:14px;font-weight:700;color:var(--ies-blue);font-size:11px;text-transform:uppercase;" title="Phase 4 Layer B (ctx.volumes-as-nucleus): positions sized per-channel using each channel's storageAllocation override (falls back to ctx.facility allocation when no override).">Inventory → Positions by Channel</td></tr>
+            <tr><td colspan="2" style="padding-top:14px;font-weight:700;color:var(--ies-blue);font-size:11px;text-transform:uppercase;" title="Positions sized per-channel using each channel's storage-allocation override (falls back to the facility-level allocation when no override).">Inventory → Positions by Channel</td></tr>
             ${byChannel.map(c => `
               <tr>
                 <td style="padding-left:8px;">${escapeHtml(c.name)}${renderCmDrillbackChip({ cmId: ctx.facility.parent_cost_model_id, channelKey: c.channelKey, channelName: c.name })}</td>
@@ -251,11 +251,11 @@ export function renderDashboard(ctx) {
 
       ${sized.utilization.warning === 'high_util' ? `
         <div style="margin-top:12px;padding:10px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;color:#92400e;font-size:12px;">
-          ⚠ <strong>High Utilization (${sized.utilization.utilizationPct}%)</strong> — limited operational flexibility for receiving surges and seasonal peaks. Consider increasing ctx.facility size or reducing peak inventory assumptions.
+          ⚠ <strong>High Utilization (${sized.utilization.utilizationPct}%)</strong> — limited operational flexibility for receiving surges and seasonal peaks. Consider increasing facility size or reducing peak inventory assumptions.
         </div>
       ` : sized.utilization.warning === 'low_util' ? `
         <div style="margin-top:12px;padding:10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;color:#9a3412;font-size:12px;">
-          ⚠ <strong>Low Utilization (${sized.utilization.utilizationPct}%)</strong> — gap between average (${sized.utilization.avg.toLocaleString()}) and peak (${sized.utilization.peak.toLocaleString()}) is significant. Verify the ctx.facility is sized for the right scenario.
+          ⚠ <strong>Low Utilization (${sized.utilization.utilizationPct}%)</strong> — gap between average (${sized.utilization.avg.toLocaleString()}) and peak (${sized.utilization.peak.toLocaleString()}) is significant. Verify the facility is sized for the right scenario.
         </div>
       ` : ''}
 
@@ -276,10 +276,10 @@ export function renderDashboard(ctx) {
         <div class="text-subtitle mb-4">Capacity Utilization</div>
         ${renderUtilBar('Storage SF vs Existing',
           ctx.facility.totalSqft > 0 ? Math.round((sized.storageSqft / ctx.facility.totalSqft) * 100) : 0,
-          { mode: 'cap', tooltip: 'Sized storage SF / ctx.facility.totalSqft. >95% means storage alone consumes all available SF — no room for staging, dock, office.' })}
+          { mode: 'cap', tooltip: 'Sized storage SF / existing building SF. >95% means storage alone consumes all available SF — no room for staging, dock, office.' })}
         ${renderUtilBar('Sized SF vs Existing',
           ctx.facility.totalSqft > 0 ? Math.round((sized.totalSqft / ctx.facility.totalSqft) * 100) : 0,
-          { mode: 'cap', tooltip: 'Sized total SF / ctx.facility.totalSqft. >100% means the engineered ctx.facility does not fit in the existing footprint.' })}
+          { mode: 'cap', tooltip: 'Sized total SF / existing building SF. >100% means the engineered facility does not fit in the existing footprint.' })}
         ${renderUtilBar('Pallet Position Util',
           sized.utilization.utilizationPct,
           { mode: 'band', tooltip: 'Average inventory positions / designed positions. Healthy band 70-90%. Below 70% = over-built; above 90% = no slack for receiving surges or seasonal peaks. (WSC-D4 fix: was inverted as cap-mode.)' })}
@@ -350,7 +350,7 @@ export function renderDashboard(ctx) {
           <div class="text-subtitle" style="margin:0;">Rack &amp; Aisle Geometry</div>
           ${storage.geometryIsHeuristic
             ? `<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:3px;" title="Building Width × Depth not set — geometry assumes a 1.5:1 rectangle from total SF. Set Width / Depth on the Building card for measured geometry.">HEURISTIC</span>`
-            : `<span style="font-size:10px;background:#dcfce7;color:#166534;padding:2px 6px;border-radius:3px;" title="Geometry computed from ctx.facility.buildingWidth × buildingDepth.">MEASURED</span>`
+            : `<span style="font-size:10px;background:#dcfce7;color:#166534;padding:2px 6px;border-radius:3px;" title="Geometry computed from the entered building width × depth.">MEASURED</span>`
           }
         </div>
         <table class="cm-grid-table" style="font-size:13px;">
@@ -378,7 +378,7 @@ export function renderDashboard(ctx) {
             <tr><td>Peak Units/Day</td><td class="cm-num">${(ctx.zones.peakUnitsPerDay ?? 0).toLocaleString()}</td></tr>
             <tr><td>Avg Units/Day</td><td class="cm-num">${(ctx.zones.avgUnitsPerDay || 350000).toLocaleString()}</td></tr>
             <tr><td>Operating Days/Yr</td><td class="cm-num">${(ctx.zones.operatingDaysPerYear || 250)}</td></tr>
-            <tr><td title="Days Inventory On-Hand = avgUnits / dailyOutbound. Typical 3PL DC: 30-90 days; high-turn retail: 10-30 days; DTC ecomm: 60-120 days. Sources: ctx.zones.outboundUnitsPerDay → outboundUnitsYr/operatingDays → forwardPick.outboundUnitsPerDay (legacy).">DIOH (Days)</td><td class="cm-num">${dioh.toFixed(1)}</td></tr>
+            <tr><td title="Days Inventory On-Hand = avgUnits / dailyOutbound. Typical 3PL DC: 30-90 days; high-turn retail: 10-30 days; DTC ecomm: 60-120 days. Sources: daily outbound units → annual outbound/operating days → forward-pick outbound (legacy).">DIOH (Days)</td><td class="cm-num">${dioh.toFixed(1)}</td></tr>
           </tbody>
         </table>
       </div>
