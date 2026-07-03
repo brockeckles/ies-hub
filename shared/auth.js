@@ -56,7 +56,7 @@
  * @module shared/auth
  */
 
-import { db } from './supabase.js?v=20260429-demo-s3';
+import { db } from './supabase.js?v=20260703-hw1';
 import { bus } from './event-bus.js?v=20260418-sK';
 
 /** Cached session + user — source of truth is supabase.auth.getSession(). */

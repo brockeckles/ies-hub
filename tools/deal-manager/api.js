@@ -5,7 +5,7 @@
  * @module tools/deal-manager/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260429-demo-s3';
+import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 // P2-1 (2026-07-03) — pure site-field→CM-column mapper
 import { siteToCmColumns, NEW_SITE_DEFAULTS } from './calc.js?v=20260703-lw3';
@@ -276,8 +276,11 @@ export async function listUnlinkedProjects() {
     .order('name');
   if (error) throw error;
   // Normalise the column name so callers can use total_sqft uniformly.
+  // id → String to match mapCmProjectToSite — the link-modal compares this
+  // against dataset.cmId (always a string); raw BIGSERIAL numbers made the
+  // freshly-linked site render as 'Linked CM' with zeroed stats (2026-07-03).
   return (data || []).map(r => ({
-    id: r.id,
+    id: String(r.id),
     name: r.name,
     total_sqft: r.facility_sqft || 0,
     total_annual_cost: r.total_annual_cost || 0,

@@ -289,7 +289,38 @@ export function renderPlan(pctx) {
   `;
 }
 
+/**
+ * P3-2 (2026-07-03) — guarded entry point. drawPlan is the exact rAF paint
+ * path that historically blanked the canvas on a single thrown error (the
+ * columnRanges ReferenceError, the null-coord heatmap abort). The guard
+ * paints an in-canvas banner instead of dying silently, and rethrows to a
+ * console.error so the global error-net / devtools still see it. Callers
+ * with empty catch blocks stay safe — the banner is drawn before rethrow.
+ */
 export function drawPlan(pctx) {
+  try {
+    _drawPlanUnsafe(pctx);
+  } catch (err) {
+    console.error('[WSC] drawPlan failed:', err);
+    try {
+      const canvas = pctx.rootEl?.querySelector('#wsc-plan-canvas');
+      const ctx = canvas && canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fef2f2';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#991b1b';
+        ctx.font = '600 14px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('2D Plan failed to render — see console for details.', canvas.width / 2, canvas.height / 2 - 10);
+        ctx.font = '400 12px system-ui, sans-serif';
+        ctx.fillText(String(err?.message || err).slice(0, 120), canvas.width / 2, canvas.height / 2 + 12);
+      }
+    } catch { /* banner is best-effort */ }
+  }
+}
+
+function _drawPlanUnsafe(pctx) {
   const canvas = pctx.rootEl?.querySelector('#wsc-plan-canvas');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');

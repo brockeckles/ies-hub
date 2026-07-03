@@ -9,7 +9,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260610-life1';
 import * as calc from './calc.js?v=20260703-lw3';
-import * as api from './api.js?v=20260703-lw3';
+import * as api from './api.js?v=20260703-hw1';
 import * as cmApi from '../cost-model/api.js?v=20260612-am1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
@@ -1420,7 +1420,7 @@ async function openLinkCmModal(parentEl) {
           await api.linkSite(projectId, activeDeal.id);
         }
         // Fetch the CM project row to materialize as a Site
-        const chosen = projects.find(p => p.id === projectId);
+        const chosen = projects.find(p => String(p.id) === String(projectId));
         const breakdown = await api.fetchCostModelBreakdown(projectId);
         const newSite = {
           id: 's-cm-' + projectId,

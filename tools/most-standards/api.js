@@ -5,7 +5,7 @@
  * @module tools/most-standards/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260429-demo-s3';
+import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 // P2-2 (2026-07-02) — pure element sanitation lives in calc.js
 import { sanitizeElementForWrite, serializeWorkflow } from './calc.js?v=20260702-p23a';

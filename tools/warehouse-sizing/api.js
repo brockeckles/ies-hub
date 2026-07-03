@@ -5,7 +5,7 @@
  * @module tools/warehouse-sizing/api
  */
 
-import { db } from '../../shared/supabase.js?v=20260429-demo-s3';
+import { db } from '../../shared/supabase.js?v=20260703-hw1';
 
 // ============================================================
 // FACILITY CONFIGS

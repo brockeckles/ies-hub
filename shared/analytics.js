@@ -21,7 +21,7 @@
  * @module shared/analytics
  */
 
-import { db } from './supabase.js?v=20260429-demo-s3';
+import { db } from './supabase.js?v=20260703-hw1';
 // Identity is read from the sessionStorage mirror that auth.js maintains
 // (`ies_user_id` + `ies_user_email`). Reading from sessionStorage instead of
 // importing auth.js makes this module drift-immune to auth.js cache-bust

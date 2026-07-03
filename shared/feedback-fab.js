@@ -15,7 +15,7 @@
  * @module shared/feedback-fab
  */
 
-import { db } from './supabase.js?v=20260429-demo-s3';
+import { db } from './supabase.js?v=20260703-hw1';
 import { showToast } from './toast.js?v=20260419-uC';
 
 const FAB_ID = 'hub-feedback-fab';

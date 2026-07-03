@@ -28,7 +28,7 @@
  * @module shared/audit
  */
 
-import { db } from './supabase.js?v=20260429-demo-s3';
+import { db } from './supabase.js?v=20260703-hw1';
 // Identity is read from the sessionStorage mirror that auth.js writes via
 // `mirrorIdentityToLegacy`. Reading sessionStorage (instead of importing
 // auth.js) makes this module drift-immune — multiple `auth.js?v=...` URLs
