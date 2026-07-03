@@ -863,3 +863,53 @@ export function runScenario(params) {
   );
   return { ok: true, version: ENGINE_VERSION, result, errors: [] };
 }
+
+// ============================================================
+// P2-1 (2026-07-03): SITE EDITING — FIELD MAP + DEFAULTS
+// ============================================================
+// Brock's build-it-out call on the 2026-07-02 assessment's P2-1: sites are
+// cost_model_projects rows (deal_deals_id link), so "site editing" writes
+// the headline CM columns. Pure mapper here so api/ui stay thin + testable.
+
+/** Editable Site fields → cost_model_projects columns. */
+export const SITE_TO_CM_COLUMNS = {
+  name: 'name',
+  market: 'client_name',
+  environment: 'environment_type',
+  sqft: 'facility_sqft',
+  annualCost: 'total_annual_cost',
+  targetMarginPct: 'target_margin_pct',
+  startupCost: 'startup_cost',
+  pricingModel: 'pricing_model',
+  annualVolume: 'vol_pallets_received',
+};
+
+const SITE_NUMERIC_FIELDS = new Set(['sqft', 'annualCost', 'targetMarginPct', 'startupCost', 'annualVolume']);
+
+/** Defaults for a DM-created skeleton site (the old in-memory ghost values,
+ * now actually persisted + editable). */
+export const NEW_SITE_DEFAULTS = {
+  name: 'New Site',
+  sqft: 200000,
+  annualCost: 2000000,
+  targetMarginPct: 10,
+  startupCost: 0,
+  pricingModel: 'cost-plus',
+};
+
+/**
+ * Map a Site-field patch to cost_model_projects columns. Unknown keys are
+ * dropped; numeric fields coerce ('' / junk → 0); strings pass through.
+ * @param {Object} patch — partial Site
+ * @returns {Object} column patch safe for db.insert/db.update
+ */
+export function siteToCmColumns(patch) {
+  const out = {};
+  for (const [field, col] of Object.entries(SITE_TO_CM_COLUMNS)) {
+    if (!patch || patch[field] === undefined) continue;
+    out[col] = SITE_NUMERIC_FIELDS.has(field)
+      ? (Number(String(patch[field]).replace(/[,$\s]/g, '')) || 0)
+      : patch[field];
+  }
+  return out;
+}

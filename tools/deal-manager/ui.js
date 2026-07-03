@@ -8,11 +8,11 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260610-life1';
-import * as calc from './calc.js?v=20260610-straggler1';
-import * as api from './api.js?v=20260511-port2';
+import * as calc from './calc.js?v=20260703-p21a';
+import * as api from './api.js?v=20260703-p21a';
 import * as cmApi from '../cost-model/api.js?v=20260612-am1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
-import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
+import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260611-sl1';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 
@@ -974,6 +974,9 @@ async function openDeal(id) {
   }
 
   financials = calc.computeDealFinancials(sites, activeDeal.contractTermYears || 5);
+  // P2-1 (2026-07-03): keep the deal's site cache in sync — Compare reads
+  // d._sites for non-active deals ("read once, written never" pre-fix).
+  activeDeal._sites = sites;
 
   // MUL-F2 — DOS stages now load from public.stages + stage_element_templates.
   // Falls back to calc.DOS_STAGES constant when the DB query errors (offline,
@@ -1167,9 +1170,9 @@ function renderSites(el) {
             const linked = !!s.costModelId;
             return `
               <div class="hub-card" style="padding:16px;${linked ? 'border-left:3px solid var(--ies-blue);' : ''}">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-                  <span style="font-size:14px;font-weight:700;">${escapeHtml(s.name)}</span>
-                  <button class="hub-btn hub-btn-sm hub-btn-secondary" data-unlink="${s.id}" style="padding:4px 8px;">✕</button>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;">
+                  <input type="text" value="${escapeAttr(s.name)}" data-site-field="name" data-site-id="${s.id}" style="font-size:14px;font-weight:700;border:1px solid transparent;border-radius:6px;padding:2px 6px;flex:1;min-width:0;background:transparent;" onfocus="this.style.borderColor='var(--ies-gray-200)';this.style.background='#fff';" onblur="this.style.borderColor='transparent';this.style.background='transparent';" title="Site name — edits save automatically" />
+                  <button class="hub-btn hub-btn-sm hub-btn-secondary" data-unlink="${s.id}" title="Unlink this site from the deal (the cost model project is kept)" style="padding:4px 8px;">✕</button>
                 </div>
                 <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
                   <span class="hub-status-chip ${linked ? 'linked' : 'standalone'} dot" style="font-size:11px;">${linked ? 'CM-linked' : 'Typed data'}</span>
@@ -1179,26 +1182,31 @@ function renderSites(el) {
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
                   <div>
                     <div style="font-size:11px;color:var(--ies-gray-400);">SqFt</div>
-                    <div style="font-weight:600;">${s.sqft.toLocaleString()}</div>
+                    <input type="number" min="0" step="1000" value="${Number(s.sqft) || 0}" data-site-field="sqft" data-site-id="${s.id}" class="hub-input" style="font-weight:600;font-size:13px;padding:3px 6px;width:100%;" />
                   </div>
                   <div>
-                    <div style="font-size:11px;color:var(--ies-gray-400);">Annual Cost</div>
-                    <div style="font-weight:600;">${calc.formatCurrency(s.annualCost, { compact: true })}</div>
+                    <div style="font-size:11px;color:var(--ies-gray-400);">Annual Cost ($)</div>
+                    <input type="number" min="0" step="10000" value="${Number(s.annualCost) || 0}" data-site-field="annualCost" data-site-id="${s.id}" class="hub-input" style="font-weight:600;font-size:13px;padding:3px 6px;width:100%;" />
                   </div>
                   <div>
-                    <div style="font-size:11px;color:var(--ies-gray-400);">Target Margin</div>
-                    <div style="font-weight:600;">${calc.formatPct(s.targetMarginPct)}</div>
+                    <div style="font-size:11px;color:var(--ies-gray-400);">Target Margin %</div>
+                    <input type="number" min="0" max="60" step="0.5" value="${Number(s.targetMarginPct) || 0}" data-site-field="targetMarginPct" data-site-id="${s.id}" class="hub-input" style="font-weight:600;font-size:13px;padding:3px 6px;width:100%;" />
                   </div>
                   <div>
                     <div style="font-size:11px;color:var(--ies-gray-400);">Pricing</div>
-                    <div style="font-weight:600;text-transform:capitalize;">${s.pricingModel || '—'}</div>
+                    <select data-site-field="pricingModel" data-site-id="${s.id}" class="hub-input" style="font-weight:600;font-size:13px;padding:3px 6px;width:100%;">
+                      ${Object.keys(calc.DEFAULT_PRICING_MARKUPS).map(pm => `<option value="${pm}"${(s.pricingModel || 'cost-plus') === pm ? ' selected' : ''}>${pm}</option>`).join('')}
+                    </select>
+                  </div>
+                  <div>
+                    <div style="font-size:11px;color:var(--ies-gray-400);">Startup Cost ($)</div>
+                    <input type="number" min="0" step="10000" value="${Number(s.startupCost) || 0}" data-site-field="startupCost" data-site-id="${s.id}" class="hub-input" style="font-weight:600;font-size:13px;padding:3px 6px;width:100%;" />
+                  </div>
+                  <div>
+                    <div style="font-size:11px;color:var(--ies-gray-400);">Annual Volume</div>
+                    <input type="number" min="0" step="1000" value="${Number(s.annualVolume) || 0}" data-site-field="annualVolume" data-site-id="${s.id}" class="hub-input" style="font-weight:600;font-size:13px;padding:3px 6px;width:100%;" />
                   </div>
                 </div>
-                ${s.startupCost ? `
-                  <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--ies-gray-200);font-size:11px;color:var(--ies-gray-400);">
-                    Startup: ${calc.formatCurrency(s.startupCost, { compact: true })}
-                  </div>
-                ` : ''}
                 ${linked && s.costBreakdown ? `
                   <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--ies-gray-200);font-size:11px;color:var(--ies-gray-500);">
                     Breakdown: L ${calc.formatCurrency(s.costBreakdown.labor || 0, { compact: true })} · F ${calc.formatCurrency(s.costBreakdown.facility || 0, { compact: true })} · E ${calc.formatCurrency(s.costBreakdown.equipment || 0, { compact: true })}
@@ -1212,21 +1220,78 @@ function renderSites(el) {
     </div>
   `;
 
+  // P2-1 (2026-07-03): sites persist now. Demo deal stays memory-only.
+  const isDemoDeal = String(activeDeal?.id) === 'demo-deal-1';
+
   el.querySelectorAll('[data-unlink]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const siteId = /** @type {HTMLElement} */ (btn).dataset.unlink;
+      const site = sites.find(x => x.id === siteId);
+      if (!site) return;
+      if (!(await showConfirm(`Unlink "${site.name}" from this deal? The cost model project itself is kept and can be re-linked.`))) return;
+      if (!isDemoDeal) {
+        try {
+          await api.unlinkSite(siteId);   // previously had ZERO call sites — unlink only forgot the row in memory
+        } catch (err) {
+          showToast('Unlink failed: ' + (err.message || 'unknown'), 'error');
+          return;
+        }
+      }
       sites = sites.filter(s => s.id !== siteId);
       financials = calc.computeDealFinancials(sites, activeDeal?.contractTermYears || 5);
+      if (activeDeal) activeDeal._sites = sites;
       renderSites(el);
     });
   });
 
-  el.querySelector('#dm-add-site')?.addEventListener('click', () => {
-    const id = 's' + Date.now();
-    sites.push({ id, name: 'New Site', sqft: 200000, annualCost: 2000000, targetMarginPct: 10, pricingModel: 'cost-plus' });
+  el.querySelector('#dm-add-site')?.addEventListener('click', async () => {
+    if (isDemoDeal) {
+      sites.push({ id: 's' + Date.now(), ...calc.NEW_SITE_DEFAULTS });
+    } else {
+      try {
+        // Persisted skeleton CM project linked to this deal — the old
+        // in-memory ghost vanished on Back and was forever 200k/$2M/10%.
+        const created = await api.createSite(activeDeal.id, calc.NEW_SITE_DEFAULTS);
+        sites.push(created);
+        showToast('Site created', 'success');
+      } catch (err) {
+        showToast('Could not create site: ' + (err.message || 'unknown'), 'error');
+        return;
+      }
+    }
     financials = calc.computeDealFinancials(sites, activeDeal?.contractTermYears || 5);
+    if (activeDeal) activeDeal._sites = sites;
     renderSites(el);
+  });
+
+  // Field edits — change fires on blur/Enter (inputs) and select. Persist,
+  // recompute, re-render (focus already left the control on 'change').
+  el.querySelectorAll('[data-site-field]').forEach(input => {
+    input.addEventListener('change', async (e) => {
+      const t = /** @type {HTMLInputElement|HTMLSelectElement} */ (e.currentTarget);
+      const siteId = t.dataset.siteId;
+      const field = t.dataset.siteField;
+      const site = sites.find(x => x.id === siteId);
+      if (!site || !field) return;
+      const numeric = ['sqft', 'annualCost', 'targetMarginPct', 'startupCost', 'annualVolume'].includes(field);
+      const value = numeric ? (Number(t.value) || 0) : t.value;
+      const prev = site[field];
+      site[field] = value;
+      if (!isDemoDeal) {
+        try {
+          await api.updateSite(siteId, { [field]: value });
+        } catch (err) {
+          site[field] = prev; // roll back the optimistic edit
+          showToast('Save failed: ' + (err.message || 'unknown'), 'error');
+          renderSites(el);
+          return;
+        }
+      }
+      financials = calc.computeDealFinancials(sites, activeDeal?.contractTermYears || 5);
+      if (activeDeal) activeDeal._sites = sites;
+      renderSites(el);
+    });
   });
 
   el.querySelector('#dm-link-cm')?.addEventListener('click', () => openLinkCmModal(el));
@@ -1624,6 +1689,20 @@ function renderCompare(el) {
   }
   const candidates = allDeals.length ? allDeals : [activeDeal];
   const selected = compareDealIds.map(id => candidates.find(d => d.id === id)).filter(Boolean);
+  // P2-1 (2026-07-03): fetch real sites for compared deals that haven't
+  // loaded any yet — Compare previously ran against all-zero ghosts
+  // because d._sites was never written. One fetch per deal, then a single
+  // re-render; deals that legitimately have zero sites get _sites=[] so
+  // this doesn't loop.
+  const unhydrated = selected.filter(d =>
+    String(d.id) !== String(activeDeal.id) && d._sites === undefined && String(d.id) !== 'demo-deal-1');
+  if (unhydrated.length > 0) {
+    Promise.all(unhydrated.map(async d => {
+      try { d._sites = await api.listSites(d.id); } catch { d._sites = []; }
+    })).then(() => {
+      if (el.isConnected) renderCompare(el);
+    });
+  }
   const computed = selected.map(d => {
     const dSites = (d.id === activeDeal.id) ? sites : (d._sites || []);
     const fin = calc.computeDealFinancials(dSites, d.contractTermYears || 5, {

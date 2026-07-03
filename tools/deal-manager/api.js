@@ -7,6 +7,8 @@
 
 import { db } from '../../shared/supabase.js?v=20260429-demo-s3';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
+// P2-1 (2026-07-03) — pure site-field→CM-column mapper
+import { siteToCmColumns, NEW_SITE_DEFAULTS } from './calc.js?v=20260703-p21a';
 
 // ============================================================
 // DEALS
@@ -191,6 +193,44 @@ export async function listSites(dealId) {
 export async function linkSite(projectId, dealId) {
   await db.update('cost_model_projects', projectId, { deal_deals_id: dealId });
   recordAudit({ table: 'cost_model_projects', id: projectId, action: 'link', fields: { deal_deals_id: dealId } });
+}
+
+/**
+ * P2-1 (2026-07-03) — create a new site on a deal. Sites ARE
+ * cost_model_projects rows, so this inserts a skeleton CM project already
+ * linked via deal_deals_id ('+ Add Empty Site' previously pushed an
+ * in-memory object that vanished on Back).
+ * @param {string|number} dealId
+ * @param {Object} [site] — partial Site fields; NEW_SITE_DEFAULTS fill gaps
+ * @returns {Promise<import('./types.js?v=20260418-sL').Site>}
+ */
+export async function createSite(dealId, site = {}) {
+  const cols = siteToCmColumns({ ...NEW_SITE_DEFAULTS, ...site });
+  const row = await db.insert('cost_model_projects', {
+    ...cols,
+    deal_deals_id: dealId,
+    status: 'draft',
+    description: 'Created in Multi-Site Analyzer',
+  });
+  recordAudit({ table: 'cost_model_projects', id: row?.id, action: 'insert', fields: { deal_deals_id: dealId, source: 'dm-site' } });
+  return mapCmProjectToSite(row);
+}
+
+/**
+ * P2-1 (2026-07-03) — persist edits to a site's headline fields. Writes the
+ * linked cost_model_projects row (unknown fields dropped by the mapper).
+ * NOTE for CM-authored projects: total_annual_cost is recomputed by CM on
+ * its next save — DM edits to it are a manual override until then.
+ * @param {string|number} siteId — cost_model_projects.id
+ * @param {Object} patch — partial Site fields
+ * @returns {Promise<import('./types.js?v=20260418-sL').Site>}
+ */
+export async function updateSite(siteId, patch) {
+  const cols = siteToCmColumns(patch);
+  if (Object.keys(cols).length === 0) return null;
+  const row = await db.update('cost_model_projects', siteId, cols);
+  recordAudit({ table: 'cost_model_projects', id: siteId, action: 'update', fields: { source: 'dm-site', keys: Object.keys(cols).join(',') } });
+  return mapCmProjectToSite(row);
 }
 
 /**
