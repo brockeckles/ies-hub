@@ -1420,21 +1420,33 @@ async function openLinkCmModal(parentEl) {
         if (isPersistedDeal) {
           await api.linkSite(projectId, activeDeal.id);
         }
-        // Fetch the CM project row to materialize as a Site
+        // Fetch the CM project row to materialize as a Site.
+        // UX0-3 (2026-07-03): the site id minted here used an s-cm- prefix
+        // while every other site id is String(cost_model_projects.id) via
+        // mapCmProjectToSite — the freshly-linked card's edit/unlink handlers
+        // missed until reopen, and updateSite would write to a phantom row.
         const chosen = projects.find(p => String(p.id) === String(projectId));
         const breakdown = await api.fetchCostModelBreakdown(projectId);
-        const newSite = {
-          id: 's-cm-' + projectId,
-          name: chosen?.name || 'Linked CM',
-          sqft: chosen?.total_sqft || 0,
-          annualCost: chosen?.total_annual_cost || 0,
-          targetMarginPct: 10,
-          pricingModel: /** @type {const} */ ('cost-plus'),
-          costModelId: projectId,
-          costBreakdown: breakdown || undefined,
-        };
-        sites.push(newSite);
+        if (isPersistedDeal) {
+          // Server is the source of truth — rehydrate through the same
+          // mapper the open-deal path uses, then attach the breakdown.
+          sites = await api.listSites(activeDeal.id);
+          const hydrated = sites.find(s => String(s.costModelId) === String(projectId));
+          if (hydrated) hydrated.costBreakdown = breakdown || undefined;
+        } else {
+          sites.push({
+            id: String(projectId),
+            name: chosen?.name || 'Linked CM',
+            sqft: chosen?.facility_sqft || chosen?.total_sqft || 0,
+            annualCost: chosen?.total_annual_cost || 0,
+            targetMarginPct: chosen?.target_margin_pct || 10,
+            pricingModel: /** @type {const} */ (chosen?.pricing_model || 'cost-plus'),
+            costModelId: String(projectId),
+            costBreakdown: breakdown || undefined,
+          });
+        }
         financials = calc.computeDealFinancials(sites, activeDeal.contractTermYears || 5);
+        activeDeal._sites = sites; // keep Compare hydration in sync (sites may be a fresh array)
         overlay.remove();
         renderSites(parentEl);
       } catch (e) {

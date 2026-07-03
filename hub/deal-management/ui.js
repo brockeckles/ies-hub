@@ -429,10 +429,26 @@ function bindDelegatedEvents() {
     // Stage auto-advance
     if (target.closest('[data-action="advance-stage"]')) {
       if (selectedDeal && selectedDeal.stage < 6) {
+        const prevStage = selectedDeal.stage;
+        const prevDays = selectedDeal.daysInStage;
         selectedDeal.stage += 1;
         selectedDeal.daysInStage = 0;
         renderDetail();
-        bus.emit('toast:show', { message: `Advanced to Stage ${selectedDeal.stage}: ${DOS_STAGES.find(s => s.id === selectedDeal.stage)?.name || ''}`, level: 'success' });
+        // UX0-3: persist for real deals (optimistic, rollback on failure) —
+        // was memory-only, so the pipeline position vanished on reload.
+        if (_isRealDealId(selectedDeal.id)) {
+          const deal = selectedDeal;
+          api.advanceDealStage(deal.id, deal.stage).then(() => {
+            bus.emit('toast:show', { message: `Advanced to Stage ${deal.stage}: ${DOS_STAGES.find(s => s.id === deal.stage)?.name || ''}`, level: 'success' });
+          }).catch(err => {
+            deal.stage = prevStage;
+            deal.daysInStage = prevDays;
+            if (selectedDeal === deal) renderDetail();
+            bus.emit('toast:show', { message: 'Stage advance failed: ' + (err.message || err), level: 'error' });
+          });
+        } else {
+          bus.emit('toast:show', { message: `Advanced to Stage ${selectedDeal.stage}: ${DOS_STAGES.find(s => s.id === selectedDeal.stage)?.name || ''}`, level: 'success' });
+        }
       }
       return;
     }

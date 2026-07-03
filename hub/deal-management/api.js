@@ -402,8 +402,27 @@ export async function setDosElementStatus(dealId, elementId, status) {
   return data;
 }
 
+/**
+ * UX0-3 (2026-07-03): persist stage advancement. The "Advance to Stage N"
+ * button mutated memory only — current_stage_id never updated, so every
+ * reload reset the pipeline position (X3 in the 2026-07-03 UX assessment).
+ * @param {string} dealId — deal_deals.id (uuid)
+ * @param {number} stageNumber — 1..6 UI stage number (NOT stages.id)
+ * @returns {Promise<Object>} updated row
+ */
+export async function advanceDealStage(dealId, stageNumber) {
+  if (!dealId) throw new Error('advanceDealStage: dealId required');
+  const stages = await db.fetchAll('stages');
+  const match = (stages || []).find(s => Number(s.stage_number) === Number(stageNumber));
+  if (!match) throw new Error(`advanceDealStage: no stages row for stage_number ${stageNumber}`);
+  const { data, error } = await db.from('deal_deals')
+    .update({ current_stage_id: match.id }).eq('id', dealId).select().single();
+  if (error) { console.warn('[deal-mgmt] advanceDealStage failed', error); throw error; }
+  return data;
+}
+
 export default { fetchStages, fetchActivityTemplates, listRealDeals, createDeal, deleteDeal,
   loadStrategy, saveStrategy,
   listArtifactsByDeal, createArtifact, deleteArtifact,
-  loadDosStatusByDeal, setDosElementStatus,
+  loadDosStatusByDeal, setDosElementStatus, advanceDealStage,
 };
