@@ -27,6 +27,33 @@ Out of scope (report to the respective provider directly):
 - Cloudflare CDN vulnerabilities → https://www.cloudflare.com/trust-hub/
 - GXO enterprise infrastructure (corporate network, endpoint, SSO) → GXO IT
 
+## Authentication posture
+
+Documented for GXO IT review (updated 2026-07-04).
+
+All access requires a named Supabase Auth account (email + password); there
+is no self-service signup. Two-factor authentication (TOTP) is enforced at
+the application boot gate — a session that has not reached AAL2 is blocked
+from mounting the app shell (CIS Control 6.3):
+
+- **Admin tier: hard-gated.** Admins must enroll and verify a TOTP factor
+  before the app boots. No skip, no grace.
+- **Member tier: 14-day enrollment grace window (2026-07-04).** A member who
+  has not yet enrolled a factor may defer enrollment for up to 14 days from
+  the *first time they hit the gate*. The window anchor is stamped once,
+  server-side, by a `SECURITY DEFINER` RPC (`public.mfa_grace_start()`,
+  migration `20260704150000`) — it cannot be restarted from the client, and
+  the client fails closed (gate stays up) if the RPC returns nothing.
+  Members with a verified factor are always challenged; the grace window
+  defers enrollment only, never an active challenge.
+- The gate is app-layer enforcement; RLS team-scoping remains the data
+  boundary at any AAL. Hardening RLS to require AAL2 is tracked separately.
+
+Rationale for the grace window: newly provisioned members were blocked from
+first login by enrollment friction. The window lets them reach the tool
+while keeping a hard deadline, and admins — the accounts with elevated
+privileges — remain unconditionally gated.
+
 ## Reporting a vulnerability
 
 **Preferred channel:** email `brockeckles@gmail.com` with a subject line

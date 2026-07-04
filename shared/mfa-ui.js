@@ -24,7 +24,7 @@
  * @module shared/mfa-ui
  */
 
-import { auth } from './auth.js?v=20260702-sec2';
+import { auth } from './auth.js?v=20260704-mfa1';
 
 // ─── Public entry point ──────────────────────────────────────────────────
 
@@ -35,7 +35,7 @@ import { auth } from './auth.js?v=20260702-sec2';
  * @param {HTMLElement} overlay
  * @param {{ onPass: () => void, onLogout: () => void }} opts
  */
-export async function openMfaGate(overlay, { onPass, onLogout }) {
+export async function openMfaGate(overlay, { onPass, onLogout, grace = null }) {
   // Ensure overlay is visible and painted with a minimal host card so the
   // user sees something while we call listFactors().
   overlay.classList.remove('hidden');
@@ -59,7 +59,7 @@ export async function openMfaGate(overlay, { onPass, onLogout }) {
   if (verifiedFactorId) {
     renderChallengeModal(overlay, { factorId: verifiedFactorId, onPass, onLogout });
   } else {
-    renderEnrollModal(overlay, { onPass, onLogout });
+    renderEnrollModal(overlay, { onPass, onLogout, grace });
   }
 }
 
@@ -101,7 +101,7 @@ function escapeHtml(s) {
 
 // ─── Enrollment modal ────────────────────────────────────────────────────
 
-async function renderEnrollModal(overlay, { onPass, onLogout }) {
+async function renderEnrollModal(overlay, { onPass, onLogout, grace = null }) {
   overlay.innerHTML = `
     <div class="hub-auth-card" role="dialog" aria-label="Set up two-factor authentication" style="max-width:460px;">
       <div class="hub-auth-logo" aria-hidden="true">
@@ -159,6 +159,15 @@ async function renderEnrollModal(overlay, { onPass, onLogout }) {
       <button class="hub-btn hub-btn-primary w-full" id="mfa-enroll-verify" style="margin-top:14px;" disabled>
         Verify and activate
       </button>
+      ${grace && grace.eligible ? `
+      <!-- 2026-07-04 (UX decision #4): member-tier enrollment grace window.
+           Rendered ONLY when auth.mfaGraceInfo() says eligible — admins and
+           already-enrolled users never see this button. The window is
+           anchored server-side (mfa_grace_start RPC); this label counts
+           down and the button disappears when it hits zero. -->
+      <button class="hub-btn w-full" id="mfa-grace-skip" style="margin-top:8px;">
+        Set up later — ${grace.daysLeft} day${grace.daysLeft === 1 ? '' : 's'} left
+      </button>` : ''}
       <button class="hub-btn w-full" id="mfa-logout-btn" style="margin-top:8px;">Sign out</button>
     </div>
   `;
@@ -171,6 +180,12 @@ async function renderEnrollModal(overlay, { onPass, onLogout }) {
   const verifyBtn = overlay.querySelector('#mfa-enroll-verify');
 
   wireLogoutButton(overlay, onLogout);
+
+  // Grace skip — boots the app at aal1. requiresMfa() stays true, so the
+  // gate re-appears on every sign-in until the user enrolls or the window
+  // expires (at which point mfaGraceInfo flips ineligible → hard gate).
+  const skipBtn = overlay.querySelector('#mfa-grace-skip');
+  if (skipBtn) skipBtn.addEventListener('click', () => onPass());
 
   function showError(msg) {
     errorEl.textContent = msg;

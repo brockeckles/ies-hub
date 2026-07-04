@@ -7,7 +7,7 @@
 
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
-import { auth } from '../../shared/auth.js?v=20260702-sec2';
+import { auth } from '../../shared/auth.js?v=20260704-mfa1';
 
 // ============================================================
 // MASTER DATA

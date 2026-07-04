@@ -29,7 +29,7 @@
  *   completePasswordRecovery → signed in.
  *
  * Usage:
- *   import { auth } from './auth.js?v=20260702-sec2';
+ *   import { auth } from './auth.js?v=20260704-mfa1';
  *
  *   await auth.bootstrapSession();            // call once before gate check
  *   if (!auth.isAuthenticated()) {
@@ -365,6 +365,43 @@ async function getAalLevel() {
  *
  * @returns {Promise<boolean>}
  */
+/**
+ * TOTP grace window (2026-07-04, UX decision #4) — member tier only.
+ *
+ * Members who have NOT yet enrolled a TOTP factor may defer enrollment for
+ * MFA_GRACE_DAYS, anchored to the FIRST time they hit the gate. The anchor
+ * is stamped once server-side via the mfa_grace_start() RPC (SECURITY
+ * DEFINER, coalesce — later calls return the original timestamp, so the
+ * clock cannot be restarted from the client). Admins are excluded in the
+ * RPC itself AND here: they stay hard-gated.
+ *
+ * Fail-closed contract: any RPC failure / NULL return (admin, missing
+ * profile row) yields { eligible:false } and the gate stays up. Users with
+ * a verified factor are never grace-eligible — a 6-digit challenge is not
+ * the friction this window exists to defer.
+ *
+ * Documented for GXO IT in SECURITY.md ("Authentication posture").
+ */
+const MFA_GRACE_DAYS = 14;
+
+async function mfaGraceInfo() {
+  const none = { eligible: false, daysLeft: 0 };
+  try {
+    if (isAdmin()) return none; // hard gate — never eligible
+    if (await hasEnrolledFactors()) return none; // challenge, not skippable
+    const client = db.getClient();
+    if (!client) return none;
+    const { data, error } = await client.rpc('mfa_grace_start');
+    if (error || !data) return none; // fail CLOSED
+    const elapsedDays = (Date.now() - new Date(data).getTime()) / 86400000;
+    const daysLeft = Math.max(0, Math.ceil(MFA_GRACE_DAYS - elapsedDays));
+    return { eligible: daysLeft > 0, daysLeft };
+  } catch (err) {
+    console.warn('[auth] mfaGraceInfo threw:', err);
+    return none;
+  }
+}
+
 async function requiresMfa() {
   // RESTORED (2026-07-02) — the MFA gate lifted 2026-05-26 for GXO IT
   // reviewer logins is re-enabled ahead of the inside-firewall transition.
@@ -1905,6 +1942,7 @@ export const auth = {
   hasEnrolledFactors,
   getAalLevel,
   requiresMfa,
+  mfaGraceInfo,
   enrollTotp,
   verifyEnrollment,
   verifyChallenge,
