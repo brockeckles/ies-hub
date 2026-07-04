@@ -8,7 +8,7 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260703-ls1';
-import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
+import { markDirty as guardMarkDirty, markClean as guardMarkClean, listDirty as guardListDirty } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
@@ -388,7 +388,13 @@ async function enterTool(savedRow) {
       refreshToolChromeActions(el, _buildMostChromeOpts());
     },
     onSection: () => {}, // MOST has no sub-sections
-    onBack: () => { renderMostLanding(); },
+    onBack: async () => {
+      // 2026-07-04 dirty-guard gap: same as CM — in-tool Back bypassed the
+      // hash-based guard. Confirm when the editor has staged edits.
+      if (guardListDirty().includes('most') && !(await showConfirm('You have unsaved changes. Leave anyway?'))) return;
+      guardMarkClean('most');
+      renderMostLanding();
+    },
     onAction: (id) => _handleMostAction(id),
     onPrimaryShortcut: (id) => _handleMostAction(id),
   });
@@ -468,7 +474,13 @@ function _buildMostChromeHandlers() {
       }
     },
     onSection: () => {},
-    onBack: () => { renderMostLanding(); },
+    onBack: async () => {
+      // 2026-07-04 dirty-guard gap: same as CM — in-tool Back bypassed the
+      // hash-based guard. Confirm when the editor has staged edits.
+      if (guardListDirty().includes('most') && !(await showConfirm('You have unsaved changes. Leave anyway?'))) return;
+      guardMarkClean('most');
+      renderMostLanding();
+    },
     onAction: (id) => _handleMostAction(id),
     onPrimaryShortcut: (id) => _handleMostAction(id),
   };

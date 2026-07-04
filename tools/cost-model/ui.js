@@ -1290,6 +1290,12 @@ function wireEditorEvents() {
       renderCurrentView();
     },
     onBack: async () => {
+      // 2026-07-04 dirty-guard gap: chrome ← Back is an in-tool view swap
+      // (no hashchange), so the router's confirmLeaveIfDirty never fires —
+      // a dirty draft was silently discarded. Mirror COG's onBack pattern:
+      // confirm, then treat leaving as an explicit discard.
+      if (getIsDirty() && !(await showConfirm('You have unsaved changes. Leave anyway?'))) return;
+      resetDirty(); // state + guardMarkClean('cost-model') — explicit discard
       // Refresh saved-models list when returning to landing.
       try { savedModels = await api.listModels(); } catch (_) {}
       viewMode = 'landing';
