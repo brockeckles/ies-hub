@@ -99,6 +99,12 @@ export const DEFAULT_CONFIG = {
   // and capacity must agree. Supported: lb, cwt, pallets, units, cases,
   // orders, revenue.
   weightUnit: 'lb',
+  // UX-2 COG Setup (2026-07-04) — which freight-profile preset the Quick
+  // Setup select shows. '' = none/custom. Applying a preset patches the
+  // SAME config keys the Engineering Parameters cards edit (mode mix,
+  // rates, parcel knobs) — this key is bookkeeping for the select only,
+  // never read by the engines.
+  freightPreset: '',
   // 2026-05-29 — Demand scaling factor. Multiplies every point's weight
   // uniformly before the solve. Lets SDs dial sample data up to a
   // realistic customer scale without re-uploading (e.g. 'what if this
@@ -263,6 +269,90 @@ export const DEAL_STAGES = [
   { value: 'lost',     label: 'Lost / On Hold' },
   { value: 'internal', label: 'Internal / Scenario Sketch' },
 ];
+
+// ============================================================
+// UX-2 COG Setup (2026-07-04) — FREIGHT-PROFILE PRESETS
+// ============================================================
+// Each preset is a PATCH of DEFAULT_CONFIG keys (pinned by
+// test-ux2-cog-setup.mjs — a preset may never introduce a key the
+// Engineering Parameters surface doesn't already own). Rate anchors reuse
+// the 2026 rules-of-thumb documented on DEFAULT_CONFIG.modeRates above.
+export const FREIGHT_PROFILE_PRESETS = {
+  pure_tl: {
+    label: 'Retail replenishment — pure TL',
+    summary: '100% truckload, single $/mi rate. Big-box, grocery, CPG store replenishment.',
+    patch: {
+      modeMixEnabled: false,
+      modeMix: { tlPct: 100, ltlPct: 0, parcelPct: 0 },
+    },
+  },
+  tl_ltl_blend: {
+    label: 'Wholesale B2B — TL + LTL blend',
+    summary: '70% TL / 30% LTL effective blend. Distributors, MRO, aftermarket, pharma wholesale.',
+    patch: {
+      modeMixEnabled: true,
+      modeMix: { tlPct: 70, ltlPct: 30, parcelPct: 0 },
+    },
+  },
+  dtc_parcel: {
+    label: 'DTC E-Commerce — parcel-heavy',
+    summary: '80% parcel via zone-priced engine (5 lb avg, 85% residential), 15% TL / 5% LTL inbound-transfer slice.',
+    patch: {
+      modeMixEnabled: true,
+      modeMix: { tlPct: 15, ltlPct: 5, parcelPct: 80 },
+      parcelCarrier: 'fedex_ground',
+      parcelAvgPackageWeightLb: 5,
+      parcelResidentialShare: 0.85,
+      parcelFuelPct: 25,
+      parcelServiceMix: { ground: 90, threeDay: 5, twoDay: 5, overnight: 0 },
+    },
+  },
+  food_bev_reefer: {
+    label: 'Food & Beverage — refrigerated TL',
+    summary: '100% TL with reefer emissions intensity (2.10 kg CO\u2082/mi, EPA SmartWay refrigerated band).',
+    patch: {
+      modeMixEnabled: false,
+      modeMix: { tlPct: 100, ltlPct: 0, parcelPct: 0 },
+      co2KgPerTruckMile: 2.10,
+    },
+  },
+};
+
+// Deal-industry → suggested preset (assessment §6 D3: "freight-profile
+// presets wired to the deal's industry"). Returns a FREIGHT_PROFILE_PRESETS
+// key or null when there is no defensible default (Other / unset).
+export function freightPresetForIndustry(industry) {
+  switch (String(industry || '')) {
+    case 'dtc_ecom':
+    case 'apparel_lifestyle':
+    case 'tech_electronics':  return 'dtc_parcel';
+    case 'retail':
+    case 'cpg_grocery':       return 'pure_tl';
+    case 'food_bev':          return 'food_bev_reefer';
+    case 'b2b_dist':
+    case 'industrial_mro':
+    case 'auto_aftermarket':
+    case 'healthcare_pharma': return 'tl_ltl_blend';
+    default:                  return null;
+  }
+}
+
+/**
+ * Apply a freight-profile preset to a config. Pure — returns a NEW config;
+ * nested patch objects replace wholesale (a preset states its full mode
+ * mix / service mix, never a partial). Unknown key → config unchanged.
+ * @param {object} config
+ * @param {string} key — FREIGHT_PROFILE_PRESETS key
+ */
+export function applyFreightPreset(config, key) {
+  const preset = FREIGHT_PROFILE_PRESETS[key];
+  if (!preset) return { ...config };
+  const next = { ...config, freightPreset: key };
+  for (const [k, v] of Object.entries(preset.patch)) {
+    next[k] = (v && typeof v === 'object' && !Array.isArray(v)) ? { ...v } : v;
+  }
+  return next;
+}
 
 // CoG weight-unit metadata — drives label text + step sizes in the UI.
 export const WEIGHT_UNIT_OPTIONS = [

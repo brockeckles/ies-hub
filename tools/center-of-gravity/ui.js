@@ -13,11 +13,12 @@ import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEve
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260702-p1m1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
-import * as calc from './calc.js?v=20260703-ux0';
+import * as calc from './calc.js?v=20260704-ux2c';
 import * as api from './api.js?v=20260703-dc2';
 import * as cmApi from '../cost-model/api.js?v=20260703-p33';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
+import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -27,6 +28,19 @@ const COG_GROUPS = [
   { key: 'parameters', label: 'Parameters', description: 'k, $/mi, capacity, candidates' },
   { key: 'run',        label: 'Run',        description: 'Numbers, map, sensitivity' },
 ];
+// UX-2 COG Setup (2026-07-04) — Quick-tier chrome. Two phases: Setup (five
+// business questions over the SAME config/points state the Engineering
+// phases edit) + Results (the run phase, shared verbatim with Engineering).
+const COG_QUICK_GROUPS = [
+  { key: 'setup', label: 'Setup',   description: 'Five questions — demand, k, freight, service, current DCs' },
+  { key: 'run',   label: 'Results', description: 'Numbers, map, sensitivity' },
+];
+/** Quick chrome applies on the Setup canvas, and on Results while the tier
+ *  pref is quick (so Run doesn't yank the user into Engineering tabs). */
+function _cogQuickChrome() {
+  return activePhase === 'setup'
+    || (activePhase === 'run' && tierSvc.getTier('cog') === 'quick');
+}
 const COG_SECTIONS = [
   { key: 'numbers',     label: '\u{1F4CA} Numbers',     group: 'run' },
   { key: 'map',         label: '\u{1F5FA} Map',         group: 'run' },
@@ -292,6 +306,7 @@ function openEditor(savedRow) {
   runState.reset();
   if (cogResult) runState.markClean(runStateInputs());
 
+  _applyCogTierOpenRemap();
   rootEl.innerHTML = renderShell();
   bindShellEvents();
   renderContent();
@@ -382,8 +397,8 @@ function _undoReplace() {
   _lastReplacedPoints = null;
   markDirty();
   if (rootEl) {
-    const inputsEl = rootEl.querySelector('#cog-content');
-    if (inputsEl && activePhase === 'inputs') renderInputsPhase(inputsEl);
+    // UX-2: setup phase shows the same points state — re-render in place.
+    if (activePhase === 'inputs' || activePhase === 'setup') renderContent();
     else {
       rootEl.innerHTML = renderShell();
       bindShellEvents();
@@ -768,7 +783,12 @@ function _buildCogChromeOpts() {
 
   const runStateClass = runState.state(runStateInputs());
 
+  const _quick = _cogQuickChrome();
   const actions = [
+    { id: 'cog-tier',
+      label: _quick ? 'Engineering' : 'Quick',
+      title: _quick ? 'Switch to Engineering mode — all phases & knobs'
+                    : 'Switch to Quick mode — 5-question Setup (everything else keeps its current value)' },
     { id: 'cog-save',
       label: activeScenarioId ? '\u{1F4BE} Save' : '\u{1F4BE} Save Scenario',
       title: activeScenarioId ? 'Update this scenario' : 'Save this scenario to open it again later',
@@ -792,7 +812,7 @@ function _buildCogChromeOpts() {
 
   return {
     toolKey: 'cog',
-    groups: COG_GROUPS,
+    groups: _quick ? COG_QUICK_GROUPS : COG_GROUPS,
     sections: COG_SECTIONS,
     activePhase,
     activeSection,
@@ -806,7 +826,7 @@ function _buildCogChromeOpts() {
     sidebarFooter,
     bodyHtml: '<div id="cog-content" style="overflow-y:auto;padding:24px;height:100%;"></div>',
     backTitle: 'Back to scenarios',
-    emptyPhaseHint: activePhase === 'run' ? '' : 'Single-canvas phase — switch to Run for sub-views',
+    emptyPhaseHint: activePhase === 'run' ? '' : (_quick ? 'Single-canvas Setup — Run to see Results sub-views' : 'Single-canvas phase — switch to Run for sub-views'),
   };
 }
 
@@ -938,6 +958,32 @@ function renderCogStepper() {
   return;
 }
 
+/** UX-2 — flip Quick ⇄ Engineering. Setup ⇄ Inputs; Results stays put.
+ *  Crossing the boundary IS choosing the tier (CM pattern, ux2a). */
+function handleCogTierToggle() {
+  const toQuick = !_cogQuickChrome();
+  tierSvc.setTier('cog', toQuick ? 'quick' : 'engineering');
+  if (toQuick) {
+    if (activePhase !== 'run') activePhase = 'setup';
+  } else if (activePhase === 'setup') {
+    activePhase = 'inputs';
+  }
+  if (!rootEl) return;
+  rootEl.innerHTML = renderShell();
+  bindShellEvents();
+  renderContent();
+  _refreshCogKpis();
+}
+
+/** UX-2 — quick-tier editor opens land on Setup. Must run BEFORE
+ *  renderShell() builds chrome from activePhase (CM walk-fix lesson,
+ *  8c35e1b: remap-after-renderShell = Engineering tabs over Quick content). */
+function _applyCogTierOpenRemap() {
+  if (tierSvc.getTier('cog') === 'quick' && (activePhase === 'inputs' || activePhase === 'parameters')) {
+    activePhase = 'setup';
+  }
+}
+
 async function bindShellEvents() {
   if (!rootEl) return;
   rootEl.__tcBound = false;
@@ -971,6 +1017,7 @@ async function bindShellEvents() {
       await renderLanding();
     },
     onAction: (id) => {
+      if (id === 'cog-tier') return handleCogTierToggle();
       if (id === 'cog-save') return handleSave();
       if (id === 'cog-run') {
         // 2026-05-28 H7 — show 'Solving…' on the Run button before the
@@ -1044,7 +1091,10 @@ async function bindShellEvents() {
       const subTabMap = { n: 'numbers', m: 'map', v: 'sensitivity', c: 'compare' };
       if (phaseMap[k]) {
         e.preventDefault();
-        activePhase = /** @type {any} */ (phaseMap[k]);
+        let _ph = phaseMap[k];
+        // UX-2: in the quick tier, Inputs/Parameters keys land on Setup.
+        if (tierSvc.getTier('cog') === 'quick' && (_ph === 'inputs' || _ph === 'parameters')) _ph = 'setup';
+        activePhase = /** @type {any} */ (_ph);
         if (activePhase === 'run' && !runSubTab) runSubTab = 'numbers';
         rootEl.innerHTML = renderShell();
         bindShellEvents();
@@ -1123,6 +1173,7 @@ function renderContent() {
   // Facilities (lifted off the old Demand Points tab); Run hosts Numbers /
   // Map / Sensitivity sub-tabs over a single solve.
   switch (activePhase) {
+    case 'setup':      renderSetupPhase(el); break;
     case 'inputs':     renderInputsPhase(el); break;
     case 'parameters': renderParametersPhase(el); break;
     case 'run':        renderRunPhase(el); break;
@@ -1299,8 +1350,7 @@ function renderUploadWizard(container) {
   });
   container.querySelector('#cog-wiz-cancel')?.addEventListener('click', () => {
     _pendingUpload = null;
-    const inputsEl = rootEl?.querySelector('#cog-content');
-    if (inputsEl) renderInputsPhase(inputsEl);
+    renderContent();  // UX-2: phase-aware (inputs OR quick setup)
   });
   container.querySelector('#cog-wiz-confirm')?.addEventListener('click', async () => {
     if (!valid) return;
@@ -1394,8 +1444,7 @@ async function _commitPendingUpload(mode = 'replace') {
   if (allUpload.length === 0) {
     showToast(`Nothing loaded — every row blank/unparseable.`, 'err');
     _pendingUpload = null;
-    const inputsEl = rootEl?.querySelector('#cog-content');
-    if (inputsEl) renderInputsPhase(inputsEl);
+    renderContent();  // UX-2: phase-aware (inputs OR quick setup)
     return;
   }
   if (mode === 'append' && points.length > 0) {
@@ -1412,8 +1461,7 @@ async function _commitPendingUpload(mode = 'replace') {
       const ok = await showConfirm(`Replace ${points.length} existing point${points.length === 1 ? '' : 's'} with ${allUpload.length} from "${pu.fileName}" (${loaded.length} active, ${excluded.length} excluded)?`);
       if (!ok) {
         _pendingUpload = null;
-        const inputsEl = rootEl?.querySelector('#cog-content');
-        if (inputsEl) renderInputsPhase(inputsEl);
+        renderContent();  // UX-2: phase-aware (inputs OR quick setup)
         return;
       }
       _snapshotForUndo(`Upload "${pu.fileName}"`);
@@ -1422,8 +1470,7 @@ async function _commitPendingUpload(mode = 'replace') {
   }
   _pendingUpload = null;
   markDirty();
-  const inputsEl = rootEl?.querySelector('#cog-content');
-  if (inputsEl) renderInputsPhase(inputsEl);
+  renderContent();  // UX-2: phase-aware (inputs OR quick setup)
   const tail = excluded.length > 0 ? ` — ${excluded.length} excluded (visible in table)` : '';
   const verb = mode === 'append' ? 'Appended' : 'Loaded';
   if (_lastReplacedPoints) {
@@ -1431,6 +1478,161 @@ async function _commitPendingUpload(mode = 'replace') {
   } else {
     showToast(`${verb} ${loaded.length} active point${loaded.length === 1 ? '' : 's'} from ${pu.fileName}${tail}.`, excluded.length > 0 ? 'warn' : 'ok');
   }
+}
+
+// ============================================================
+// UX-2 / D3 (2026-07-04) — QUICK SETUP PHASE (assessment §6 D3)
+// ============================================================
+// Five business questions over the SAME state the Engineering phases edit.
+// PURE RENDERING FILTER: every control reuses the exact element id an
+// Engineering phase renders, so _bindDemandIngestion + _bindParametersEvents
+// give behavior for free (null-safe queries — absent controls just skip).
+// The one quick-only control is the freight-preset select, and it only
+// APPLIES calc.FREIGHT_PROFILE_PRESETS patches onto DEFAULT_CONFIG keys the
+// Parameters cards already own (pinned by test-ux2-cog-setup.mjs).
+
+function _setupCard(n, title, hint, bodyHtml, advPhase, advLabel) {
+  return `
+    <div class="hub-card" style="margin-bottom:14px;padding:14px 16px;border-left:3px solid var(--ies-blue);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;">
+        <div style="font-size:12px;font-weight:700;color:var(--ies-gray-700);">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--ies-blue);color:#fff;font-size:11px;margin-right:8px;">${n}</span>${title}
+        </div>
+        ${advPhase ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-cog-adv="${advPhase}" title="Open the full Engineering surface — flips this scenario view to Engineering mode">${advLabel} ⚙</button>` : ''}
+      </div>
+      ${hint ? `<div style="font-size:11px;color:var(--ies-gray-400);margin-bottom:10px;">${hint}</div>` : ''}
+      ${bodyHtml}
+    </div>`;
+}
+
+function renderSetupPhase(el) {
+  const activePts = points.filter(p => p.type !== 'excluded');
+  const totalWeight = activePts.reduce((s, p) => s + p.weight, 0);
+  const wmeta = calc.getWeightUnitMeta(config.weightUnit || 'lb');
+  const suggested = calc.freightPresetForIndustry(config.industry);
+  const activePreset = calc.FREIGHT_PROFILE_PRESETS[config.freightPreset] || null;
+  const svcVal = config.maxServiceMiles ?? 0;
+  const svcOptions = [
+    { v: 0,   label: 'No service target' },
+    { v: 250, label: '250 mi — same-day parcel' },
+    { v: 500, label: '500 mi — next-day TL' },
+    { v: 800, label: '800 mi — 2-day LTL' },
+  ];
+  if (!svcOptions.some(o => o.v === svcVal)) svcOptions.push({ v: svcVal, label: `${svcVal} mi — custom` });
+  const csList = config.currentStateDCs || [];
+
+  el.innerHTML = `
+    <div style="max-width:860px;">
+      <div style="margin-bottom:16px;">
+        <div style="font-size:15px;font-weight:700;color:var(--ies-gray-700);">Where should the network run from?</div>
+        <div style="font-size:12px;color:var(--ies-gray-400);">Five questions, then <strong>▶ Run</strong>. Solver internals, mode-mix rates and parcel knobs stay on defaults — every ⚙ opens the full Engineering surface.</div>
+      </div>
+
+      ${_setupCard(1, 'Customer demand', 'Upload the customer\'s ZIP + units file — the mapping wizard handles layouts. Or load the demo to explore.', `
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <input type="file" id="cog-xlsx-input" accept=".xlsx,.xls,.csv" style="display:none;" />
+          <button class="hub-btn hub-btn-sm hub-btn-primary" id="cog-xlsx-pick" title="Choose an Excel (.xlsx, .xls) or CSV file — column-mapping wizard opens next">📂 Upload demand file</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-load-demo" title="Load a 10-point US demo fixture">Load Demo</button>
+          <span id="cog-xlsx-filename" style="font-size:12px;color:var(--ies-gray-500);font-style:italic;"></span>
+          <span style="flex:1;text-align:right;font-size:12px;font-weight:600;color:${activePts.length ? 'var(--ies-gray-700)' : 'var(--ies-red)'};">
+            ${activePts.length ? `${activePts.length.toLocaleString()} points · ${totalWeight.toLocaleString()} ${wmeta.short}/yr` : 'No demand yet'}
+          </span>
+        </div>
+        <div id="cog-xlsx-feedback" style="font-size:11px;color:var(--ies-gray-400);display:none;margin-top:6px;"></div>
+        <div id="cog-upload-wizard" style="${_pendingUpload ? '' : 'display:none;'}margin-top:8px;"></div>
+      `, 'inputs', 'All points')}
+
+      ${_setupCard(2, 'How many DCs?', 'Auto solves every k and adopts the cost-curve recommendation — the default answer to "how many DCs should we quote?"', `
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="cog-k-auto" ${config.kAuto ? 'checked' : ''} style="cursor:pointer;">
+            Auto (recommended)
+          </label>
+          <span style="font-size:12px;color:var(--ies-gray-400);">or pin it:</span>
+          <input type="number" value="${config.numCenters}" min="1" max="20" id="cog-k" ${config.kAuto ? 'disabled' : ''}
+                 style="width:64px;padding:7px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:14px;font-weight:700;text-align:center;color:var(--ies-blue);${config.kAuto ? 'opacity:.55;' : ''}">
+        </div>
+      `, null, '')}
+
+      ${_setupCard(3, 'Freight profile', 'Sets the transport-mode blend the cost engine prices. Presets patch the same knobs the Engineering Parameters cards edit.', `
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <select id="cog-freight-preset" style="min-width:280px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;">
+            <option value="">${config.modeMixEnabled ? '— Custom (Engineering-edited mix) —' : '— Default: pure TL —'}</option>
+            ${Object.entries(calc.FREIGHT_PROFILE_PRESETS).map(([k, pr]) =>
+              `<option value="${k}"${config.freightPreset === k ? ' selected' : ''}>${pr.label}${suggested === k ? ' ★ suggested' : ''}</option>`).join('')}
+          </select>
+          ${suggested && config.freightPreset !== suggested ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-preset-suggested" title="${calc.FREIGHT_PROFILE_PRESETS[suggested].summary.replace(/"/g, '&quot;')}">★ Use ${calc.FREIGHT_PROFILE_PRESETS[suggested].label}</button>` : ''}
+        </div>
+        <div style="font-size:11px;color:var(--ies-gray-500);margin-top:6px;">
+          ${activePreset ? activePreset.summary : (config.modeMixEnabled
+            ? `Mode mix on: TL ${config.modeMix?.tlPct ?? 100}% · LTL ${config.modeMix?.ltlPct ?? 0}% · parcel ${config.modeMix?.parcelPct ?? 0}%`
+            : `Pure TL at $${config.transportCostPerMile}/mi — pick a preset if this customer ships LTL or parcel.`)}
+          ${suggested && !activePreset ? ` <span style="color:var(--ies-blue);">Deal industry suggests: ${calc.FREIGHT_PROFILE_PRESETS[suggested].label}.</span>` : ''}
+        </div>
+      `, 'parameters', 'Rates & parcel')}
+
+      ${_setupCard(4, 'Service target', 'Flags demand outside the radius after Run — answers "can we hit next-day coverage?" without changing the solve.', `
+        <select id="cog-max-service" style="min-width:240px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;">
+          ${svcOptions.map(o => `<option value="${o.v}"${svcVal === o.v ? ' selected' : ''}>${o.label}</option>`).join('')}
+        </select>
+      `, null, '')}
+
+      ${_setupCard(5, 'Current network (optional)', 'One DC per line: <code>Label, Lat, Lng</code>. Unlocks the vs-current benchmark card — the headline RFP number.', `
+        <textarea id="cog-currentstate-list" rows="3"
+                  placeholder="Memphis DC, 35.1495, -90.0490&#10;Columbus DC, 39.9612, -82.9988"
+                  style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-family:monospace;line-height:1.5;">${csList.map(c => `${c.label || ''}, ${c.lat}, ${c.lng}`).join('\n')}</textarea>
+        <div id="cog-currentstate-feedback" style="font-size:11px;color:var(--ies-gray-400);margin-top:4px;">${csList.length ? `${csList.length} current-state DC${csList.length === 1 ? '' : 's'} loaded — benchmark card appears on Results after Run` : 'No current state yet — leave blank for a greenfield view.'}</div>
+      `, null, '')}
+
+      <div style="font-size:12px;color:var(--ies-gray-400);padding:4px 2px 24px;">
+        Ready? Hit <strong>▶ Run</strong> (Cmd/Ctrl+Enter) — Results open on the Numbers tab with the answer up top.
+      </div>
+    </div>
+  `;
+
+  // Re-mount the wizard mid-flow on re-render (same pattern as Inputs).
+  if (_pendingUpload) {
+    const wizEl = el.querySelector('#cog-upload-wizard');
+    if (wizEl) renderUploadWizard(/** @type {HTMLElement} */ (wizEl));
+  }
+
+  const rerender = () => renderSetupPhase(el);
+  _bindDemandIngestion(el, rerender);
+  _bindParametersEvents(el, rerender);
+
+  // Quick-only: freight-preset select + one-click suggested button.
+  const _applyPreset = (key) => {
+    if (!key) {
+      config.freightPreset = '';
+      markDirty();
+      rerender();
+      return;
+    }
+    config = calc.applyFreightPreset(config, key);
+    markDirty();
+    rerender();
+    showToast(`Applied "${calc.FREIGHT_PROFILE_PRESETS[key].label}" — mode mix + parcel knobs set. Rates stay editable under Engineering ⚙.`, 'ok');
+  };
+  el.querySelector('#cog-freight-preset')?.addEventListener('change', (e) => {
+    _applyPreset(/** @type {HTMLSelectElement} */ (e.target).value);
+  });
+  el.querySelector('#cog-preset-suggested')?.addEventListener('click', () => {
+    const s = calc.freightPresetForIndustry(config.industry);
+    if (s) _applyPreset(s);
+  });
+
+  // Advanced ⚙ hatches — crossing the boundary IS choosing Engineering.
+  el.querySelectorAll('[data-cog-adv]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      tierSvc.setTier('cog', 'engineering');
+      activePhase = /** @type {any} */ (/** @type {HTMLElement} */ (btn).dataset.cogAdv || 'inputs');
+      if (!rootEl) return;
+      rootEl.innerHTML = renderShell();
+      bindShellEvents();
+      renderContent();
+      _refreshCogKpis();
+    });
+  });
 }
 
 function renderInputsPhase(el) {
@@ -1684,178 +1886,7 @@ function renderInputsPhase(el) {
     renderInputsPhase(el);
   });
 
-  el.querySelector('#cog-load-demo')?.addEventListener('click', () => {
-    if (points.length > 0) _snapshotForUndo('Load Demo');
-    points = calc.DEMO_POINTS.map(p => ({ ...p }));
-    markDirty();
-    renderInputsPhase(el);
-    if (_lastReplacedPoints) {
-      showToast(`Loaded ${points.length} demo points. <button data-cog-undo style="margin-left:8px;text-decoration:underline;background:none;border:none;color:inherit;cursor:pointer;font-weight:700;">Undo</button>`, 'ok', { html: true });
-    } else {
-      showToast(`Loaded ${points.length} demo points.`, 'ok');
-    }
-  });
-
-  // 2026-05-26 — XLS / XLSX / CSV upload. Two columns: 5-digit ZIP + units.
-  // Parses with the globally-loaded SheetJS (already in index.html for
-  // exports). Auto-detects a header row, looks up each ZIP via
-  // calc.lookupLocation, pushes one demand point per resolved row.
-  // Mirrors the archetype loader's confirm-replace pattern.
-  const xlsxBtn = el.querySelector('#cog-xlsx-pick');
-  const xlsxInput = /** @type {HTMLInputElement|null} */ (el.querySelector('#cog-xlsx-input'));
-  const xlsxName = el.querySelector('#cog-xlsx-filename');
-  const xlsxFb = el.querySelector('#cog-xlsx-feedback');
-  const showFeedback = (msg, level) => {
-    if (!xlsxFb) return;
-    xlsxFb.style.display = 'block';
-    xlsxFb.textContent = msg;
-    xlsxFb.style.color = level === 'err' ? 'var(--ies-red)'
-      : level === 'warn' ? '#a16207'
-      : 'var(--ies-gray-500)';
-  };
-  xlsxBtn?.addEventListener('click', () => { xlsxInput?.click(); });
-  xlsxInput?.addEventListener('change', async (evt) => {
-    const file = /** @type {HTMLInputElement} */ (evt.target)?.files?.[0];
-    if (!file) return;
-    if (xlsxName) xlsxName.textContent = file.name;
-    showFeedback('Reading…', 'info');
-    // 2026-05-28 C1 — parse + open the wizard instead of resolving inline.
-    const XLSX_ = /** @type {any} */ (typeof window !== 'undefined' ? window.XLSX : null);
-    if (!XLSX_ || !XLSX_.read) {
-      showFeedback('Spreadsheet parser not loaded — refresh and retry.', 'err');
-      return;
-    }
-    let bufW;
-    try { bufW = await file.arrayBuffer(); } catch (err) { showFeedback(`Read failed: ${err?.message || err}`, 'err'); return; }
-    let aoaW;
-    try {
-      const wbW = XLSX_.read(bufW, { type: 'array' });
-      const sn = wbW.SheetNames[0];
-      if (!sn) { showFeedback('File has no sheets.', 'err'); return; }
-      aoaW = XLSX_.utils.sheet_to_json(wbW.Sheets[sn], { header: 1, defval: '', blankrows: false });
-    } catch (err) { showFeedback(`Parse failed: ${err?.message || err}`, 'err'); return; }
-    if (!Array.isArray(aoaW) || aoaW.length === 0) { showFeedback('File is empty.', 'err'); return; }
-    const looksLikeData = /^\s*\d{1,5}\s*$/.test(String(aoaW[0]?.[0] ?? '')) || (typeof aoaW[0]?.[0] === 'number');
-    const headerRowW = looksLikeData ? null : (aoaW[0] || []).map(v => String(v || ''));
-    _pendingUpload = { fileName: file.name, aoa: aoaW, headerRow: headerRowW, mapping: {} };
-    if (xlsxInput) xlsxInput.value = '';
-    if (xlsxFb) xlsxFb.style.display = 'none';
-    const wizEl = el.querySelector('#cog-upload-wizard');
-    if (wizEl) renderUploadWizard(/** @type {HTMLElement} */ (wizEl));
-    return;  // wizard owns the rest of the flow
-    // ────── legacy inline-resolution path below (unreachable, kept one
-    // commit for diff readability) ──────
-
-    // SheetJS lives at window.XLSX — same global the exports use.
-    const XLSX = /** @type {any} */ (typeof window !== 'undefined' ? window.XLSX : null);
-    if (!XLSX || !XLSX.read) {
-      showFeedback('Spreadsheet parser not loaded — refresh the page and try again.', 'err');
-      showToast('Spreadsheet library missing — hard refresh and retry.', 'err');
-      return;
-    }
-
-    let buffer;
-    try {
-      buffer = await file.arrayBuffer();
-    } catch (err) {
-      showFeedback(`Failed to read file: ${err?.message || err}`, 'err');
-      return;
-    }
-
-    let aoa;
-    try {
-      const wb = XLSX.read(buffer, { type: 'array' });
-      const sheetName = wb.SheetNames[0];
-      if (!sheetName) {
-        showFeedback('The file has no sheets.', 'err');
-        return;
-      }
-      aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: '', blankrows: false });
-    } catch (err) {
-      showFeedback(`Failed to parse file: ${err?.message || err}`, 'err');
-      return;
-    }
-
-    if (!Array.isArray(aoa) || aoa.length === 0) {
-      showFeedback('The file is empty.', 'err');
-      return;
-    }
-
-    // Header-row auto-detect: if the first row's first cell isn't a
-    // numeric / ZIP-looking value, treat it as a header and skip it.
-    const looksLikeZip = (v) => /^\s*\d{1,5}\s*$/.test(String(v ?? ''));
-    const dataRows = looksLikeZip(aoa[0]?.[0]) ? aoa : aoa.slice(1);
-
-    const loaded = [];
-    const excluded = [];  // surfaced in points table as type='excluded'
-    const skipped = { badZip: 0, noMatch: 0, badUnits: 0, blank: 0 };
-    for (const row of dataRows) {
-      if (!row || row.length === 0 || (row[0] === '' && row[1] === '')) { skipped.blank++; continue; }
-      // Normalize ZIP: 5-digit string, left-pad if Excel stripped leading zeros.
-      const rawZip = String(row[0] ?? '').trim();
-      if (!rawZip) { skipped.badZip++; continue; }
-      const zip = rawZip.replace(/[^0-9]/g, '').padStart(5, '0').slice(-5);
-      if (!/^\d{5}$/.test(zip)) { skipped.badZip++; continue; }
-      const unitsRaw = Number(String(row[1] ?? '').replace(/[,$\s]/g, ''));
-      const validUnits = Number.isFinite(unitsRaw) && unitsRaw > 0;
-      const hit = calc.lookupLocation(zip);
-      // 2026-05-26 — instead of silently dropping no-match / bad-units
-      // rows, surface them in the points table as type='excluded' so
-      // the user can see exactly what didn't make it.
-      if (!hit || !validUnits) {
-        const reason = !hit ? 'no ZIP match' : 'missing / invalid units';
-        if (!hit) skipped.noMatch++; else skipped.badUnits++;
-        excluded.push({
-          id: 'px' + Date.now() + '_' + (loaded.length + excluded.length),
-          name: `ZIP ${zip} — excluded (${reason})`,
-          lat: null,
-          lng: null,
-          weight: validUnits ? Math.max(1, Math.round(unitsRaw)) : 0,
-          type: 'excluded',
-        });
-        continue;
-      }
-      loaded.push({
-        id: 'p' + Date.now() + '_' + loaded.length,
-        name: `${hit.name} (${zip})`,
-        lat: hit.lat,
-        lng: hit.lng,
-        weight: Math.max(1, Math.round(unitsRaw)),
-        type: 'demand',
-      });
-    }
-
-    const allUpload = [...loaded, ...excluded];
-    if (allUpload.length === 0) {
-      const reason = skipped.badZip ? `${skipped.badZip} bad ZIP${skipped.badZip === 1 ? '' : 's'}`
-        : 'no usable rows (all blank or unparseable)';
-      showFeedback(`Nothing loaded — ${reason}.`, 'err');
-      // Reset the input so the same file can be re-picked after fixing it.
-      if (xlsxInput) xlsxInput.value = '';
-      return;
-    }
-
-    if (points.length > 0) {
-      const ok = await showConfirm(`Replace ${points.length} existing point${points.length === 1 ? '' : 's'} with ${allUpload.length} from "${file.name}" (${loaded.length} active, ${excluded.length} excluded)?`);
-      if (!ok) {
-        showFeedback('Cancelled — existing points kept.', 'info');
-        if (xlsxInput) xlsxInput.value = '';
-        return;
-      }
-      _snapshotForUndo(`Upload "${file.name}"`);
-    }
-    points = allUpload;
-    markDirty();
-    renderInputsPhase(el);
-    const tailParts = [];
-    if (excluded.length > 0) tailParts.push(`${excluded.length} excluded (visible in table)`);
-    if (skipped.badZip > 0) tailParts.push(`${skipped.badZip} bad ZIP dropped`);
-    if (skipped.blank > 0) tailParts.push(`${skipped.blank} blank dropped`);
-    const tail = tailParts.length ? ` — ${tailParts.join(', ')}` : '';
-    showToast(`Loaded ${loaded.length} active point${loaded.length === 1 ? '' : 's'} from ${file.name}${tail}.`, excluded.length > 0 ? 'warn' : 'ok');
-    // Reset so re-uploading the same file fires the change event again.
-    if (xlsxInput) xlsxInput.value = '';
-  });
+  _bindDemandIngestion(el, () => renderInputsPhase(el));
 
   // City/state/ZIP lookup → resolve and append a point.
   const lookupInput  = /** @type {HTMLInputElement|null} */ (el.querySelector('#cog-lookup-input'));
@@ -1959,6 +1990,76 @@ function renderInputsPhase(el) {
     const wizEl = el.querySelector('#cog-upload-wizard');
     if (wizEl) renderUploadWizard(/** @type {HTMLElement} */ (wizEl));
   }
+}
+
+/** UX-2 (2026-07-04) — demand-ingestion bindings (Load Demo + XLS/XLSX/CSV
+ *  upload wizard trigger) extracted from renderInputsPhase so the Quick
+ *  Setup canvas reuses the exact same ids + flow. The unreachable legacy
+ *  inline-resolution path (kept 'one commit' since 2026-05-28) was removed
+ *  in this extraction — the wizard has owned the flow since C1.
+ *  @param {HTMLElement} el @param {() => void} rerender */
+function _bindDemandIngestion(el, rerender) {
+  el.querySelector('#cog-load-demo')?.addEventListener('click', () => {
+    if (points.length > 0) _snapshotForUndo('Load Demo');
+    points = calc.DEMO_POINTS.map(p => ({ ...p }));
+    markDirty();
+    rerender();
+    if (_lastReplacedPoints) {
+      showToast(`Loaded ${points.length} demo points. <button data-cog-undo style="margin-left:8px;text-decoration:underline;background:none;border:none;color:inherit;cursor:pointer;font-weight:700;">Undo</button>`, 'ok', { html: true });
+    } else {
+      showToast(`Loaded ${points.length} demo points.`, 'ok');
+    }
+  });
+
+  // 2026-05-26 — XLS / XLSX / CSV upload. Two columns: 5-digit ZIP + units.
+  // Parses with the globally-loaded SheetJS (already in index.html for
+  // exports). Auto-detects a header row, looks up each ZIP via
+  // calc.lookupLocation, pushes one demand point per resolved row.
+  // Mirrors the archetype loader's confirm-replace pattern.
+  const xlsxBtn = el.querySelector('#cog-xlsx-pick');
+  const xlsxInput = /** @type {HTMLInputElement|null} */ (el.querySelector('#cog-xlsx-input'));
+  const xlsxName = el.querySelector('#cog-xlsx-filename');
+  const xlsxFb = el.querySelector('#cog-xlsx-feedback');
+  const showFeedback = (msg, level) => {
+    if (!xlsxFb) return;
+    xlsxFb.style.display = 'block';
+    xlsxFb.textContent = msg;
+    xlsxFb.style.color = level === 'err' ? 'var(--ies-red)'
+      : level === 'warn' ? '#a16207'
+      : 'var(--ies-gray-500)';
+  };
+  xlsxBtn?.addEventListener('click', () => { xlsxInput?.click(); });
+  xlsxInput?.addEventListener('change', async (evt) => {
+    const file = /** @type {HTMLInputElement} */ (evt.target)?.files?.[0];
+    if (!file) return;
+    if (xlsxName) xlsxName.textContent = file.name;
+    showFeedback('Reading…', 'info');
+    // 2026-05-28 C1 — parse + open the wizard instead of resolving inline.
+    const XLSX_ = /** @type {any} */ (typeof window !== 'undefined' ? window.XLSX : null);
+    if (!XLSX_ || !XLSX_.read) {
+      showFeedback('Spreadsheet parser not loaded — refresh and retry.', 'err');
+      return;
+    }
+    let bufW;
+    try { bufW = await file.arrayBuffer(); } catch (err) { showFeedback(`Read failed: ${err?.message || err}`, 'err'); return; }
+    let aoaW;
+    try {
+      const wbW = XLSX_.read(bufW, { type: 'array' });
+      const sn = wbW.SheetNames[0];
+      if (!sn) { showFeedback('File has no sheets.', 'err'); return; }
+      aoaW = XLSX_.utils.sheet_to_json(wbW.Sheets[sn], { header: 1, defval: '', blankrows: false });
+    } catch (err) { showFeedback(`Parse failed: ${err?.message || err}`, 'err'); return; }
+    if (!Array.isArray(aoaW) || aoaW.length === 0) { showFeedback('File is empty.', 'err'); return; }
+    const looksLikeData = /^\s*\d{1,5}\s*$/.test(String(aoaW[0]?.[0] ?? '')) || (typeof aoaW[0]?.[0] === 'number');
+    const headerRowW = looksLikeData ? null : (aoaW[0] || []).map(v => String(v || ''));
+    _pendingUpload = { fileName: file.name, aoa: aoaW, headerRow: headerRowW, mapping: {} };
+    if (xlsxInput) xlsxInput.value = '';
+    if (xlsxFb) xlsxFb.style.display = 'none';
+    const wizEl = el.querySelector('#cog-upload-wizard');
+    if (wizEl) renderUploadWizard(/** @type {HTMLElement} */ (wizEl));
+    return;  // wizard owns the rest of the flow
+  });
+
 }
 
 function renderParametersPhase(el) {
@@ -2330,6 +2431,15 @@ function renderParametersPhase(el) {
     </div>
   `;
 
+  _bindParametersEvents(el, () => renderParametersPhase(el));
+}
+
+/** UX-2 (2026-07-04) — Parameters bindings extracted from
+ *  renderParametersPhase so the Quick Setup canvas can reuse them on the
+ *  SAME element ids (null-safe queries: only controls present bind).
+ *  @param {HTMLElement} el @param {() => void} rerender — phase-correct
+ *  re-render for handlers that need a repaint. */
+function _bindParametersEvents(el, rerender) {
   // Bind config inputs (lifted from old renderPoints).
   el.querySelector('#cog-k')?.addEventListener('change', (e) => {
     config.numCenters = Math.max(1, Math.min(20, parseInt(/** @type {HTMLInputElement} */ (e.target).value) || 1));
@@ -2414,7 +2524,7 @@ function renderParametersPhase(el) {
     const wasOnAnyDefault = calc.WEIGHT_UNIT_OPTIONS.some(u => u.defaultCap === cur);
     if (wasOnAnyDefault) config.unitsPerTruck = meta.defaultCap;
     markDirty();
-    renderParametersPhase(el);
+    rerender();
   });
   el.querySelector('#cog-cap')?.addEventListener('change', (e) => {
     config.unitsPerTruck = Math.max(1, parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 25000);
@@ -2446,7 +2556,7 @@ function renderParametersPhase(el) {
     };
     config = { ...calc.DEFAULT_CONFIG, ...preserve };
     markDirty();
-    renderParametersPhase(el);
+    rerender();
     showToast('Parameters reset to defaults.', 'ok');
   });
   el.querySelector('#cog-fixed-cost')?.addEventListener('change', (e) => {
@@ -2456,7 +2566,7 @@ function renderParametersPhase(el) {
   el.querySelector('#cog-outlier-toggle')?.addEventListener('change', (e) => {
     config.outlierCapEnabled = /** @type {HTMLInputElement} */ (e.target).checked;
     markDirty();
-    renderParametersPhase(el);
+    rerender();
   });
   el.querySelector('#cog-outlier-percentile')?.addEventListener('change', (e) => {
     const v = parseInt(/** @type {HTMLInputElement} */ (e.target).value);
@@ -2468,7 +2578,7 @@ function renderParametersPhase(el) {
   el.querySelector('#cog-modemix-toggle')?.addEventListener('change', (e) => {
     config.modeMixEnabled = /** @type {HTMLInputElement} */ (e.target).checked;
     markDirty();
-    renderParametersPhase(el);
+    rerender();
   });
   const bindModePct = (id, key) => {
     el.querySelector(id)?.addEventListener('change', (e) => {
@@ -2476,7 +2586,7 @@ function renderParametersPhase(el) {
       config.modeMix = config.modeMix || { tlPct: 100, ltlPct: 0, parcelPct: 0 };
       config.modeMix[key] = Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0));
       markDirty();
-      renderParametersPhase(el);
+      rerender();
     });
   };
   bindModePct('#cog-modemix-tl-pct', 'tlPct');
@@ -2488,7 +2598,7 @@ function renderParametersPhase(el) {
       config.modeRates = config.modeRates || { tlPerMile: 2.85, ltlPerMile: 4.20, parcelPerMile: 28.00 };
       config.modeRates[key] = Math.max(0, Number.isFinite(v) ? v : 0);
       markDirty();
-      renderParametersPhase(el);
+      rerender();
     });
   };
   bindModeRate('#cog-moderates-tl', 'tlPerMile');
@@ -2498,37 +2608,37 @@ function renderParametersPhase(el) {
   // 2026-05-28 27c — Parcel Engine bindings.
   el.querySelector('#cog-parcel-carrier')?.addEventListener('change', (e) => {
     config.parcelCarrier = /** @type {HTMLSelectElement} */ (e.target).value || 'fedex_ground';
-    markDirty(); renderParametersPhase(el);
+    markDirty(); rerender();
   });
   el.querySelector('#cog-parcel-avg-weight')?.addEventListener('change', (e) => {
     const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
     config.parcelAvgPackageWeightLb = Math.max(0.1, Number.isFinite(v) ? v : 5);
-    markDirty(); renderParametersPhase(el);
+    markDirty(); rerender();
   });
   el.querySelector('#cog-parcel-residential')?.addEventListener('change', (e) => {
     const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
     config.parcelResidentialShare = Math.max(0, Math.min(1, (Number.isFinite(v) ? v : 50) / 100));
-    markDirty(); renderParametersPhase(el);
+    markDirty(); rerender();
   });
   el.querySelector('#cog-parcel-fuel')?.addEventListener('change', (e) => {
     const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
     config.parcelFuelPct = Math.max(0, Number.isFinite(v) ? v : 25);
-    markDirty(); renderParametersPhase(el);
+    markDirty(); rerender();
   });
   el.querySelector('#cog-parcel-discount')?.addEventListener('change', (e) => {
     const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
     config.parcelContractDiscountPct = Math.max(0, Math.min(80, Number.isFinite(v) ? v : 0));
-    markDirty(); renderParametersPhase(el);
+    markDirty(); rerender();
   });
   el.querySelector('#cog-parcel-dim')?.addEventListener('change', (e) => {
     const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
     config.parcelDimMultiplier = Math.max(1.0, Math.min(3.0, Number.isFinite(v) ? v : 1.0));
-    markDirty(); renderParametersPhase(el);
+    markDirty(); rerender();
   });
   el.querySelector('#cog-parcel-accessorials')?.addEventListener('change', (e) => {
     const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
     config.parcelAccessorialsPerPkg = Math.max(0, Number.isFinite(v) ? v : 0);
-    markDirty(); renderParametersPhase(el);
+    markDirty(); rerender();
   });
 
   // 2026-05-28 39 — Discount tier editor bindings.
@@ -2537,7 +2647,7 @@ function renderParametersPhase(el) {
     const last = config.parcelDiscountTiers[config.parcelDiscountTiers.length - 1];
     const nextMin = last ? (+last.minWeightLb + 5) : 0;
     config.parcelDiscountTiers.push({ minWeightLb: nextMin, discountPct: 30 });
-    markDirty(); renderParametersPhase(el);
+    markDirty(); rerender();
   });
   el.querySelectorAll('[data-cog-tier-min]').forEach(inp => {
     inp.addEventListener('change', (e) => {
@@ -2545,7 +2655,7 @@ function renderParametersPhase(el) {
       const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
       if (config.parcelDiscountTiers && config.parcelDiscountTiers[ti]) {
         config.parcelDiscountTiers[ti].minWeightLb = Math.max(0, Number.isFinite(v) ? v : 0);
-        markDirty(); renderParametersPhase(el);
+        markDirty(); rerender();
       }
     });
   });
@@ -2555,7 +2665,7 @@ function renderParametersPhase(el) {
       const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
       if (config.parcelDiscountTiers && config.parcelDiscountTiers[ti]) {
         config.parcelDiscountTiers[ti].discountPct = Math.max(0, Math.min(80, Number.isFinite(v) ? v : 0));
-        markDirty(); renderParametersPhase(el);
+        markDirty(); rerender();
       }
     });
   });
@@ -2564,7 +2674,7 @@ function renderParametersPhase(el) {
       const ti = parseInt(/** @type {HTMLElement} */ (e.target).dataset.cogTierDel, 10);
       if (config.parcelDiscountTiers) {
         config.parcelDiscountTiers.splice(ti, 1);
-        markDirty(); renderParametersPhase(el);
+        markDirty(); rerender();
       }
     });
   });
@@ -2575,7 +2685,7 @@ function renderParametersPhase(el) {
       const v = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
       config.parcelServiceMix = config.parcelServiceMix || { ground: 100, threeDay: 0, twoDay: 0, overnight: 0 };
       config.parcelServiceMix[key] = Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0));
-      markDirty(); renderParametersPhase(el);
+      markDirty(); rerender();
     });
   });
 
@@ -2617,14 +2727,14 @@ function renderParametersPhase(el) {
     }
     config.currentStateDCs = cands.map(c => ({ label: c.label, lat: c.lat, lng: c.lng }));
     markDirty();
-    renderParametersPhase(el);
+    rerender();
     showToast(`Copied ${cands.length} candidate site${cands.length === 1 ? '' : 's'} as current state.`, 'ok');
   });
 
   el.querySelector('#cog-snap-toggle')?.addEventListener('change', (e) => {
     config.snapToCandidates = /** @type {HTMLInputElement} */ (e.target).checked;
     markDirty();
-    renderParametersPhase(el);
+    rerender();
   });
   el.querySelector('#cog-candidate-list')?.addEventListener('change', (e) => {
     const raw = /** @type {HTMLTextAreaElement} */ (e.target).value || '';
