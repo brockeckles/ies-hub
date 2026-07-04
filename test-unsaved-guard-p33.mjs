@@ -7,7 +7,7 @@
  * optimistic rollback (P2-1) — there is no transient unsaved state.
  * CM saves now compare-and-swap on updated_at instead of last-write-wins.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 
 let pass = 0, fail = 0;
 function t(name, fn) {
@@ -38,8 +38,8 @@ for (const k of TOOLS) {
 }
 t('all guard imports share one ?v= (single module instance — a second instance would have its own empty registry)', () =>
   versions.size === 1);
-t('deal-manager deliberately unwired (per-change persistence, no transient state)', () =>
-  !readFileSync('./tools/deal-manager/ui.js', 'utf8').includes('unsaved-guard'));
+t('deal-manager ui retired entirely (2026-07-04 — was deliberately unwired before that)', () =>
+  !existsSync('./tools/deal-manager/ui.js'));
 
 // ── CM wiring ────────────────────────────────────────────────────────────
 const cm = srcs['cost-model'];

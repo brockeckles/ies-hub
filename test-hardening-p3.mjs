@@ -15,7 +15,6 @@ const indexHtml = readFileSync('./index.html', 'utf8');
 const errorNet = readFileSync('./shared/error-net.js', 'utf8');
 const supabase = readFileSync('./shared/supabase.js', 'utf8');
 const dmApi = readFileSync('./tools/deal-manager/api.js', 'utf8');
-const dmUi = readFileSync('./tools/deal-manager/ui.js', 'utf8');
 const wscPlan = readFileSync('./tools/warehouse-sizing/ui-plan.js', 'utf8');
 
 // ── P3-2: global error net ────────────────────────────────────────────────
@@ -52,8 +51,6 @@ t('supabase.js auth ?v= matches the index.html auth import', () => {
 // ── id sweep: link-modal string/number fix ────────────────────────────────
 t('listUnlinkedProjects normalizes id to String at the seam', () =>
   dmApi.includes('id: String(r.id)'));
-t('link-modal compare is type-safe', () =>
-  dmUi.includes('projects.find(p => String(p.id) === String(projectId))'));
 
 console.log(`test-hardening-p3: ${pass} passed, ${fail} failed.`);
 if (fail) process.exit(1);

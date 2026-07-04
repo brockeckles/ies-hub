@@ -58,7 +58,6 @@ delete globalThis.document; // don't leak the stub into other assertions
 // ── source scans: every body-appended transient overlay is marked ────────
 const EXPECT = {
   'tools/cost-model/ui.js': 7,
-  'tools/deal-manager/ui.js': 1,
   'tools/most-standards/ui.js': 1,
   'hub/admin/ui.js': 2,
   'hub/deal-management/ui.js': 1,

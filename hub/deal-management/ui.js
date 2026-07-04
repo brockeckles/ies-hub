@@ -414,7 +414,6 @@ function bindDelegatedEvents() {
 
     // Open in design tool
     if (target.closest('[data-action="open-cost-model"]')) { window.location.hash = 'designtools/cost-model'; return; }
-    if (target.closest('[data-action="open-multi-site"]')) { window.location.hash = 'designtools/deal-manager'; return; }
 
     // Smart cost-model actions (real deals only — wired by renderCostModelButton/renderCostBreakdownCard)
     const openCmId = target.closest('[data-action="open-cost-model-id"]');
@@ -1036,7 +1035,7 @@ function renderDetail() {
 
       <!-- Quick Action chip group — surfaces most-used workflow actions without
            burying them in tabs. All chips reuse existing handlers (advance-stage,
-           add-artifact, open-cost-model, open-multi-site). -->
+           add-artifact, open-cost-model). MSA retired 2026-07-04. -->
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;background:var(--ies-gray-50);border:1px solid var(--ies-gray-200);border-radius:10px;">
         <span style="font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.04em;margin-right:4px;">Quick actions</span>
         ${(() => {

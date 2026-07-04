@@ -137,7 +137,7 @@ t('WSC 3D fallback mouseup is single-live (remove-before-add)', () =>
 const MODULES = [
   'router\\.js', 'search\\.js', 'tool-chrome\\.js', 'command-center/ui\\.js',
   'ui-3d\\.js', 'ui-shell-events\\.js', 'center-of-gravity/ui\\.js',
-  'cost-model/ui\\.js', 'deal-manager/ui\\.js', 'fleet-modeler/ui\\.js',
+  'cost-model/ui\\.js', 'fleet-modeler/ui\\.js',
   'most-standards/ui\\.js', 'network-opt/ui\\.js', 'warehouse-sizing/ui\\.js',
 ];
 function walk(dir, acc) {

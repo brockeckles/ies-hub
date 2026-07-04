@@ -15,7 +15,6 @@ function t(name, fn) {
 
 const dmApi = readFileSync('./hub/deal-management/api.js', 'utf8');
 const dmUi = readFileSync('./hub/deal-management/ui.js', 'utf8');
-const msaUi = readFileSync('./tools/deal-manager/ui.js', 'utf8');
 
 t('api.advanceDealStage exists and writes current_stage_id', () =>
   /export async function advanceDealStage/.test(dmApi)
@@ -33,11 +32,10 @@ t('advance-stage handler calls api.advanceDealStage for real deals', () =>
 t('advance-stage rolls back on failure', () =>
   /deal\.stage = prevStage;/.test(dmUi));
 
-t("MSA link flow no longer mints 's-cm-' ids", () =>
-  !msaUi.includes("id: 's-cm-'"));
-
-t('MSA persisted-deal link rehydrates via api.listSites', () =>
-  /sites = await api\.listSites\(activeDeal\.id\);/.test(msaUi));
+// MSA ui retired 2026-07-04 — its link-flow pins died with the file. The
+// hub deal tabs (below) remain the only site listing surface.
+t('hub deal tabs still hydrate sites via msaApi.listSites', () =>
+  /msaApi\.listSites\(dealId\)/.test(dmUi));
 
 console.log(`test-ux0-dm-persistence: ${pass} passed, ${fail} failed.`);
 if (fail > 0) process.exit(1);

@@ -14,7 +14,7 @@
 //
 // Run:  node test-cm-authoritative-pricing.mjs
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import * as dmCalc from './tools/deal-manager/calc.js';
 
 let passed = 0, failed = 0;
@@ -149,12 +149,10 @@ t("hub Financials table badges estimate rows with 'est'", () => {
   assert(/pricing: CM-authoritative/.test(hub), 'provenance label missing');
 });
 
-t('MSA band-aid is dead: no silent unknown-value option injection', () => {
-  const msa = readFileSync('./tools/deal-manager/ui.js', 'utf8');
-  assert(!msa.includes('known.includes(cur) ? known : [cur, ...known]'),
-    'the silent injection band-aid must be gone');
-  assert(/CM-priced/.test(msa), 'CM-priced read-only display missing');
-  assert(/\(legacy\)/.test(msa), 'legacy values must be labeled, not hidden');
+t('MSA band-aid is dead: the whole MSA ui is retired (2026-07-04)', () => {
+  // The silent unknown-value option injection died with the file — MSA route
+  // fully retired; deal tabs are the only pricing surface (CM-authoritative).
+  assert(!existsSync('./tools/deal-manager/ui.js'), 'MSA ui.js must be deleted');
 });
 
 process.stdout.write('\n');
