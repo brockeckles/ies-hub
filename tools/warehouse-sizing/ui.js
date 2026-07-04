@@ -609,13 +609,14 @@ async function handleSaveWsc() {
 
 function renderConfigPanel() {
   // CM Chrome v3 ripple — the WSC config panel now lives inside the chrome's
-  // collapsible left drawer. (_wscQuickChrome() ? renderQuickConfigHtml : renderConfigHtml)() (from ui-config.js) returns
+  // collapsible left drawer. The tier picks the panel: Quick Size (5
+  // inputs) vs the full stepped Configure (ui-config.js).
   // the HTML; this function targets whichever element holds it (id=wsc-config
   // wrapper inside the chrome's .tc-sidebar__body) and binds the events.
   const panel = rootEl?.querySelector('#wsc-config');
   if (!panel) return;
   const ctx = _makeConfigCtx();
-  panel.innerHTML = renderConfigHtml(ctx);
+  panel.innerHTML = (_wscQuickChrome() ? renderQuickConfigHtml : renderConfigHtml)(ctx);
   bindConfigEvents(panel, ctx);
 }
 

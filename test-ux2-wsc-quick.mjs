@@ -84,8 +84,8 @@ t('quick panel surfaces the sized answer (SF + positions)', () => {
 t('cache-bust pins agree across consumers (wq1)', () => {
   const index = readFileSync('./index.html', 'utf8');
   const cmUi = readFileSync('./tools/cost-model/ui.js', 'utf8');
-  assert(index.includes('warehouse-sizing/ui.js?v=20260704-wq1'), 'index.html wsc pin stale');
-  assert(cmUi.includes('warehouse-sizing/ui.js?v=20260704-wq1'), 'CM slideover wsc pin stale');
+  assert(index.includes('warehouse-sizing/ui.js?v=20260704-wq2'), 'index.html wsc pin stale');
+  assert(cmUi.includes('warehouse-sizing/ui.js?v=20260704-wq2'), 'CM slideover wsc pin stale');
   assert(ui.includes("ui-config.js?v=20260704-wq1") && ui.includes("ui-shell-events.js?v=20260704-wq1"), 'inner pins stale');
 });
 
