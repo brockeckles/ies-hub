@@ -132,10 +132,37 @@ export async function createModel(data) {
     environment_type: split.legacy,
     contract_term_years: Number(data.contractTerm || pd.contractTerm || 5),
     project_data: data, // Full JSON blob
+    ..._headlineColumns(data),
   };
   const dealId = pd.dealId || data.dealId;
   if (dealId) payload.deal_deals_id = dealId;
   return db.insert('cost_model_projects', payload);
+}
+
+
+/**
+ * CM-authoritative pricing (2026-07-04): lift engine headline facts (stamped
+ * by ui.js handleSave as data.headlineFacts) plus the facility/margin/contract
+ * headline columns the deal tabs read. Omitted (not nulled) when the model
+ * has no engine output yet, so a Setup-only draft never zeroes a prior stamp.
+ * @param {Object} data — full model object
+ * @returns {Object} partial column payload
+ */
+export function _headlineColumns(data) {
+  const cols = {};
+  const hf = data && data.headlineFacts;
+  if (hf && hf.source === 'cm-engine') {
+    if (Number(hf.totalAnnualRevenue) > 0) cols.total_annual_revenue = Number(hf.totalAnnualRevenue);
+    if (Number(hf.totalAnnualCost) > 0)    cols.total_annual_cost    = Number(hf.totalAnnualCost);
+  }
+  const pd = (data && data.projectDetails) || {};
+  const sqft = Number(data?.facility?.totalSqft) || 0;
+  if (sqft > 0) cols.facility_sqft = sqft;
+  const margin = Number(data?.financial?.targetMargin);
+  if (Number.isFinite(margin) && margin > 0) cols.target_margin_pct = margin;
+  const ct = pd.contractType || data.contractType;
+  if (ct === 'fixed_variable' || ct === 'open_book') cols.contract_type = ct;
+  return cols;
 }
 
 /**
@@ -158,6 +185,7 @@ function _modelUpdatePayload(data) {
     contract_term_years: Number(data.contractTerm || pd.contractTerm || 5),
     project_data: data,
     updated_at: new Date().toISOString(),
+    ..._headlineColumns(data),
   };
   payload.deal_deals_id = pd.dealId || data.dealId || null;
   return payload;

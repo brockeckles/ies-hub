@@ -109,7 +109,15 @@ export function computeSiteFinancials(site) {
   const ratePerVolume = Number(site.perVolumeRate || 0);
 
   let annualRevenue;
-  if (ratePerVolume > 0 && annualVolume > 0) {
+  // CM-authoritative pricing (2026-07-04, D1 vocab decision): when the CM
+  // engine has stamped a real revenue on this model (site.annualRevenue,
+  // from cost_model_projects.total_annual_revenue), it IS the price — the
+  // pricing_model markup heuristic below only labels never-engine-saved
+  // rows, and callers surface revenueSource so the UI can badge estimates.
+  const cmRevenue = Number(site.annualRevenue || 0);
+  if (cmRevenue > 0) {
+    annualRevenue = cmRevenue;
+  } else if (ratePerVolume > 0 && annualVolume > 0) {
     // Volume-based revenue (units × rate). Margin emerges; doesn't drive price.
     annualRevenue = ratePerVolume * annualVolume;
   } else if (pricingModel === 'cost-plus' || pricingModel === 'fixed-fee') {
@@ -139,6 +147,9 @@ export function computeSiteFinancials(site) {
     annualVolume,
     costPerVolume,
     revenuePerVolume,
+    // 'cm' = engine-stamped revenue (authoritative) · 'estimate' = markup
+    // heuristic fallback for models never saved through the CM engine.
+    revenueSource: cmRevenue > 0 ? 'cm' : 'estimate',
   };
 }
 

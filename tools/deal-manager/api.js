@@ -8,7 +8,7 @@
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 // P2-1 (2026-07-03) — pure site-field→CM-column mapper
-import { siteToCmColumns, NEW_SITE_DEFAULTS } from './calc.js?v=20260703-lw3';
+import { siteToCmColumns, NEW_SITE_DEFAULTS } from './calc.js?v=20260704-cmp1';
 
 // ============================================================
 // DEALS
@@ -306,6 +306,11 @@ function mapCmProjectToSite(row) {
     annualVolume: row.vol_pallets_received || 0,    // closest proxy: inbound pallet volume
     costModelId: String(row.id),
     inBid: !!row.in_bid,                            // UX-1 D1p2: ★-in-bid marker
+    // CM-authoritative pricing (2026-07-04, D1 vocab decision): the CM
+    // engine's stamped steady-state revenue. When > 0 it drives
+    // computeSiteFinancials directly and the markup heuristic is skipped.
+    annualRevenue: Number(row.total_annual_revenue) || 0,
+    contractType: row.contract_type || null,
   };
 }
 

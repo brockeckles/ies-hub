@@ -8,9 +8,9 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260703-ls1';
-import * as calc from './calc.js?v=20260703-lw3';
-import * as api from './api.js?v=20260703-dc5';
-import * as cmApi from '../cost-model/api.js?v=20260703-p33';
+import * as calc from './calc.js?v=20260704-cmp1';
+import * as api from './api.js?v=20260704-cmp1';
+import * as cmApi from '../cost-model/api.js?v=20260704-cmp1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260703-dc2';
@@ -1216,9 +1216,25 @@ function renderSites(el) {
                   </div>
                   <div>
                     <div style="font-size:11px;color:var(--ies-gray-400);">Pricing</div>
-                    <select data-site-field="pricingModel" data-site-id="${s.id}" class="hub-input" style="font-weight:600;font-size:13px;padding:3px 6px;width:100%;">
-                      ${(() => { const cur = s.pricingModel || 'cost-plus'; const known = Object.keys(calc.DEFAULT_PRICING_MARKUPS); const opts = known.includes(cur) ? known : [cur, ...known]; return opts.map(pm => `<option value="${pm}"${cur === pm ? ' selected' : ''}>${pm}</option>`).join(''); })()}
-                    </select>
+                    ${Number(s.annualRevenue) > 0 ? (() => {
+                      // CM-authoritative (2026-07-04, D1 vocab decision): this
+                      // model has engine-stamped revenue — the Cost Model owns
+                      // pricing. Show CM's contract-type vocab read-only; the
+                      // markup select (and its unknown-value band-aid) is gone
+                      // for CM-priced rows.
+                      const ctLabels = { fixed_variable: 'Fixed / Variable', open_book: 'Open Book' };
+                      const ct = ctLabels[s.contractType] || 'CM engine';
+                      return `<div class="hub-input" style="font-weight:600;font-size:12px;padding:4px 6px;background:var(--ies-gray-50);color:var(--ies-gray-500);" title="Priced by the Cost Model engine (contract type: ${ct}). Edit pricing in the Cost Model — this field is no longer a pricing input for engine-saved models.">${ct} · CM-priced</div>`;
+                    })() : (() => {
+                      // Estimate fallback — model never engine-saved. Legacy
+                      // stored values outside the 5 known markups render as a
+                      // labeled legacy option instead of silently injecting.
+                      const cur = s.pricingModel || 'cost-plus';
+                      const known = Object.keys(calc.DEFAULT_PRICING_MARKUPS);
+                      const opts = known.map(pm => `<option value="${pm}"${cur === pm ? ' selected' : ''}>${pm}</option>`).join('');
+                      const legacy = known.includes(cur) ? '' : `<option value="${cur}" selected>${cur} (legacy)</option>`;
+                      return `<select data-site-field="pricingModel" data-site-id="${s.id}" class="hub-input" style="font-weight:600;font-size:13px;padding:3px 6px;width:100%;" title="Markup-heuristic estimate — save this model through the Cost Model engine to price it authoritatively.">${legacy}${opts}</select>`;
+                    })()}
                   </div>
                   <div>
                     <div style="font-size:11px;color:var(--ies-gray-400);">Startup Cost ($)</div>

@@ -14,7 +14,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260704-mfa1';
 import * as calc from './calc.js?v=20260704-ebr1';
-import * as api from './api.js?v=20260703-p33';
+import * as api from './api.js?v=20260704-cmp1';
 import * as scenarios from './calc.scenarios.js?v=20260704-ebr1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260511-port8';
@@ -12499,6 +12499,23 @@ async function handleSave() {
     // Lazy pin for projects that predate house-assumption pinning — captures
     // the guidance in force NOW as their baseline (reference only, no reseed).
     ensureHouseAssumptions(false);
+    // CM-authoritative pricing (2026-07-04, D1 vocab decision): stamp the
+    // engine's steady-state annual revenue/cost onto the model so the api
+    // payload builders can lift them into flat columns. Deal financials
+    // (hub deal tabs) prefer these over the DM markup heuristic. Fail-soft:
+    // a compute error just skips the stamp — save must never be blocked.
+    try {
+      const hk = computeHeaderKpis({ model, refData, userHasInteracted, whatIfTransient, currentScenario, currentScenarioSnapshots, heuristicOverrides, currentMarketLaborProfile, scenarios });
+      const sum = hk?.kpiCtx?.summary;
+      if (hk?.ready && sum && (sum.totalRevenue > 0 || sum.totalCost > 0)) {
+        model.headlineFacts = {
+          totalAnnualRevenue: sum.totalRevenue || 0,
+          totalAnnualCost: sum.totalCost || 0,
+          source: 'cm-engine',
+          computedAt: new Date().toISOString(),
+        };
+      }
+    } catch (err) { console.warn('[CM] headlineFacts stamp failed:', err); }
     let savedRow = null;
     if (model.id) {
       // P3-3 optimistic concurrency (2026-07-03): compare-and-swap on

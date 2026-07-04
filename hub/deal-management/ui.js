@@ -13,8 +13,8 @@ import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260703-dc1';
 // UX-1 D1p2 (2026-07-03): the MSA merge — deal tabs reuse the Multi-Site
 // Analyzer's pure calc + site mapping instead of duplicating the math.
-import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260703-lw3';
-import * as msaApi from '../../tools/deal-manager/api.js?v=20260703-dc5';
+import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260704-cmp1';
+import * as msaApi from '../../tools/deal-manager/api.js?v=20260704-cmp1';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -1808,7 +1808,7 @@ function renderDealFinancialsMsa() {
     <div class="hub-card" style="padding:16px;margin-bottom:16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <div style="font-size:13px;font-weight:700;">Deal P&amp;L ${usingBid ? '<span style="color:#16a34a;font-size:11px;font-weight:700;">★ in-bid scenarios only</span>' : '<span style="color:var(--ies-gray-400);font-size:11px;">all linked scenarios — mark ★ in bid on Site Details to pin the bid set</span>'}</div>
-        <div style="font-size:11px;color:var(--ies-gray-400);">${sites.length} scenario${sites.length === 1 ? '' : 's'} · ${d.contractTermYears || 5}-yr term · engine: Multi-Site calc</div>
+        <div style="font-size:11px;color:var(--ies-gray-400);">${sites.length} scenario${sites.length === 1 ? '' : 's'} · ${d.contractTermYears || 5}-yr term · engine: Multi-Site calc · pricing: CM-authoritative</div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;">
         ${[['Revenue', money(fin.totalAnnualRevenue)], ['Cost', money(fin.totalAnnualCost)],
@@ -1833,7 +1833,7 @@ function renderDealFinancialsMsa() {
           ${sites.map(sx => { const f = byId.get(sx.costModelId); return `
             <tr style="border-top:1px solid var(--ies-gray-100);">
               <td style="padding:9px 16px;font-weight:600;">${sx.inBid ? '<span style="color:#16a34a;">★</span> ' : ''}${escapeHtml(sx.name)}</td>
-              <td style="padding:9px 12px;text-align:right;">${money(f.annualRevenue)}</td>
+              <td style="padding:9px 12px;text-align:right;">${money(f.annualRevenue)}${f.revenueSource === 'estimate' ? ' <span title="Markup-heuristic estimate — this model has never been saved through the Cost Model engine. Save it in CM to replace this with engine pricing." style="font-size:10px;font-weight:700;color:#b45309;background:#fef3c7;border-radius:8px;padding:1px 6px;vertical-align:middle;">est</span>' : ''}</td>
               <td style="padding:9px 12px;text-align:right;">${money(f.annualCost)}</td>
               <td style="padding:9px 12px;text-align:right;font-weight:600;">${f.grossMarginPct.toFixed(1)}%</td>
               <td style="padding:9px 12px;text-align:right;">${(sx.sqft || 0).toLocaleString()}</td>
