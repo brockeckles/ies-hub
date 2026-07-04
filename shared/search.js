@@ -3,7 +3,7 @@
  * Static index + dynamic Supabase search, dropdown UI, keyboard navigation.
  *
  * Usage:
- *   import { search } from './search.js?v=20260703-ux0';
+ *   import { search } from './search.js?v=20260703-dc5';
  *   search.init(document.querySelector('.hub-search-container'));
  *
  * @module shared/search
@@ -56,7 +56,7 @@ class GlobalSearch {
       { title: 'Ideas & Feedback', route: 'feedback', section: 'Resources', keywords: ['feedback', 'ideas', 'suggestions'] },
       { title: 'Admin', route: 'admin', section: 'Admin', keywords: ['admin', 'settings', 'master data', 'reference data', 'users', 'user activity', 'escalations', 'audit'] },
       { title: 'Cost Model Builder', route: 'designtools/cost-model', section: 'Design Tools', keywords: ['pricing', 'P&L', 'labor', 'equipment', 'overhead'] },
-      { title: 'Multi-Site Analyzer', route: 'designtools/deal-manager', section: 'Design Tools', keywords: ['deal', 'sites', 'compare'] },
+      // UX-1 D1p2 (2026-07-03): MSA merged into Deal Management — removed from search.
       { title: 'Warehouse Sizing Calculator', route: 'designtools/warehouse-sizing', section: 'Design Tools', keywords: ['warehouse', 'sqft', '3D', 'facility'] },
       { title: 'MOST Labor Standards', route: 'designtools/most-standards', section: 'Design Tools', keywords: ['MOST', 'labor', 'TMU', 'standards'] },
       { title: 'Center of Gravity', route: 'designtools/center-of-gravity', section: 'Design Tools', keywords: ['COG', 'location', 'clustering'] },

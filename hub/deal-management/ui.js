@@ -7,10 +7,14 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260703-dc4';
+import * as api from './api.js?v=20260703-dc5';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260703-dc1';
+// UX-1 D1p2 (2026-07-03): the MSA merge — deal tabs reuse the Multi-Site
+// Analyzer's pure calc + site mapping instead of duplicating the math.
+import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260703-lw3';
+import * as msaApi from '../../tools/deal-manager/api.js?v=20260703-dc5';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -19,6 +23,12 @@ let selectedDeal = null;
 // UX-1 D1 phase 1: design-tool scenarios per deal (wsc/most/cog), hydrated
 // alongside strategy/artifacts/DOS in _hydrateDealDetail.
 const _designScenariosByDeal = new Map();
+// UX-1 D1p2: latest deal_outcomes row per deal (null = still open) + MSA-shape
+// site rows per deal (scenario-level, from msaApi.listSites) + compare slots.
+const _outcomeByDeal = new Map();
+const _msaSitesByDeal = new Map();
+let _cmpSiteA = null;
+let _cmpSiteB = null;
 let detailTab = 'overview'; // overview | sites | dos | financials | documents | strategy
 let dealSearch = '';
 let customerFilter = ''; // empty = all
@@ -436,6 +446,45 @@ function bindDelegatedEvents() {
       if (route) window.location.hash = route;
       return;
     }
+
+    // UX-1 D1p2-A: terminal lifecycle dialog.
+    const outcomeBtn = target.closest('[data-action="deal-outcome"]');
+    if (outcomeBtn) {
+      _openOutcomeDialog(outcomeBtn.getAttribute('data-outcome') || 'won');
+      return;
+    }
+
+    // UX-1 D1p2-B: ★-in-bid toggle on the Sites tab.
+    const bidBtn = target.closest('[data-action="mark-in-bid"]');
+    if (bidBtn) {
+      const modelId = bidBtn.getAttribute('data-model-id');
+      const d = selectedDeal;
+      if (!d || !modelId) return;
+      (async () => {
+        try {
+          await api.setModelInBid(d.id, modelId);
+          // Update local state without a full re-fetch: exclusive per group.
+          const t = (d.models || []).find(m => String(m.id) === String(modelId));
+          const gk = t ? `${t.market_id || ''}|${t.name || ''}` : null;
+          (d.models || []).forEach(m => {
+            if (`${m.market_id || ''}|${m.name || ''}` === gk) m.in_bid = String(m.id) === String(modelId);
+          });
+          const msaRows = _msaSitesByDeal.get(d.id) || [];
+          msaRows.forEach(r => {
+            const rk = `${r.marketId || ''}|${r.name || ''}`;
+            // MSA Site shape doesn't carry market_id — match on costModelId group via models list instead.
+          });
+          // Simplest correct refresh of MSA rows: flip inBid by id.
+          msaRows.forEach(r => { if (t && (d.models || []).some(m => `${m.market_id || ''}|${m.name || ''}` === gk && String(m.id) === String(r.costModelId))) r.inBid = String(r.costModelId) === String(modelId); });
+          showToast('Marked ★ in bid — deal rollups now read this scenario.', 'success');
+          renderDetailContent();
+        } catch (err) {
+          console.error('[deal-mgmt] mark-in-bid failed', err);
+          showToast('Could not mark in bid: ' + err.message, 'error');
+        }
+      })();
+      return;
+    }
     // R10 (2026-04-29) — Site Details + Add Site
     const addSite = target.closest('[data-action="add-site-to-deal"]');
     if (addSite) {
@@ -528,6 +577,16 @@ function bindDelegatedEvents() {
   });
 
   // Strategy inputs — debounced upsert via _scheduleStrategySave
+  // UX-1 D1p2-C: Compare tab slot selects.
+  rootEl.addEventListener('change', (e) => {
+    const sel = /** @type {HTMLElement} */ (e.target).closest?.('[data-cmp-slot]');
+    if (!sel) return;
+    const slot = sel.getAttribute('data-cmp-slot');
+    if (slot === 'a') _cmpSiteA = /** @type {HTMLSelectElement} */ (sel).value;
+    else _cmpSiteB = /** @type {HTMLSelectElement} */ (sel).value;
+    renderDetailContent();
+  });
+
   rootEl.addEventListener('input', (e) => {
     const t = /** @type {HTMLElement} */ (e.target);
     if (!selectedDeal) return;
@@ -980,12 +1039,27 @@ function renderDetail() {
            add-artifact, open-cost-model, open-multi-site). -->
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;background:var(--ies-gray-50);border:1px solid var(--ies-gray-200);border-radius:10px;">
         <span style="font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.04em;margin-right:4px;">Quick actions</span>
-        ${d.stage < 6
-          ? `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="advance-stage" title="Move this deal to Stage ${d.stage + 1}">Advance to Stage ${d.stage + 1} →</button>`
-          : `<span class="hub-chip" style="font-size:11px;color:var(--ies-gray-500);background:var(--ies-gray-100);padding:4px 10px;border-radius:16px;">Final stage reached</span>`}
+        ${(() => {
+          // UX-1 D1p2-A: terminal lifecycle. A closed deal shows its outcome
+          // banner; an open deal gets Advance + Won/Lost/Withdrawn controls.
+          const oc = _outcomeByDeal.get(d.id);
+          if (oc) {
+            const c = oc.outcome === 'won' ? '#16a34a' : oc.outcome === 'lost' ? '#dc2626' : '#6b7280';
+            return `<span style="display:inline-flex;align-items:center;gap:8px;padding:5px 14px;border-radius:16px;font-size:12px;font-weight:700;color:#fff;background:${c};">
+              ${oc.outcome.toUpperCase()}${oc.reason_category ? ` · ${escapeHtml(oc.reason_category.replace(/_/g, ' '))}` : ''}
+              <span style="font-weight:500;opacity:.85;">${oc.recorded_at ? new Date(oc.recorded_at).toLocaleDateString() : ''}</span>
+            </span>`;
+          }
+          return `${d.stage < 6
+            ? `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="advance-stage" title="Move this deal to Stage ${d.stage + 1}">Advance to Stage ${d.stage + 1} →</button>`
+            : `<span class="hub-chip" style="font-size:11px;color:var(--ies-gray-500);background:var(--ies-gray-100);padding:4px 10px;border-radius:16px;">Final stage reached</span>`}
+          ${d.isReal ? `
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="deal-outcome" data-outcome="won" title="Close this deal as Won" style="color:#16a34a;border-color:#bbe5c8;">Won</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="deal-outcome" data-outcome="lost" title="Close this deal as Lost" style="color:#dc2626;border-color:#f3c1c1;">Lost</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="deal-outcome" data-outcome="withdrawn" title="Close as Withdrawn / No decision">…</button>` : ''}`;
+        })()}
         ${renderCostModelButton(d)}
         <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="add-artifact" title="Link a cost model, design scenario, deck, or external file">+ Link Artifact</button>
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="open-multi-site" title="Open the Multi-Site Analyzer with this deal">Multi-Site →</button>
       </div>
 
       <!-- Quick Stats — 5-tile strip overrides hub-kpi-strip\'s 4-column default -->
@@ -1003,6 +1077,8 @@ function renderDetail() {
         <button class="hub-tab ${detailTab === 'sites' ? 'active' : ''}" data-detail-tab="sites">Site Details</button>
         <button class="hub-tab ${detailTab === 'dos' ? 'active' : ''}" data-detail-tab="dos">DOS Elements</button>
         <button class="hub-tab ${detailTab === 'financials' ? 'active' : ''}" data-detail-tab="financials">Financials</button>
+        <button class="hub-tab ${detailTab === 'sensitivity' ? 'active' : ''}" data-detail-tab="sensitivity">Sensitivity</button>
+        <button class="hub-tab ${detailTab === 'compare' ? 'active' : ''}" data-detail-tab="compare">Compare</button>
         <button class="hub-tab ${detailTab === 'strategy' ? 'active' : ''}" data-detail-tab="strategy">Win Strategy</button>
         <button class="hub-tab ${detailTab === 'artifacts' ? 'active' : ''}" data-detail-tab="artifacts">Artifacts</button>
       </div>
@@ -1020,9 +1096,11 @@ function renderDetailContent() {
 
   switch (detailTab) {
     case 'overview': el.innerHTML = renderDealOverview(); break;
+    case 'sensitivity': el.innerHTML = renderDealSensitivity(); break;
+    case 'compare': el.innerHTML = renderDealCompare(); break;
     case 'sites': el.innerHTML = renderDealSites(); break;
     case 'dos': el.innerHTML = renderDealDos(); break;
-    case 'financials': el.innerHTML = renderDealFinancials(); break;
+    case 'financials': el.innerHTML = renderDealFinancialsMsa(); break;
     case 'strategy': el.innerHTML = renderDealWinStrategy(); break;
     case 'artifacts': el.innerHTML = renderDealArtifacts(); break;
   }
@@ -1181,15 +1259,22 @@ async function _hydrateDealDetail(dealId) {
   if (_hydratedDeals.has(dealId)) return;
   _hydratedDeals.add(dealId);
   try {
-    const [strategy, artifacts, dosStatus, designScenarios] = await Promise.all([
+    const [strategy, artifacts, dosStatus, designScenarios, outcome, msaSites] = await Promise.all([
       api.loadStrategy(dealId),
       api.listArtifactsByDeal(dealId),
       api.loadDosStatusByDeal(dealId),
       api.listDesignScenariosByDeal(dealId),
+      api.getLatestDealOutcome(dealId),
+      msaApi.listSites(dealId).catch(() => []),
     ]);
 
     // Workflow rail data (UX-1 D1 phase 1).
     _designScenariosByDeal.set(dealId, designScenarios || { wsc: [], most: [], cog: [] });
+
+    // UX-1 D1p2: outcome + MSA-shape scenario rows (Financials/Sensitivity/
+    // Compare tabs + ★-in-bid rollups all read these).
+    _outcomeByDeal.set(dealId, outcome || null);
+    _msaSitesByDeal.set(dealId, Array.isArray(msaSites) ? msaSites : []);
 
     // Strategy: merge over the seeded defaults so any null-valued columns
     // fall back to the seed; non-null DB values win.
@@ -1526,7 +1611,7 @@ function renderDealOverview() {
         <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Quick Actions</div>
         <div style="display:flex;flex-direction:column;gap:8px;">
           ${renderCostModelButton(d)}
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="open-multi-site" style="text-align:left;">Open Multi-Site Analyzer →</button>
+<!-- UX-1 D1p2: Multi-Site Analyzer merged into the Financials / Sensitivity / Compare tabs (decision #1: full merge). -->
         </div>
       </div>
     </div>
@@ -1602,6 +1687,243 @@ function renderWorkflowRail(d) {
   `;
 }
 
+/**
+ * UX-1 D1p2-A (2026-07-03): terminal-outcome dialog. Writes deal_outcomes
+ * (schema applied 2026-07-03) + reflects status on deal_deals. Bid Y1
+ * numbers prefill from the deal header so the calibration loop starts with
+ * the bid-of-record even if nobody edits a field.
+ */
+function _openOutcomeDialog(kind) {
+  const d = selectedDeal;
+  if (!rootEl || !d) return;
+  rootEl.querySelector('#dm-outcome-dialog')?.remove();
+  const rev = Number(d.revenue) || 0;
+  const margin = Number(d.margin) || 0;
+  const cost = rev > 0 ? rev * (1 - margin / 100) : 0;
+  const REASONS = ['price','service_level','geography','incumbent_relationship','capability_gap','timing','political','undisclosed','other'];
+  const title = kind === 'won' ? 'Mark deal Won' : kind === 'lost' ? 'Mark deal Lost' : 'Close deal (Withdrawn / No decision)';
+  const accent = kind === 'won' ? '#16a34a' : kind === 'lost' ? '#dc2626' : '#6b7280';
+  const overlay = document.createElement('div');
+  overlay.id = 'dm-outcome-dialog';
+  overlay.setAttribute('data-hub-overlay', '');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:1000;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:8px;padding:20px;width:600px;max-width:94vw;max-height:88vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,0.2);border-top:4px solid ${accent};">
+      <div style="font-size:16px;font-weight:800;margin-bottom:2px;">${title}</div>
+      <div style="font-size:12px;color:var(--ies-gray-400);margin-bottom:14px;">${escapeHtml(d.name)} · ${escapeHtml(d.client)} — this records the outcome for the win/loss calibration loop.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;font-size:13px;">
+        ${kind === 'withdrawn' ? `
+        <label style="display:flex;flex-direction:column;gap:4px;">Outcome
+          <select id="oc-outcome" class="hub-input"><option value="withdrawn">Withdrawn (we pulled out)</option><option value="no_decision">No decision (customer went dark)</option></select>
+        </label>` : ''}
+        <label style="display:flex;flex-direction:column;gap:4px;">Reason
+          <select id="oc-reason" class="hub-input"><option value="">— pick one —</option>${REASONS.map(r => `<option value="${r}">${r.replace(/_/g, ' ')}</option>`).join('')}</select>
+        </label>
+        ${kind === 'lost' ? `
+        <label style="display:flex;flex-direction:column;gap:4px;">Lost to (competitor)
+          <input id="oc-competitor" class="hub-input" placeholder="e.g. DHL, Ryder, in-house">
+        </label>` : ''}
+        ${kind === 'won' ? `
+        <label style="display:flex;flex-direction:column;gap:4px;">Go-live date
+          <input id="oc-golive" type="date" class="hub-input">
+        </label>` : ''}
+        <label style="display:flex;flex-direction:column;gap:4px;">Bid Y1 revenue ($)
+          <input id="oc-rev" type="number" class="hub-input" value="${rev ? Math.round(rev) : ''}">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;">Bid Y1 cost ($)
+          <input id="oc-cost" type="number" class="hub-input" value="${cost ? Math.round(cost) : ''}">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;grid-column:1 / -1;">Reason detail
+          <textarea id="oc-detail" class="hub-input" rows="2" placeholder="The nuance the category can't hold"></textarea>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;grid-column:1 / -1;">Notes
+          <textarea id="oc-notes" class="hub-input" rows="2"></textarea>
+        </label>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="oc-cancel">Cancel</button>
+        <button class="hub-btn hub-btn-sm hub-btn-primary" id="oc-save" style="background:${accent};border-color:${accent};">Record outcome</button>
+      </div>
+    </div>
+  `;
+  rootEl.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  overlay.querySelector('#oc-cancel')?.addEventListener('click', close);
+  overlay.querySelector('#oc-save')?.addEventListener('click', async () => {
+    const val = (sel) => overlay.querySelector(sel)?.value?.trim() || '';
+    const outcome = kind === 'withdrawn' ? (val('#oc-outcome') || 'withdrawn') : kind;
+    const bidRev = Number(val('#oc-rev'));
+    const bidCost = Number(val('#oc-cost'));
+    const bidMargin = (Number.isFinite(bidRev) && bidRev > 0 && Number.isFinite(bidCost))
+      ? ((bidRev - bidCost) / bidRev) * 100 : null;
+    try {
+      const row = await api.recordDealOutcome(d.id, {
+        outcome,
+        reason_category: val('#oc-reason') || null,
+        reason_detail: val('#oc-detail') || null,
+        competitor_won_to: kind === 'lost' ? (val('#oc-competitor') || null) : null,
+        go_live_date: kind === 'won' ? (val('#oc-golive') || null) : null,
+        bid_y1_revenue: Number.isFinite(bidRev) && bidRev > 0 ? bidRev : null,
+        bid_y1_cost: Number.isFinite(bidCost) && bidCost > 0 ? bidCost : null,
+        bid_y1_margin_pct: bidMargin,
+        notes: val('#oc-notes') || null,
+      });
+      _outcomeByDeal.set(d.id, row);
+      close();
+      showToast(`Outcome recorded: ${outcome.toUpperCase()}.`, 'success');
+      renderDetail();
+    } catch (err) {
+      console.error('[deal-mgmt] recordDealOutcome failed', err);
+      showToast('Could not record outcome: ' + err.message, 'error');
+    }
+  });
+}
+
+/**
+ * UX-1 D1p2 helper: the deal's MSA-shape scenario rows, filtered to ★-in-bid
+ * when any are marked (the double-count fix — rollups stop summing every
+ * linked scenario the moment one ★ exists).
+ */
+function _binderSites(d) {
+  const rows = _msaSitesByDeal.get(d.id) || [];
+  const starred = rows.filter(r => r.inBid);
+  return { sites: starred.length ? starred : rows, usingBid: starred.length > 0, all: rows };
+}
+
+/** UX-1 D1p2-C: Financials tab — MSA Summary merged in (real engine math). */
+function renderDealFinancialsMsa() {
+  const d = selectedDeal;
+  if (!d.isReal) return renderDealFinancials();
+  const { sites, usingBid, all } = _binderSites(d);
+  if (all.length === 0) {
+    return `<div class="hub-card" style="padding:32px;text-align:center;color:var(--ies-gray-500);font-size:13px;">
+      ${_msaSitesByDeal.has(d.id) ? 'No cost-model scenarios linked to this deal yet — start one from the Workflow rail.' : 'Loading deal financials…'}
+    </div>`;
+  }
+  const fin = msaCalc.computeDealFinancials(sites, d.contractTermYears || 5);
+  const money = (n) => '$' + (Math.abs(n) >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : Math.round(n).toLocaleString('en-US'));
+  const byId = new Map(sites.map(sx => [sx.costModelId, msaCalc.computeSiteFinancials(sx)]));
+  return `
+    <div class="hub-card" style="padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:700;">Deal P&amp;L ${usingBid ? '<span style="color:#16a34a;font-size:11px;font-weight:700;">★ in-bid scenarios only</span>' : '<span style="color:var(--ies-gray-400);font-size:11px;">all linked scenarios — mark ★ in bid on Site Details to pin the bid set</span>'}</div>
+        <div style="font-size:11px;color:var(--ies-gray-400);">${sites.length} scenario${sites.length === 1 ? '' : 's'} · ${d.contractTermYears || 5}-yr term · engine: Multi-Site calc</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;">
+        ${[['Revenue', money(fin.totalAnnualRevenue)], ['Cost', money(fin.totalAnnualCost)],
+           ['Gross margin', fin.grossMarginPct.toFixed(1) + '%'], ['EBITDA', fin.ebitdaPct.toFixed(1) + '%'],
+           ['NPV', money(fin.npv)], ['Payback', fin.paybackMonths > 0 ? Math.round(fin.paybackMonths) + ' mo' : '—'],
+           ['IRR', Number.isFinite(fin.irr) && fin.irr !== 0 ? (fin.irr * 100).toFixed(1) + '%' : '—'],
+           ['Startup', money(fin.totalStartupCost)]].map(([l, v]) => `
+          <div class="hub-kpi-tile"><div class="hub-kpi-tile__label">${l}</div><div class="hub-kpi-tile__value" style="font-size:16px;">${v}</div></div>`).join('')}
+      </div>
+    </div>
+    <div class="hub-card" style="padding:0;overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="background:var(--ies-gray-50);font-size:11px;color:var(--ies-gray-400);">
+          <th style="text-align:left;padding:10px 16px;">Scenario</th>
+          <th style="text-align:right;padding:10px 12px;">Revenue</th>
+          <th style="text-align:right;padding:10px 12px;">Cost</th>
+          <th style="text-align:right;padding:10px 12px;">Margin</th>
+          <th style="text-align:right;padding:10px 12px;">SF</th>
+          <th style="text-align:right;padding:10px 16px;">$/SF</th>
+        </tr></thead>
+        <tbody>
+          ${sites.map(sx => { const f = byId.get(sx.costModelId); return `
+            <tr style="border-top:1px solid var(--ies-gray-100);">
+              <td style="padding:9px 16px;font-weight:600;">${sx.inBid ? '<span style="color:#16a34a;">★</span> ' : ''}${escapeHtml(sx.name)}</td>
+              <td style="padding:9px 12px;text-align:right;">${money(f.annualRevenue)}</td>
+              <td style="padding:9px 12px;text-align:right;">${money(f.annualCost)}</td>
+              <td style="padding:9px 12px;text-align:right;font-weight:600;">${f.marginPct.toFixed(1)}%</td>
+              <td style="padding:9px 12px;text-align:right;">${(sx.sqft || 0).toLocaleString()}</td>
+              <td style="padding:9px 16px;text-align:right;">${sx.sqft > 0 ? '$' + (f.annualRevenue / sx.sqft).toFixed(2) : '—'}</td>
+            </tr>`; }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+/** UX-1 D1p2-C: Sensitivity tab — MSA grid (cost ±10% × margin ±3pts). */
+function renderDealSensitivity() {
+  const d = selectedDeal;
+  const { sites, usingBid } = _binderSites(d);
+  if (!d.isReal || sites.length === 0) {
+    return `<div class="hub-card" style="padding:32px;text-align:center;color:var(--ies-gray-500);font-size:13px;">Link cost-model scenarios to run sensitivity.</div>`;
+  }
+  const sens = msaCalc.calcDealSensitivity(sites, { years: d.contractTermYears || 5 });
+  const cellColor = (e) => e >= 12 ? '#dcfce7' : e >= 8 ? '#fef9c3' : '#fee2e2';
+  return `
+    <div class="hub-card" style="padding:16px;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:4px;">EBITDA % sensitivity ${usingBid ? '<span style="color:#16a34a;font-size:11px;">★ in-bid set</span>' : ''}</div>
+      <div style="font-size:11px;color:var(--ies-gray-400);margin-bottom:12px;">Rows: target margin shift (pts) · Columns: annual cost flex (%) · engine: Multi-Site calc</div>
+      <table style="border-collapse:collapse;font-size:12.5px;">
+        <thead><tr><th style="padding:6px 10px;"></th>${sens.xRange.map(x => `<th style="padding:6px 14px;font-size:11px;color:var(--ies-gray-500);">cost ${x > 0 ? '+' : ''}${x}%</th>`).join('')}</tr></thead>
+        <tbody>
+          ${sens.grid.map((row, yi) => `
+            <tr>
+              <td style="padding:6px 10px;font-size:11px;color:var(--ies-gray-500);font-weight:700;">margin ${sens.yRange[yi] > 0 ? '+' : ''}${sens.yRange[yi]}pt</td>
+              ${row.map(c => `<td style="padding:8px 14px;text-align:center;background:${cellColor(c.ebitdaPct)};border:1px solid #fff;font-weight:${c.x === 0 && c.y === 0 ? '800' : '500'};">${c.ebitdaPct.toFixed(1)}%<div style="font-size:10px;color:var(--ies-gray-500);">${c.grade}</div></td>`).join('')}
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+/** UX-1 D1p2-C: Compare tab — two scenarios side by side (MSA Compare merged in). */
+function renderDealCompare() {
+  const d = selectedDeal;
+  const { all } = _binderSites(d);
+  if (!d.isReal || all.length < 2) {
+    return `<div class="hub-card" style="padding:32px;text-align:center;color:var(--ies-gray-500);font-size:13px;">Need at least two linked scenarios to compare.</div>`;
+  }
+  if (!_cmpSiteA || !all.some(r => r.costModelId === _cmpSiteA)) _cmpSiteA = all[0].costModelId;
+  if (!_cmpSiteB || !all.some(r => r.costModelId === _cmpSiteB)) _cmpSiteB = (all.find(r => r.costModelId !== _cmpSiteA) || all[1]).costModelId;
+  const A = all.find(r => r.costModelId === _cmpSiteA);
+  const B = all.find(r => r.costModelId === _cmpSiteB);
+  const fA = msaCalc.computeSiteFinancials(A);
+  const fB = msaCalc.computeSiteFinancials(B);
+  const money = (n) => '$' + (Math.abs(n) >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : Math.round(n).toLocaleString('en-US'));
+  const pick = (id, slot) => `
+    <select class="hub-input" data-cmp-slot="${slot}" style="max-width:280px;">
+      ${all.map(r => `<option value="${escapeAttr(r.costModelId)}" ${r.costModelId === id ? 'selected' : ''}>${escapeHtml(r.name)}${r.inBid ? ' ★' : ''}</option>`).join('')}
+    </select>`;
+  const row = (label, va, vb, fmt = (x) => x) => {
+    const better = typeof va === 'number' && typeof vb === 'number' && va !== vb ? (va > vb ? 'a' : 'b') : null;
+    return `<tr style="border-top:1px solid var(--ies-gray-100);">
+      <td style="padding:8px 16px;color:var(--ies-gray-500);">${label}</td>
+      <td style="padding:8px 12px;text-align:right;font-weight:${better === 'a' ? '800' : '500'};">${fmt(va)}</td>
+      <td style="padding:8px 16px;text-align:right;font-weight:${better === 'b' ? '800' : '500'};">${fmt(vb)}</td>
+    </tr>`;
+  };
+  return `
+    <div class="hub-card" style="padding:16px;">
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+        <div style="font-size:13px;font-weight:700;">Compare scenarios</div>
+        ${pick(_cmpSiteA, 'a')} <span style="color:var(--ies-gray-400);">vs</span> ${pick(_cmpSiteB, 'b')}
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="background:var(--ies-gray-50);font-size:11px;color:var(--ies-gray-400);">
+          <th style="text-align:left;padding:8px 16px;">Metric</th>
+          <th style="text-align:right;padding:8px 12px;">${escapeHtml(A.name)}</th>
+          <th style="text-align:right;padding:8px 16px;">${escapeHtml(B.name)}</th>
+        </tr></thead>
+        <tbody>
+          ${row('Annual revenue', fA.annualRevenue, fB.annualRevenue, money)}
+          ${row('Annual cost', fA.annualCost, fB.annualCost, money)}
+          ${row('Margin %', fA.marginPct, fB.marginPct, (x) => x.toFixed(1) + '%')}
+          ${row('Facility SF', A.sqft || 0, B.sqft || 0, (x) => x.toLocaleString())}
+          ${row('Startup cost', A.startupCost || 0, B.startupCost || 0, money)}
+          ${row('Rev $/SF', A.sqft > 0 ? fA.annualRevenue / A.sqft : 0, B.sqft > 0 ? fB.annualRevenue / B.sqft : 0, (x) => x > 0 ? '$' + x.toFixed(2) : '—')}
+        </tbody>
+      </table>
+      <div style="margin-top:10px;font-size:11px;color:var(--ies-gray-400);">Bold = better of the pair. Engine: Multi-Site calc (computeSiteFinancials).</div>
+    </div>
+  `;
+}
+
 function renderDealSites() {
   const d = selectedDeal;
   const sites = Array.isArray(d.sites) ? d.sites : [];
@@ -1640,18 +1962,33 @@ function renderDealSites() {
         </thead>
         <tbody>
           ${emptyState}
-          ${sites.map(s => `
+          ${sites.map(s => {
+            // UX-1 D1p2-B: a site is the named entity; its scenarios are the
+            // deal's CM projects sharing market|name. Exactly one should be ★.
+            const group = (d.models || []).filter(m => (m.name || '') === s.name);
+            const chips = group.map(m => {
+              const lbl = m.scenario_label || 'Baseline';
+              const star = m.in_bid;
+              return `<span style="display:inline-flex;align-items:center;gap:5px;border:1px solid ${star ? '#bbe5c8' : 'var(--ies-gray-200)'};background:${star ? '#e9f7ee' : '#fff'};border-radius:14px;padding:2px 4px 2px 10px;font-size:11px;margin:2px 4px 2px 0;">
+                <a href="javascript:void(0)" data-action="open-cost-model-id" data-model-id="${escapeAttr(m.id)}" style="text-decoration:none;color:var(--ies-navy);font-weight:${star ? '700' : '500'};">${star ? '★ ' : ''}${escapeHtml(lbl)}</a>
+                ${star ? '' : `<button data-action="mark-in-bid" data-model-id="${escapeAttr(m.id)}" title="Mark this scenario ★ in bid — deal rollups will read it" style="border:none;background:var(--ies-gray-50);border-radius:10px;padding:1px 7px;font-size:10px;cursor:pointer;color:var(--ies-gray-500);">★?</button>`}
+              </span>`;
+            }).join('');
+            return `
             <tr style="border-bottom:1px solid var(--ies-gray-100);">
-              <td style="padding:8px;font-weight:600;">${escapeHtml(s.name)}</td>
-              <td style="padding:8px;color:var(--ies-gray-500);">${escapeHtml(s.market)}</td>
-              <td style="padding:8px;text-align:right;font-weight:600;">${(s.sqft || 0).toLocaleString()}</td>
-              <td style="padding:8px;"><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;background:var(--ies-gray-100);color:var(--ies-gray-600);">${escapeHtml(s.type)}</span></td>
+              <td style="padding:8px;font-weight:600;vertical-align:top;">${escapeHtml(s.name)}
+                <div style="margin-top:4px;">${chips || '<span style="font-size:11px;color:var(--ies-gray-400);">no scenarios</span>'}</div>
+              </td>
+              <td style="padding:8px;color:var(--ies-gray-500);vertical-align:top;">${escapeHtml(s.market)}</td>
+              <td style="padding:8px;text-align:right;font-weight:600;vertical-align:top;">${(s.sqft || 0).toLocaleString()}</td>
+              <td style="padding:8px;vertical-align:top;"><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;background:var(--ies-gray-100);color:var(--ies-gray-600);">${escapeHtml(s.type)}</span></td>
             </tr>
-          `).join('')}
+          `; }).join('')}
         </tbody>
       </table>
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--ies-gray-100);font-size:12px;color:var(--ies-gray-400);">
-        Total: ${sites.reduce((s, site) => s + (site.sqft || 0), 0).toLocaleString()} sq ft across ${sites.length} sites
+        Total: ${sites.reduce((s, site) => s + (site.sqft || 0), 0).toLocaleString()} sq ft across ${sites.length} sites ·
+        ★ = in-bid scenario (deal P&amp;L reads ★ rows only once any is marked)
       </div>
     </div>
   `;

@@ -8,6 +8,7 @@
 
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import { auth } from '../../shared/auth.js?v=20260702-sec2';
+import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 
 /**
  * Fetch the 6 canonical DOS stages.
@@ -92,7 +93,7 @@ export async function listRealDeals() {
     // is gated by RLS or unreachable — sites just fall back to "—".
     const [deals, models, marketRows, stagesRows] = await Promise.all([
       db.fetchAll('deal_deals', 'id, deal_name, client_name, deal_owner, status, current_stage_id, created_at, updated_at, est_annual_revenue, target_margin_pct, contract_term_years, target_go_live, industry_vertical, site_count'),
-      db.fetchAll('cost_model_projects', 'id, name, scenario_label, client_name, market_id, facility_sqft, target_margin_pct, total_annual_cost, deal_deals_id, updated_at'),
+      db.fetchAll('cost_model_projects', 'id, name, scenario_label, client_name, market_id, facility_sqft, target_margin_pct, total_annual_cost, deal_deals_id, updated_at, in_bid'),
       db.fetchAll('ref_markets', 'id, name').catch(() => []),
       db.fetchAll('stages', 'id, stage_number').catch(() => []),
     ]);
@@ -187,6 +188,7 @@ export async function listRealDeals() {
           facility_sqft: m.facility_sqft,
           target_margin_pct: m.target_margin_pct,
           updated_at: m.updated_at,
+          in_bid: !!m.in_bid,
         })),
       };
     });
@@ -370,6 +372,79 @@ export async function deleteArtifact(id) {
  *
  * @param {string} dealId
  */
+/**
+ * UX-1 D1p2-A (2026-07-03): record a terminal deal outcome. owner_id is
+ * auto-stamped by db.insert (R7); recorded_by mirrors it for the audit trail.
+ * @param {string} dealId
+ * @param {Object} p — { outcome, reason_category, reason_detail, competitor_won_to,
+ *                       go_live_date, bid_y1_revenue, bid_y1_cost, bid_y1_margin_pct, notes }
+ * @returns {Promise<Object>} inserted row
+ */
+export async function recordDealOutcome(dealId, p) {
+  if (!dealId || !p?.outcome) throw new Error('recordDealOutcome: dealId + outcome required');
+  const row = await db.insert('deal_outcomes', {
+    deal_id: dealId,
+    outcome: p.outcome,
+    reason_category: p.reason_category || null,
+    reason_detail: p.reason_detail || null,
+    competitor_won_to: p.competitor_won_to || null,
+    go_live_date: p.go_live_date || null,
+    bid_y1_revenue: Number.isFinite(Number(p.bid_y1_revenue)) ? Number(p.bid_y1_revenue) : null,
+    bid_y1_cost: Number.isFinite(Number(p.bid_y1_cost)) ? Number(p.bid_y1_cost) : null,
+    bid_y1_margin_pct: Number.isFinite(Number(p.bid_y1_margin_pct)) ? Number(p.bid_y1_margin_pct) : null,
+    notes: p.notes || null,
+  });
+  // Reflect the terminal state on the deal row itself so pipeline views agree.
+  try { await db.update('deal_deals', dealId, { status: p.outcome }); } catch (err) {
+    console.warn('[deal-mgmt] recordDealOutcome: status update failed', err);
+  }
+  return row;
+}
+
+/**
+ * Latest outcome row for a deal (null when the deal is still open).
+ * @param {string} dealId
+ */
+export async function getLatestDealOutcome(dealId) {
+  try {
+    const { data, error } = await db.from('deal_outcomes')
+      .select('*')
+      .eq('deal_id', dealId)
+      .order('recorded_at', { ascending: false })
+      .limit(1);
+    if (error) throw error;
+    return (data && data[0]) || null;
+  } catch (err) {
+    console.warn('[deal-mgmt] getLatestDealOutcome failed', err);
+    return null;
+  }
+}
+
+/**
+ * UX-1 D1p2-B (2026-07-03): mark a scenario ★-in-bid, exclusively within its
+ * site group (deal models collapsed by market_id|name — same key the Sites
+ * rollup uses). App-side exclusivity: clear siblings, set target.
+ * @param {string} dealId
+ * @param {number|string} modelId
+ */
+export async function setModelInBid(dealId, modelId) {
+  const { data, error } = await db.from('cost_model_projects')
+    .select('id, name, market_id, in_bid')
+    .eq('deal_deals_id', dealId);
+  if (error) throw error;
+  const rows = data || [];
+  const target = rows.find(r => String(r.id) === String(modelId));
+  if (!target) throw new Error('setModelInBid: model not on this deal');
+  const groupKey = `${target.market_id || ''}|${target.name || ''}`;
+  const siblings = rows.filter(r =>
+    `${r.market_id || ''}|${r.name || ''}` === groupKey && String(r.id) !== String(modelId) && r.in_bid);
+  for (const sib of siblings) {
+    await db.update('cost_model_projects', sib.id, { in_bid: false });
+  }
+  await db.update('cost_model_projects', target.id, { in_bid: true });
+  recordAudit({ table: 'cost_model_projects', id: target.id, action: 'mark_in_bid', fields: { deal_deals_id: dealId } });
+}
+
 /**
  * UX-1 D1 phase 1 (2026-07-03): design-tool scenarios linked to a deal via
  * parent_deal_id (stamped by the D2 deal-context on save). Powers the

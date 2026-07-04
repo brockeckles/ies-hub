@@ -305,6 +305,7 @@ function mapCmProjectToSite(row) {
     pricingModel: row.pricing_model || 'cost-plus',
     annualVolume: row.vol_pallets_received || 0,    // closest proxy: inbound pallet volume
     costModelId: String(row.id),
+    inBid: !!row.in_bid,                            // UX-1 D1p2: ★-in-bid marker
   };
 }
 
