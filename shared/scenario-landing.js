@@ -32,6 +32,7 @@
  */
 
 import { db } from './supabase.js?v=20260703-hw1';
+import * as dealContext from './deal-context.js?v=20260703-dc1';
 import { showToast } from './toast.js?v=20260419-uC';
 import { showConfirm } from './confirm-modal.js?v=20260601-prompt2';
 
@@ -69,21 +70,35 @@ export async function renderScenarioLanding(rootEl, opts) {
   // Fetch scenarios + all cost model names (for linkage label lookup) in parallel.
   let scenarios = [];
   let costModelsById = new Map();
+  let dealsById = new Map();
   try {
-    const [rows, cms] = await Promise.all([
+    const [rows, cms, deals] = await Promise.all([
       list().catch(err => { console.warn(`[${toolKey}-landing] list failed`, err); return []; }),
       db.fetchAll('cost_model_projects').catch(() => []),
+      // UX-1 D2 (2026-07-03): deal names so the "Deal:" linkage chip shows a
+      // name instead of a raw uuid.
+      db.fetchAll('deal_deals', 'id, deal_name, client_name').catch(() => []),
     ]);
     scenarios = Array.isArray(rows) ? rows : [];
     for (const cm of (cms || [])) {
       costModelsById.set(String(cm.id), cm.name || cm.client_name || `CM #${cm.id}`);
     }
+    for (const d of (deals || [])) {
+      dealsById.set(String(d.id), d.deal_name || d.client_name || String(d.id));
+    }
   } catch (err) {
     console.warn(`[${toolKey}-landing] load failed`, err);
   }
 
+  // UX-1 D2: active-deal scenarios float to the top of the list.
+  const _dcCtx = dealContext.getActive();
+  if (_dcCtx) {
+    const isMine = (r) => String((getParent(r) || {}).dealId || '') === _dcCtx.id ? 0 : 1;
+    scenarios = [...scenarios].sort((a, b) => isMine(a) - isMine(b));
+  }
+
   rootEl.innerHTML = renderShell({
-    toolName, toolKey, accent, scenarios, costModelsById,
+    toolName, toolKey, accent, scenarios, costModelsById, dealsById, dealCtx: _dcCtx,
     getId, getName, getUpdated, getParent, getSubtitle,
     canCopy: typeof onCopy === 'function',
     canDelete: typeof onDelete === 'function',
@@ -115,6 +130,13 @@ export async function renderScenarioLanding(rootEl, opts) {
     } = rootEl.__slCtx || {};
     if (!onOpen) return; // context cleared / never rendered
     const t = /** @type {HTMLElement} */ (e.target);
+
+    // UX-1 D2: clear the hub-wide deal binding from the landing chip.
+    if (t.closest('[data-sl-dc-clear]')) {
+      dealContext.clearActive();
+      renderScenarioLanding(rootEl, opts);
+      return;
+    }
 
     // + New Scenario
     if (t.closest('[data-sl-action="new"]')) {
@@ -203,7 +225,7 @@ function renderLoading(toolName) {
 }
 
 function renderShell({
-  toolName, toolKey, accent, scenarios, costModelsById,
+  toolName, toolKey, accent, scenarios, costModelsById, dealsById, dealCtx,
   getId, getName, getUpdated, getParent, getSubtitle,
   canCopy, canDelete, canLink, emptyStateHint,
 }) {
@@ -233,6 +255,12 @@ function renderShell({
             ${total} scenario${total === 1 ? '' : 's'} saved
             ${total > 0 ? `· <strong style="color:${accent};">${linked}</strong> linked, <strong>${standalone}</strong> stand-alone` : ''}
           </p>
+          ${dealCtx ? `
+          <div style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;font-size:12px;background:#fff7f5;border:1px solid #ffd9cf;border-radius:16px;padding:4px 12px;">
+            <span style="color:var(--ies-gray-500);">Working in deal:</span>
+            <span style="font-weight:700;color:var(--ies-navy);">${escapeText(dealCtx.name || (dealsById && dealsById.get(String(dealCtx.id))) || dealCtx.id)}</span>
+            <button type="button" data-sl-dc-clear title="Clear deal binding — new scenarios will start unassigned" style="border:none;background:none;cursor:pointer;color:var(--ies-gray-400);font-weight:700;font-size:12px;line-height:1;padding:0;">✕</button>
+          </div>` : ''}
         </div>
         <button type="button" data-sl-action="new" class="hub-btn hub-btn-primary" style="font-weight:700;">
           + New Scenario
@@ -248,7 +276,7 @@ function renderShell({
             <div style="text-align:right;">Actions</div>
           </div>
           ${scenarios.map(s => renderRow({
-            s, accent, costModelsById,
+            s, accent, costModelsById, dealsById,
             getId, getName, getUpdated, getParent, getSubtitle,
             canCopy, canDelete, canLink,
           })).join('')}
@@ -272,18 +300,19 @@ function renderEmpty(toolName, accent, hint) {
   `;
 }
 
-function renderRow({ s, accent, costModelsById, getId, getName, getUpdated, getParent, getSubtitle, canCopy, canDelete, canLink }) {
+function renderRow({ s, accent, costModelsById, dealsById, getId, getName, getUpdated, getParent, getSubtitle, canCopy, canDelete, canLink }) {
   const id = getId(s);
   const name = getName(s) || 'Untitled';
   const updatedRaw = getUpdated(s);
   const updated = updatedRaw ? formatRelative(updatedRaw) : '—';
   const parent = getParent(s) || {};
   const cmName = parent.cmId ? (costModelsById.get(String(parent.cmId)) || `CM #${parent.cmId}`) : null;
+  const dealName = parent.dealId ? ((dealsById && dealsById.get(String(parent.dealId))) || parent.dealId) : null;
   const subtitle = typeof getSubtitle === 'function' ? getSubtitle(s) : '';
 
   // If canLink, the whole linkage cell becomes a clickable chip-toggle that
   // opens a CM picker (unlinked → link, linked → confirm unlink).
-  const chipHtml = linkageBadge(parent, cmName, accent);
+  const chipHtml = linkageBadge(parent, cmName, accent, dealName);
   const chipCell = canLink
     ? `<button type="button" data-sl-row-action="link" aria-label="${parent.cmId ? 'Unlink from Cost Model' : 'Link to Cost Model'}" title="${parent.cmId ? 'Click to unlink' : 'Click to link to a Cost Model'}" style="background:none;border:none;padding:0;cursor:pointer;text-align:left;">${chipHtml}</button>`
     : chipHtml;
@@ -351,7 +380,7 @@ function pickCostModel(costModelsById) {
   });
 }
 
-function linkageBadge(parent, cmName, accent) {
+function linkageBadge(parent, cmName, accent, dealName) {
   if (parent.cmId) {
     return `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:11px;font-weight:700;max-width:100%;">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
@@ -361,7 +390,7 @@ function linkageBadge(parent, cmName, accent) {
   if (parent.dealId) {
     return `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:11px;font-weight:700;max-width:100%;">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
-      <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Deal: ${escapeText(parent.dealId)}</span>
+      <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Deal: ${escapeText(dealName || parent.dealId)}</span>
     </span>`;
   }
   return `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:var(--ies-gray-50);border:1px solid var(--ies-gray-200);color:var(--ies-gray-500);font-size:11px;font-weight:600;">

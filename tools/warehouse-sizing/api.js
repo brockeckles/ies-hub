@@ -6,6 +6,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
+import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 
 // ============================================================
 // FACILITY CONFIGS
@@ -46,6 +47,11 @@ export async function saveConfig(config) {
   if (config.id) {
     return db.update('wsc_facility_configs', config.id, payload);
   }
+  // UX-1 D2 (2026-07-03): new scenarios born while a deal context is active
+  // are stamped with the deal — the spine link the landing's "Deal:" chip
+  // and the deal workspace both read. Insert-only: updates never rebind.
+  const _ctx = dealContext.getActive();
+  if (_ctx) payload.parent_deal_id = _ctx.id;
   return db.insert('wsc_facility_configs', payload);
 }
 
