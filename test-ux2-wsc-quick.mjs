@@ -41,7 +41,9 @@ t('tier toggle action exists and routes through the shell', () => {
 });
 
 t('flip to quick lands on dashboard when a bench view is active', () =>
-  assert(/toQuick && \(activeView === 'plan' \|\| activeView === 'elevation'\)\) activeView = 'dashboard';/.test(ui)));
+  // N1 (2026-07-04): Design Basis joins plan/elevation as an Engineering-only
+  // bench view — flipping to quick must land it on dashboard too.
+  assert(/toQuick && \(activeView === 'plan' \|\| activeView === 'elevation' \|\| activeView === 'basis'\)\) activeView = 'dashboard';/.test(ui)));
 
 t('tier persists via shared tier service (default quick, decision #2)', () => {
   assert(ui.includes("tierSvc.getTier('wsc')") && ui.includes("tierSvc.setTier('wsc'"), 'tier service not used');
@@ -81,11 +83,19 @@ t('quick panel surfaces the sized answer (SF + positions)', () => {
 });
 
 // ── pins ─────────────────────────────────────────────────────────────────
-t('cache-bust pins agree across consumers (wq1)', () => {
+t('cache-bust pins agree across consumers', () => {
+  // N1 (2026-07-04): generic form — hardcoded pin literals went stale on
+  // every bump (wq1→wq2→n1a churn). The invariant that matters: every
+  // consumer of warehouse-sizing/ui.js carries the SAME pin.
   const index = readFileSync('./index.html', 'utf8');
   const cmUi = readFileSync('./tools/cost-model/ui.js', 'utf8');
-  assert(index.includes('warehouse-sizing/ui.js?v=20260704-wq2'), 'index.html wsc pin stale');
-  assert(cmUi.includes('warehouse-sizing/ui.js?v=20260704-wq2'), 'CM slideover wsc pin stale');
+  const pinOf = (s, name) => {
+    const m = s.match(/warehouse-sizing\/ui\.js\?v=([\w.-]+)/);
+    assert(m, `${name}: wsc ui pin missing`);
+    return m[1];
+  };
+  const indexPin = pinOf(index, 'index.html');
+  assert(pinOf(cmUi, 'CM slideover') === indexPin, 'CM slideover pin diverges from index.html');
   assert(ui.includes("ui-config.js?v=20260704-wq1") && ui.includes("ui-shell-events.js?v=20260704-wq1"), 'inner pins stale');
 });
 

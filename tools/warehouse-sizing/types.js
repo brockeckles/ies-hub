@@ -247,3 +247,36 @@
  */
 
 export {};
+
+// ============================================================
+// N1 (2026-07-04) — DESIGN BASIS PROFILE (WSC re-founding, North Star doc)
+// ============================================================
+
+/**
+ * @typedef {Object} DataGap
+ * @property {string} code — stable machine code (e.g. 'TIHI_MISSING')
+ * @property {'error'|'warn'|'info'} severity — error = blocks design-readiness
+ * @property {string} message — human sentence, printed in the Design Basis doc
+ * @property {number} [count]
+ */
+
+/**
+ * @typedef {Object} DesignProfile
+ * The unified output of BOTH ingest modes (Brock 2026-07-04: rich data and
+ * sparse RFP aggregates are first-class peers). Fields are null when the
+ * mode/data can't produce them; provenance says how each was obtained:
+ * 'derived' (computed from customer rows), 'asserted' (user-entered
+ * aggregate), 'estimated' (defaulted — always paired with a DataGap).
+ *
+ * @property {'data'|'sparse'} mode
+ * @property {number|null} skuCount
+ * @property {Object|null} velocityBands — { A|B|C: { skuCount, skuPct, linePct, skus[]|null } } (ABC by pick lines)
+ * @property {Object|null} cubeMovement — { A|B|C: { cubePct }, skuCoveragePct } second axis; data mode only
+ * @property {Object|null} depthOfHolding — { avgPalletsPerSku, p50, p90, skusMeasured, distribution[]|null }
+ * @property {Object|null} tiHi — { avgCasesPerPallet, skusWithData, skusMissing }
+ * @property {Object|null} peak — { weeksObserved, avgWeeklyLines, peakWeeklyLines, peakFactor, basis }
+ * @property {Object|null} volumes — { observedUnits, observedLines, annualOutboundUnits, onHandPallets }
+ * @property {DataGap[]} dataGaps
+ * @property {Object<string,'derived'|'asserted'|'estimated'>} provenance
+ * @property {Object} [sources] — per-slot { fileName, rows, skipped } metadata (data mode)
+ */

@@ -23,6 +23,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260704-wq1';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260703-ux0';
 import { renderDashboard } from './ui-dashboard.js?v=20260703-ux0';
+import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260704-n1a';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260702-p1b';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
 import { wscExtraStyles } from './ui-styles.js?v=20260513-stylesextract';
@@ -36,6 +37,10 @@ const WSC_GROUPS = [
   { key: 'design', label: 'Design', description: '4-view warehouse sizing canvas' },
 ];
 const WSC_SECTIONS = [
+  // N1 (2026-07-04) — Design Basis: data-first ingest + profiler, the first
+  // slice of the WSC re-founding (North Star doc). Engineering tier only for
+  // now; becomes the Quick tier's front door at N3 (media-selection pivot).
+  { key: 'basis',     label: 'Design Basis',   group: 'design' },
   { key: 'dashboard', label: 'Dashboard',      group: 'design' },
   { key: 'plan',      label: '2D — Plan',      group: 'design' },
   { key: 'elevation', label: '2D — Elevation', group: 'design' },
@@ -54,7 +59,7 @@ function _wscQuickChrome() { return tierSvc.getTier('wsc') === 'quick'; }
 function handleWscTierToggle() {
   const toQuick = !_wscQuickChrome();
   tierSvc.setTier('wsc', toQuick ? 'quick' : 'engineering');
-  if (toQuick && (activeView === 'plan' || activeView === 'elevation')) activeView = 'dashboard';
+  if (toQuick && (activeView === 'plan' || activeView === 'elevation' || activeView === 'basis')) activeView = 'dashboard';
   if (!rootEl) return;
   rootEl.innerHTML = renderShell();
   bindShellEvents(_makeShellEventsCtx());
@@ -81,6 +86,11 @@ let zones = createDefaultZones();
 
 /** @type {import('./types.js?v=20260418-sL').VolumeInputs} */
 let volumes = createDefaultVolumes();
+
+/** N1 (2026-07-04) — DesignProfile from the Design Basis section (data or
+ *  sparse mode). Persisted inside config_data.profile; null = no basis yet.
+ *  @type {import('./types.js?v=20260418-sL').DesignProfile|null} */
+let profile = null;
 
 /** @type {boolean} */
 let isDirty = false;
@@ -281,6 +291,8 @@ function openEditor(savedRow) {
   if (savedRow) {
     const data = savedRow.config_data || savedRow;
     facility = { ...createDefaultFacility(), ...data, id: savedRow.id, parent_cost_model_id: savedRow.parent_cost_model_id || null };
+    profile = data.profile || null;   // N1 — design basis rides config_data
+    resetBasisState();
     zones = { ...createDefaultZones(), ...(data.zones || {}) };
     volumes = { ...createDefaultVolumes(), ...(data.volumes || {}) };
     // Phase A migration (2026-05-05): if a legacy facility has buildingDimsOverride
@@ -292,6 +304,8 @@ function openEditor(savedRow) {
     }
   } else {
     facility = createDefaultFacility();
+    profile = null;                   // N1 — fresh scenario, no basis yet
+    resetBasisState();
     zones = createDefaultZones();
     volumes = createDefaultVolumes();
   }
@@ -535,7 +549,7 @@ function debounceRender(fn, ms = 100) {
 /** Save the current design — extracted so the chrome's onAction handler can dispatch. */
 async function handleSaveWsc() {
   try {
-    const saved = await api.saveConfig({ ...facility, zones, volumes });
+    const saved = await api.saveConfig({ ...facility, zones, volumes, profile });
     facility.id = saved.id || saved[0]?.id || facility.id;
     _clearDirty();
     showToast(`Saved "${facility.name || 'Untitled'}"`, 'success');
@@ -812,6 +826,12 @@ function renderContentView() {
   }
 
   switch (activeView) {
+    case 'basis': renderBasisView(container, {
+      getProfile: () => profile,
+      setProfile: (p) => { profile = p; _markDirty(); },
+      rerender: renderContentView,
+      toast: showToast,
+    }); break;
     case 'dashboard': container.innerHTML = renderDashboard(_makeDashboardCtx()); break;
     case 'plan':
       container.innerHTML = renderPlan(_makePlanCtx());
