@@ -370,6 +370,36 @@ export async function deleteArtifact(id) {
  *
  * @param {string} dealId
  */
+/**
+ * UX-1 D1 phase 1 (2026-07-03): design-tool scenarios linked to a deal via
+ * parent_deal_id (stamped by the D2 deal-context on save). Powers the
+ * workflow rail's Size / Labor / Network counts + smart buttons.
+ * @param {string} dealId
+ * @returns {Promise<{wsc: any[], most: any[], cog: any[]}>}
+ */
+export async function listDesignScenariosByDeal(dealId) {
+  if (!dealId) return { wsc: [], most: [], cog: [] };
+  const grab = async (table) => {
+    try {
+      const { data, error } = await db.from(table)
+        .select('id, name, updated_at')
+        .eq('parent_deal_id', dealId)
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.warn(`[deal-mgmt] listDesignScenariosByDeal(${table}) failed`, err);
+      return [];
+    }
+  };
+  const [wsc, most, cog] = await Promise.all([
+    grab('wsc_facility_configs'),
+    grab('most_analyses'),
+    grab('cog_scenarios'),
+  ]);
+  return { wsc, most, cog };
+}
+
 export async function loadDosStatusByDeal(dealId) {
   if (!dealId) return {};
   try {

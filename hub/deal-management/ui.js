@@ -7,7 +7,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260703-ux0';
+import * as api from './api.js?v=20260703-dc4';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260703-dc1';
@@ -16,6 +16,9 @@ import { setActive as setDealContext } from '../../shared/deal-context.js?v=2026
 let rootEl = null;
 let viewMode = 'pipeline'; // pipeline | list | customers | hours | detail
 let selectedDeal = null;
+// UX-1 D1 phase 1: design-tool scenarios per deal (wsc/most/cog), hydrated
+// alongside strategy/artifacts/DOS in _hydrateDealDetail.
+const _designScenariosByDeal = new Map();
 let detailTab = 'overview'; // overview | sites | dos | financials | documents | strategy
 let dealSearch = '';
 let customerFilter = ''; // empty = all
@@ -420,6 +423,17 @@ function bindDelegatedEvents() {
     if (createCm) {
       const did = /** @type {HTMLElement} */ (createCm).dataset.dealId;
       if (did) createCostModelForDeal(did);
+      return;
+    }
+
+    // UX-1 D1 phase 1 (2026-07-03): generalized 0/1/N tool launch from the
+    // workflow rail — re-assert the deal context, then route. The tool's
+    // landing (D2-wired) shows the binding chip and sorts this deal first.
+    const launchTool = target.closest('[data-action="launch-tool"]');
+    if (launchTool) {
+      if (selectedDeal) setDealContext({ id: selectedDeal.id, name: selectedDeal.name, customer: selectedDeal.client });
+      const route = launchTool.getAttribute('data-tool-route');
+      if (route) window.location.hash = route;
       return;
     }
     // R10 (2026-04-29) — Site Details + Add Site
@@ -1167,11 +1181,15 @@ async function _hydrateDealDetail(dealId) {
   if (_hydratedDeals.has(dealId)) return;
   _hydratedDeals.add(dealId);
   try {
-    const [strategy, artifacts, dosStatus] = await Promise.all([
+    const [strategy, artifacts, dosStatus, designScenarios] = await Promise.all([
       api.loadStrategy(dealId),
       api.listArtifactsByDeal(dealId),
       api.loadDosStatusByDeal(dealId),
+      api.listDesignScenariosByDeal(dealId),
     ]);
+
+    // Workflow rail data (UX-1 D1 phase 1).
+    _designScenariosByDeal.set(dealId, designScenarios || { wsc: [], most: [], cog: [] });
 
     // Strategy: merge over the seeded defaults so any null-valued columns
     // fall back to the seed; non-null DB values win.
@@ -1485,6 +1503,7 @@ function renderDealOverview() {
   const stage = DOS_STAGES.find(s => s.id === d.stage);
 
   return `
+    ${renderWorkflowRail(d)}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       <!-- Timeline -->
       <div class="hub-card" style="padding:16px;">
@@ -1509,6 +1528,75 @@ function renderDealOverview() {
           ${renderCostModelButton(d)}
           <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="open-multi-site" style="text-align:left;">Open Multi-Site Analyzer →</button>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * UX-1 D1 phase 1 (2026-07-03): the workflow rail — the deal's opportunity
+ * spine rendered as six stages (Scope → Size → Labor → Cost → Network →
+ * Package), each with linked-scenario counts and the DM 0/1/N smart-button
+ * pattern generalized to every tool. Buttons launch tools pre-bound via the
+ * shared deal context (set on deal open; re-asserted on click).
+ * Full workspace merge (MSA tabs, lifecycle control) = D1 phase 2.
+ */
+function renderWorkflowRail(d) {
+  const ds = _designScenariosByDeal.get(d.id) || { wsc: [], most: [], cog: [] };
+  const models = Array.isArray(d.models) ? d.models : [];
+  const artifacts = getArtifacts(d.id) || [];
+
+  // DOS completion across ALL stages reached so far (mirrors detail KPI).
+  let dosTotal = 0, dosDone = 0;
+  for (let sN = 1; sN <= d.stage; sN++) {
+    const templates = DOS_TEMPLATES[sN] || [];
+    dosTotal += templates.length;
+    dosDone += templates.filter(t => _dosStatusFor(d.id, t) === 'complete').length;
+  }
+  const dosPct = dosTotal > 0 ? Math.round((dosDone / dosTotal) * 100) : 0;
+
+  const smartLabel = (n, noun) => n === 0 ? `Start ${noun} →` : (n === 1 ? `Open →` : `View ${n} →`);
+  const dot = (n) => `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:${n > 0 ? '#16a34a' : 'var(--ies-gray-200)'};"></span>`;
+
+  const stages = [
+    { key: 'scope',   name: 'Scope',   sub: 'Deal basics · DOS',   count: null,
+      dotHtml: `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:${dosPct >= 100 ? '#16a34a' : dosPct > 0 ? '#eab308' : 'var(--ies-gray-200)'};"></span>`,
+      countTxt: `DOS ${dosPct}%`,
+      btn: `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-detail-tab="dos">Open DOS →</button>` },
+    { key: 'size',    name: 'Size',    sub: 'Warehouse Sizing',    count: ds.wsc.length,
+      btn: `<button class="hub-btn hub-btn-sm ${ds.wsc.length ? 'hub-btn-secondary' : 'hub-btn-primary'}" data-action="launch-tool" data-tool-route="designtools/warehouse-sizing">${smartLabel(ds.wsc.length, 'sizing')}</button>` },
+    { key: 'labor',   name: 'Labor',   sub: 'MOST Standards',      count: ds.most.length,
+      btn: `<button class="hub-btn hub-btn-sm ${ds.most.length ? 'hub-btn-secondary' : 'hub-btn-primary'}" data-action="launch-tool" data-tool-route="designtools/most-standards">${smartLabel(ds.most.length, 'labor std')}</button>` },
+    { key: 'cost',    name: 'Cost',    sub: 'Cost Model',          count: models.length,
+      btn: models.length === 0
+        ? `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="create-cost-model" data-deal-id="${escapeAttr(d.id)}">Start cost model →</button>`
+        : models.length === 1
+          ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="open-cost-model-id" data-model-id="${escapeAttr(models[0].id)}">Open →</button>`
+          : `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="choose-cost-model" data-deal-id="${escapeAttr(d.id)}">View ${models.length} →</button>` },
+    { key: 'network', name: 'Network', sub: 'Center of Gravity',   count: ds.cog.length,
+      btn: `<button class="hub-btn hub-btn-sm ${ds.cog.length ? 'hub-btn-secondary' : 'hub-btn-primary'}" data-action="launch-tool" data-tool-route="designtools/center-of-gravity">${smartLabel(ds.cog.length, 'network')}</button>` },
+    { key: 'package', name: 'Package', sub: 'Artifacts · Strategy', count: artifacts.length,
+      btn: `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-detail-tab="artifacts">Open artifacts →</button>` },
+  ];
+
+  return `
+    <div class="hub-card" style="padding:0;margin-bottom:16px;overflow:hidden;">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--ies-gray-100);display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:13px;font-weight:700;">Workflow</div>
+        <div style="font-size:11px;color:var(--ies-gray-400);">Scenarios launched here open pre-bound to this deal</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);">
+        ${stages.map((st, i) => `
+          <div style="padding:12px 14px;${i < 5 ? 'border-right:1px solid var(--ies-gray-100);' : ''}display:flex;flex-direction:column;gap:6px;min-width:0;">
+            <div style="display:flex;align-items:center;gap:7px;">
+              ${st.dotHtml || dot(st.count)}
+              <span style="font-size:12.5px;font-weight:700;">${st.name}</span>
+              <span style="margin-left:auto;font-size:10.5px;color:var(--ies-gray-400);background:var(--ies-gray-50);border-radius:10px;padding:1px 7px;white-space:nowrap;">${st.countTxt != null ? st.countTxt : st.count}</span>
+            </div>
+            <div style="font-size:10.5px;color:var(--ies-gray-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${st.sub}</div>
+            <div>${st.btn}</div>
+          </div>
+        `).join('')}
       </div>
     </div>
   `;
