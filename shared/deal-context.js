@@ -34,7 +34,14 @@ const _mem = new Map();
 
 function _store() {
   try {
-    if (typeof localStorage !== 'undefined' && localStorage) return localStorage;
+    // Feature-probe, not mere presence: newer Node exposes a `localStorage`
+    // object whose methods are all undefined (experimental Web Storage stub
+    // with no backing file), which would silently drop every write. Private
+    // browsing / sandboxed embeds can do the same. Require real methods.
+    if (typeof localStorage !== 'undefined' && localStorage
+        && typeof localStorage.getItem === 'function'
+        && typeof localStorage.setItem === 'function'
+        && typeof localStorage.removeItem === 'function') return localStorage;
   } catch { /* SecurityError in some embeds — fall through */ }
   return {
     getItem: (k) => (_mem.has(k) ? _mem.get(k) : null),
