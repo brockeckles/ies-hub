@@ -30,6 +30,7 @@ import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260703-p
 import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260703-ls1';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
+import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import {
   OFP_MHE_OPTIONS as _OFP_MHE_OPTIONS,
   OFP_IT_OPTIONS as _OFP_IT_OPTIONS,
@@ -944,8 +945,20 @@ async function loadModelByCmId(id) {
 
 function wireLandingEvents() {
   if (!rootEl) return;
+  // UX-1 D2: drop the deal binding from the landing chip.
+  rootEl.querySelector('[data-dc-clear]')?.addEventListener('click', () => {
+    dealContext.clearActive();
+    renderCurrentView();
+  });
   rootEl.querySelector('#cm-create-new')?.addEventListener('click', () => {
     model = setModel(createEmptyModel());
+    // UX-1 D2 (2026-07-03): if a deal context is active (set by the deal
+    // workspace), prestamp the new model so Save links it — replaces the
+    // cm_pending_new_for_deal 60s relay as the durable path.
+    {
+      const _ctx = dealContext.getActive();
+      if (_ctx && model?.projectDetails) model.projectDetails.dealId = _ctx.id;
+    }
     resetDirty();
     userHasInteracted = setUserHasInteracted(false);
     activeSection = 'setup';
@@ -12549,6 +12562,11 @@ function renderLanding() {
     const label = m.name || m.market_name || m.abbr || key;
     if (key) marketById[key] = label;
   });
+  // UX-1 D2 (2026-07-03): active deal context chip — shows the hub-wide
+  // binding and lets the user drop it. Groups for the active deal sort first.
+  const _dcCtx = dealContext.getActive();
+  const _dcDeal = _dcCtx ? (savedDeals || []).find(d => String(d.id) === _dcCtx.id) : null;
+  const _dcLabel = _dcCtx ? (_dcCtx.name || _dcDeal?.deal_name || _dcCtx.id) : '';
   return `
     <div style="padding:32px;max-width:1280px;margin:0 auto;">
       <a href="#designtools" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ies-gray-500);text-decoration:none;margin-bottom:8px;" onmouseover="this.style.color='#ff3a00'" onmouseout="this.style.color='var(--ies-gray-500)'">
@@ -12561,6 +12579,12 @@ function renderLanding() {
           <div style="font-size:13px;color:var(--ies-gray-400);">
             ${count === 0 ? 'Build a new pricing model from scratch.' : `${count} saved model${count === 1 ? '' : 's'} — pick one to continue, or start fresh.`}
           </div>
+          ${_dcCtx ? `
+          <div style="margin-top:10px;display:inline-flex;align-items:center;gap:8px;font-size:12px;background:#fff7f5;border:1px solid #ffd9cf;border-radius:16px;padding:4px 12px;">
+            <span style="color:var(--ies-gray-500);">Working in deal:</span>
+            <span style="font-weight:700;color:var(--ies-navy);">${escapeHtml(_dcLabel)}</span>
+            <button data-dc-clear title="Clear deal binding — new models will start unassigned" style="border:none;background:none;cursor:pointer;color:var(--ies-gray-400);font-weight:700;font-size:12px;line-height:1;">✕</button>
+          </div>` : ''}
         </div>
         <button class="hub-btn hub-btn-primary" id="cm-create-new" style="font-weight:700;">+ Create New Model</button>
       </div>
@@ -12592,6 +12616,11 @@ function renderLanding() {
         const orderedKeys = [...groups.keys()].sort((a, b) => {
           if (a === '__unassigned__') return 1;
           if (b === '__unassigned__') return -1;
+          // Active deal context group first (UX-1 D2).
+          if (_dcCtx) {
+            if (a === _dcCtx.id && b !== _dcCtx.id) return -1;
+            if (b === _dcCtx.id && a !== _dcCtx.id) return 1;
+          }
           const an = (dealById[a]?.deal_name || a).toLowerCase();
           const bn = (dealById[b]?.deal_name || b).toLowerCase();
           return an < bn ? -1 : an > bn ? 1 : 0;

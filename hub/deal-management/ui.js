@@ -10,6 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import * as api from './api.js?v=20260703-ux0';
 import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
+import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260703-dc1';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -357,6 +358,9 @@ function bindDelegatedEvents() {
       if (selectedDeal) {
         viewMode = 'detail';
         detailTab = 'overview';
+        // UX-1 D2 (2026-07-03): entering a deal's workspace binds the hub-wide
+        // deal context — tools launched from here mount pre-bound to this deal.
+        setDealContext({ id: selectedDeal.id, name: selectedDeal.name, customer: selectedDeal.client });
         render();
         // Async hydrate for real deals (strategy + artifacts + DOS status).
         _hydrateDealDetail(selectedDeal.id);
@@ -1344,6 +1348,9 @@ function openCostModelById(modelId) {
   try {
     sessionStorage.setItem('cm_pending_open', JSON.stringify({ id: Number(modelId), at: Date.now() }));
   } catch {}
+  // UX-1 D2: bind persistent deal context too — unlike the 60s relay above,
+  // this survives a slow landing so CM stays deal-bound.
+  if (selectedDeal) setDealContext({ id: selectedDeal.id, name: selectedDeal.name, customer: selectedDeal.client });
   window.location.hash = 'designtools/cost-model';
 }
 
@@ -1407,6 +1414,13 @@ function createCostModelForDeal(dealId) {
   try {
     sessionStorage.setItem('cm_pending_new_for_deal', JSON.stringify({ dealId, at: Date.now() }));
   } catch {}
+  // UX-1 D2: persistent context — if the relay TTL lapses, the CM landing's
+  // "+ Create New Model" still prestamps this deal from context.
+  {
+    const _d = DEALS.find(x => x.id === dealId) || selectedDeal;
+    if (_d) setDealContext({ id: _d.id, name: _d.name, customer: _d.client });
+    else setDealContext({ id: dealId });
+  }
   window.location.hash = 'designtools/cost-model';
 }
 
