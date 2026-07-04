@@ -9,7 +9,7 @@
  *   import { router } from './router.js?v=20260703-p34';
  *
  *   router.register('designtools/cost-model', {
- *     load: () => import('../tools/cost-model/ui.js?v=20260703-dc2'),
+ *     load: () => import('../tools/cost-model/ui.js?v=20260703-dc3'),
  *     title: 'Cost Model Builder',
  *   });
  *

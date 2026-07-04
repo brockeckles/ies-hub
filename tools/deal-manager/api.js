@@ -334,8 +334,21 @@ export async function fetchCostModelBreakdown(costModelId) {
     equipment: 0,
     overhead: 0,
     vas: 0,
-    transportation: 0,  // not modeled in CM today; placeholder for future fleet/transport push
+    transportation: 0,  // populated below from linkedCogFacts when a COG scenario has written back
   };
+
+  // P4-1 (2026-07-03): transportation from the COG writeback — read side of
+  // the linkedCogFacts contract (write-only since 2026-05-28 G2). Fetched
+  // FIRST so every return path below carries it.
+  try {
+    const { data: proj } = await db.from('cost_model_projects')
+      .select('project_data')
+      .eq('id', idVal)
+      .maybeSingle();
+    const cog = proj?.project_data?.linkedCogFacts;
+    const t = Number(cog?.totalCost);
+    if (Number.isFinite(t) && t > 0) breakdown.transportation = t;
+  } catch { /* transport stays 0 — benchmark only */ }
 
   try {
     // 1) Canonical summary

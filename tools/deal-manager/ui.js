@@ -9,7 +9,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260703-ls1';
 import * as calc from './calc.js?v=20260703-lw3';
-import * as api from './api.js?v=20260703-hw1';
+import * as api from './api.js?v=20260703-dc3';
 import * as cmApi from '../cost-model/api.js?v=20260703-p33';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';

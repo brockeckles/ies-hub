@@ -639,30 +639,22 @@ export async function mount(el) {
       // Only consume if recent (within 60s) — stale entries shouldn't hijack future opens
       if (payload && payload.at && (Date.now() - payload.at) < 60000) {
         sessionStorage.removeItem('wsc_pending_push');
-        // Switch to editor mode first, then apply
-        model = setModel(createEmptyModel());
-        resetDirty();
-        userHasInteracted = setUserHasInteracted(false);
-        activeSection = 'facility';
-        viewMode = 'editor';
-        // Apply payload to the fresh model.
-        // WSC-J1 (2026-04-25): WSC now sends 13 fields (was 5). CM stores them
-        // additively on model.facility — every write is guarded by truthy check
-        // so blank WSC values never clobber CM defaults.
-        if (payload.totalSqft)        model.facility.totalSqft = payload.totalSqft;
-        if (payload.storageSqft)      model.facility.storageSqft = payload.storageSqft;
-        if (payload.clearHeight)      model.facility.clearHeight = payload.clearHeight;
-        if (payload.buildingWidth)    model.facility.buildingWidth = payload.buildingWidth;
-        if (payload.buildingDepth)    model.facility.buildingDepth = payload.buildingDepth;
-        if (payload.dockDoors)        model.facility.dockDoors = payload.dockDoors;
-        if (payload.inboundDoors)     model.facility.inboundDoors = payload.inboundDoors;
-        if (payload.outboundDoors)    model.facility.outboundDoors = payload.outboundDoors;
-        if (payload.officeSqft)       model.facility.officeSqft = payload.officeSqft;
-        if (payload.stagingSqft)      model.facility.stagingSqft = payload.stagingSqft;
-        if (payload.palletPositions)  model.facility.palletPositions = payload.palletPositions;
-        if (payload.sfPerPosition)    model.facility.sfPerPosition = payload.sfPerPosition;
-        if (payload.peakUnitsPerDay)  model.facility.peakUnitsPerDay = payload.peakUnitsPerDay;
-        _markCmDirty();
+        // UX-1 P4-1 (2026-07-03): push becomes an UPDATE. If the active deal
+        // context resolves to a single target model (one model on the deal,
+        // or exactly one Baseline), load it and merge the WSC payload into it
+        // instead of spawning an unsaved orphan draft. Fallback: fresh model
+        // prestamped with the deal so Save still links it.
+        const _wscTarget = _resolveDealTargetModel();
+        if (_wscTarget) {
+          await loadModelByCmId(_wscTarget.id);
+        }
+        handleWscPush(payload);
+        if (_wscTarget) {
+          showToast(`Merged Warehouse Sizing output into "${_wscTarget.name || 'deal model'}" — review and Save.`, 'success');
+        } else {
+          const _ctx = dealContext.getActive();
+          if (_ctx && model?.projectDetails && !model.projectDetails.dealId) model.projectDetails.dealId = _ctx.id;
+        }
       } else {
         // Stale — discard
         sessionStorage.removeItem('wsc_pending_push');
@@ -681,14 +673,25 @@ export async function mount(el) {
       const payload = JSON.parse(pending);
       if (payload && payload.at && (Date.now() - payload.at) < 60000) {
         sessionStorage.removeItem('most_pending_push');
-        // Make sure we're on the editor, not the landing page
-        if (viewMode !== 'editor') {
+        // UX-1 P4-1 (2026-07-03): same deal-target update semantics as the
+        // WSC handoff above — single resolvable deal model gets the labor
+        // lines merged in; otherwise fresh model prestamped with the deal.
+        const _mostTarget = _resolveDealTargetModel();
+        if (_mostTarget) {
+          await loadModelByCmId(_mostTarget.id);
+        } else if (viewMode !== 'editor') {
           model = setModel(createEmptyModel());
           resetDirty();
           userHasInteracted = setUserHasInteracted(false);
           viewMode = 'editor';
         }
         handleMostPush(payload);
+        if (_mostTarget) {
+          showToast(`Merged MOST labor lines into "${_mostTarget.name || 'deal model'}" — review and Save.`, 'success');
+        } else {
+          const _ctx = dealContext.getActive();
+          if (_ctx && model?.projectDetails && !model.projectDetails.dealId) model.projectDetails.dealId = _ctx.id;
+        }
       } else {
         sessionStorage.removeItem('most_pending_push');
       }
@@ -801,6 +804,24 @@ export async function mount(el) {
 
   renderCurrentView();
 
+}
+
+/**
+ * UX-1 P4-1 (2026-07-03): resolve the deal-context's target model for
+ * push-becomes-update semantics. Returns a savedModels row when the active
+ * deal has exactly one model, or exactly one Baseline among several.
+ * Null = no context / ambiguous → caller falls back to a fresh draft.
+ */
+function _resolveDealTargetModel() {
+  try {
+    const ctx = dealContext.getActive();
+    if (!ctx) return null;
+    const mine = (savedModels || []).filter(m => String(m.deal_deals_id || '') === ctx.id);
+    if (mine.length === 1) return mine[0];
+    const base = mine.filter(m => /^baseline$/i.test(String(m.scenario_label || '')));
+    if (base.length === 1) return base[0];
+    return null;
+  } catch { return null; }
 }
 
 /** Render whichever view (landing vs editor) is active. Re-wires its events. */
@@ -10464,6 +10485,37 @@ function renderLinkedDesigns() {
     `;
   })() : '';
 
+  // P4-1 (2026-07-03): render linkedCogFacts — the COG writeback was
+  // write-only since 2026-05-28 (G2). Headline card: transport $/yr,
+  // coverage, DC count, CO2, delta vs current network.
+  const _cog = model?.linkedCogFacts;
+  const cogFactsHtml = (_cog && typeof _cog === 'object') ? (() => {
+    const money = (n) => Number.isFinite(Number(n)) ? '$' + (Number(n) >= 1e6 ? (Number(n)/1e6).toFixed(2) + 'M' : Math.round(Number(n)).toLocaleString('en-US')) : '—';
+    const pct = (n) => Number.isFinite(Number(n)) ? Number(n).toFixed(1) + '%' : '—';
+    const d = _cog.deltaVsCurrent;
+    const deltaTxt = d && Number.isFinite(Number(d.costDelta))
+      ? `<span style="font-weight:700;color:${Number(d.costDelta) <= 0 ? '#16a34a' : '#dc2626'};">${Number(d.costDelta) <= 0 ? '−' : '+'}${money(Math.abs(Number(d.costDelta)))} vs current network</span>`
+      : '';
+    return `
+      <div class="hub-card mb-4" style="border-left:3px solid #20c997;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div>
+            <div class="text-subtitle" style="margin:0;">Network facts — from COG${_cog.scenarioName ? ` · ${_esc(_cog.scenarioName)}` : ''}</div>
+            <div style="font-size:11px;color:var(--ies-gray-500);">Pushed by Center of Gravity on save${_cog.updatedAt ? ` · ${new Date(_cog.updatedAt).toLocaleString()}` : ''}. Transport is NOT in this model's P&L — benchmark only.</div>
+          </div>
+          <a href="#designtools/center-of-gravity" class="hub-btn hub-btn-sm hub-btn-secondary">Open COG →</a>
+        </div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px;">
+          <div><span style="color:var(--ies-gray-500);">Transport</span> <strong>${money(_cog.totalCost)}/yr</strong></div>
+          <div><span style="color:var(--ies-gray-500);">DCs</span> <strong>${Number(_cog.nCenters) || '—'}</strong></div>
+          <div><span style="color:var(--ies-gray-500);">Coverage</span> <strong>${pct(_cog.serviceCoveragePct)}</strong></div>
+          <div><span style="color:var(--ies-gray-500);">CO₂</span> <strong>${Number.isFinite(Number(_cog.co2Tons)) ? Math.round(Number(_cog.co2Tons)).toLocaleString('en-US') + ' t/yr' : '—'}</strong></div>
+          ${deltaTxt ? `<div>${deltaTxt}</div>` : ''}
+        </div>
+      </div>
+    `;
+  })() : '';
+
   return `
     <div class="cm-section-header">
       <div>
@@ -10477,6 +10529,8 @@ function renderLinkedDesigns() {
     </div>
 
     ${familyHtml}
+
+    ${cogFactsHtml}
 
     ${totalLinked === 0 ? `
       <div class="hub-card" style="padding:24px;text-align:center;color:var(--ies-gray-500);font-size:13px;">
@@ -11281,7 +11335,13 @@ async function handleAction(action, idx, btn) {
       const utilPct = Number(s.directUtilization) || 85;
       let updated = 0;
       let totalBefore = 0, totalAfter = 0;
+      let skippedMost = 0;
       (model.laborLines || []).forEach(line => {
+        // P4-3 (2026-07-03): MOST-pushed lines arrive with adjusted_uph
+        // (PF&D + productivity already applied by MOST) stored in base_uph
+        // and hours already baked. Re-applying the haircut here double-counts
+        // the reduction — skip them.
+        if (line.most_template_id) { skippedMost++; return; }
         const v = Number(line.volume) || 0;
         const base = Number(line.base_uph) || 0;
         if (v <= 0 || base <= 0) return;
@@ -11297,7 +11357,9 @@ async function handleAction(action, idx, btn) {
       const deltaPct = totalBefore > 0 ? (deltaHrs / totalBefore * 100) : 0;
       const fmtHrs = (n) => Math.round(n).toLocaleString('en-US');
       showToast(
-        `Applied PF&D haircut (Direct Utilization ${utilPct}%) to ${updated} lines. Total hours ${fmtHrs(totalBefore)} → ${fmtHrs(totalAfter)} (+${deltaPct.toFixed(1)}%).`,
+        `Applied PF&D haircut (Direct Utilization ${utilPct}%) to ${updated} lines.` +
+        (skippedMost ? ` Skipped ${skippedMost} MOST-sourced line${skippedMost === 1 ? '' : 's'} (PF&D already applied by MOST).` : '') +
+        ` Total hours ${fmtHrs(totalBefore)} → ${fmtHrs(totalAfter)} (+${deltaPct.toFixed(1)}%).`,
         'success'
       );
       renderSection();
