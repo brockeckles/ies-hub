@@ -24,7 +24,7 @@
  * @module tools/cost-model/calc.monthly
  */
 
-import { monthlyEffectiveHours, permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260702-p1m1';
+import { monthlyEffectiveHours, permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260704-ebr1';
 
 // ============================================================
 // LABOR BUILD-UP HELPERS (inlined from calc.js to avoid cache-bust
@@ -365,6 +365,11 @@ export function buildMonthlyProjections(params) {
     base_labor_cost = 0,
     base_facility_cost = 0,
     base_equipment_cost = 0,
+    // EBITDA reclass 2026-07-04: capital-equipment amortization now arrives
+    // separately (was folded into base_equipment_cost since 2026-06-10) and
+    // books to EQUIP_DEPR (D&A). Same escalation multiplier as equipment so
+    // opex/EBIT stay byte-identical to the folded treatment.
+    equipment_amort_annual = 0,
     base_overhead_cost = 0,
     base_vas_cost = 0,
     startup_amort = 0,
@@ -536,6 +541,7 @@ export function buildMonthlyProjections(params) {
         base_labor_cost     * escLaborMult * volMult * rampLaborMult * learningMult
         + base_facility_cost * escFacilityMult
         + base_equipment_cost * escEquipmentMult
+        + equipment_amort_annual * escEquipmentMult
         + base_overhead_cost  * escCostMult
         + base_vas_cost       * volMult
         + startup_amort
@@ -609,6 +615,18 @@ export function buildMonthlyProjections(params) {
         source_line_table: 'cost_model_equipment', source_line_id: null,
       });
     }
+    // Equipment depreciation (EBITDA reclass 2026-07-04) — capital amort
+    // split out of LEASED_EQUIP into D&A. Flat /12 within the year (matching
+    // the old series spread of equipLineAmort) and escalated with the same
+    // equipment multiplier the folded-in treatment used.
+    const monthlyEquipDepr = equipment_amort_annual * escEquipmentMult / 12;
+    if (monthlyEquipDepr > 0) {
+      expenseRows.push({
+        project_id, period_id: p.id, expense_line_code: 'EQUIP_DEPR',
+        pricing_bucket_id: null, amount: monthlyEquipDepr,
+        source_line_table: 'derived', source_line_id: null,
+      });
+    }
     // Overhead — 2026-04-21 audit: aligned with the yearly engine by
     // removing the `Math.pow(1 + vol_growth_pct * 0.3, yearIdx)` volume-
     // elasticity multiplier (magic 0.3 constant). Previously overhead
@@ -670,7 +688,12 @@ export function buildMonthlyProjections(params) {
   // the warehousing service, not corporate SG&A). Mirrors the yearly engine.
   const COGS_CODES = new Set(['LABOR_HOURLY', 'LABOR_SALARY', 'FACILITY', 'LEASED_EQUIP', 'PASS_THROUGH_EXP', 'OVERHEAD']);
   const SGA_CODES  = new Set(['IT_INTEG_EXP', 'PROF_SERV_EXP', 'ONBOARD_EXP']);
-  const DEP_CODES  = new Set(['DEPRECIATION']);
+  // EQUIP_DEPR added 2026-07-04 (EBITDA reclass): both codes are D&A for
+  // the P&L stack (EBIT = EBITDA − dep). The cash add-back below deliberately
+  // uses ONLY the startup DEPRECIATION portion — equipment cash is modeled as
+  // amortized outflow (R5 convention, see calc.js totalInvestment), so adding
+  // EQUIP_DEPR back to OCF would fabricate cash. FCF/NPV/payback unchanged.
+  const DEP_CODES  = new Set(['DEPRECIATION', 'EQUIP_DEPR']);
 
   const revByPeriod   = aggregateByPeriod(revenueRows, periods);
   const expByPeriod   = aggregateByPeriod(expenseRows, periods);
@@ -681,6 +704,7 @@ export function buildMonthlyProjections(params) {
     periods,
   );
   const depByPeriod   = aggregateByPeriod(expenseRows.filter(e => DEP_CODES.has(e.expense_line_code)), periods);
+  const depStartupByPeriod = aggregateByPeriod(expenseRows.filter(e => e.expense_line_code === 'DEPRECIATION'), periods);
 
   let prevRev = 0, prevOpex = 0, prevLabor = 0, cumFcf = 0;
   for (const p of scopedPeriods) {
@@ -690,6 +714,7 @@ export function buildMonthlyProjections(params) {
     const sgaCategory = sgaByPeriod.get(p.period_index) || 0;
     const labor   = laborByPeriod.get(p.period_index) || 0;
     const dep     = depByPeriod.get(p.period_index) || 0;
+    const depStartup = depStartupByPeriod.get(p.period_index) || 0;
 
     // M2 (2026-04-21): SG&A overlay — ratio-based corporate allocation
     // on top of category-based SGA. Default 0 means no behavior change.
@@ -723,7 +748,8 @@ export function buildMonthlyProjections(params) {
       deltaAp = (opex - prevOpex) * (dpo_days / 30);
       deltaLaborAccrual = (labor - prevLabor) * (labor_payable_days / 30);
       wcChange = deltaAr - deltaAp - deltaLaborAccrual;
-      ocf = netIncome + dep - wcChange;
+      // Cash add-back = startup depreciation ONLY (see DEP_CODES note).
+      ocf = netIncome + depStartup - wcChange;
     }
     const fcf = ocf - capex;
     cumFcf += fcf;
@@ -859,7 +885,7 @@ export function groupMonthlyToYearly(bundle, contractTermYears, opts = {}) {
   const idToPeriod = new Map(bundle.periods.map(p => [p.id, p]));
   // Per-category rollup for the Multi-Year P&L Summary table. Keep these
   // code sets in sync with the expense_line_code values emitted in
-  // buildMonthlyProjections above. The sum of the 6 categories reconciles
+  // buildMonthlyProjections above. The sum of the 7 categories reconciles
   // to cashflow.opex for every in-window period, so sumByCategory totals
   // equal sum('opex') (Year-1+ window excludes pre-go-live PROF_SERV_EXP/
   // IT_INTEG_EXP/ONBOARD_EXP by period_index >= 0, matching the legacy
@@ -875,6 +901,8 @@ export function groupMonthlyToYearly(bundle, contractTermYears, opts = {}) {
     overhead:  new Set(['OVERHEAD']),
     vas:       new Set(['PASS_THROUGH_EXP']),
     startup:   new Set(['DEPRECIATION']),
+    // 2026-07-04 EBITDA reclass — capital-equipment amort, D&A not COGS.
+    equipmentDepr: new Set(['EQUIP_DEPR']),
   };
   // COGS / SG&A classification — mirror the sets in buildMonthlyProjections
   // so per-category rollups feed a proper GP/EBITDA/EBIT stack even if an
@@ -909,6 +937,7 @@ export function groupMonthlyToYearly(bundle, contractTermYears, opts = {}) {
     const yrOverhead  = sumByCategory(CATEGORY_CODES.overhead);
     const yrVas       = sumByCategory(CATEGORY_CODES.vas);
     const yrStartup   = sumByCategory(CATEGORY_CODES.startup);
+    const yrEquipDepr = sumByCategory(CATEGORY_CODES.equipmentDepr);
 
     const yrRevenue  = sum('revenue');
     const yrTotalCost = sum('opex');
@@ -938,6 +967,7 @@ export function groupMonthlyToYearly(bundle, contractTermYears, opts = {}) {
       overhead:  yrOverhead,
       vas:       yrVas,
       startup:   yrStartup,
+      equipmentDepr: yrEquipDepr,
       // COGS / SG&A subtotals (new — let the Summary P&L show the standard
       // accounting stack: Revenue → GP → EBITDA → EBIT → NI).
       cogs: yrCogs,

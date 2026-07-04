@@ -50,15 +50,14 @@ t('owned_mhe lease: $120K/yr → $10K every month', () => {
   for (const v of s) near(v, 10000, 0.01);
 });
 
-t('it_equipment capital: maintenance + capital amort spread evenly', () => {
+t('it_equipment capital: maintenance-only in series (amort → EQUIP_DEPR)', () => {
   const lines = [{ line_type: 'it_equipment', quantity: 48, acquisition_type: 'capital', acquisition_cost: 2850, monthly_maintenance: 15 }];
-  // 2026-06-10 Critical #3 fix: capital lines now carry amortization in the
-  // series, not maintenance-only (which silently dropped acquisition cost
-  // from every financial output).
-  // maintenance: 48 × 15 × 12 = 8640/yr; amort: 48 × 2850 / 5yr = 27360/yr
-  // total 36000/yr → 3000/month
+  // EBITDA reclass 2026-07-04: capital amort no longer rides the series —
+  // it arrives via equipment_amort_annual and books to EQUIP_DEPR (D&A).
+  // A series still carrying amort would double-count it in the monthly
+  // engine. maintenance: 48 × 15 × 12 = 8640/yr → 720/month.
   const s = computeEquipmentMonthlySeries(lines);
-  for (const v of s) near(v, 3000, 0.01);
+  for (const v of s) near(v, 720, 0.01);
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -91,7 +90,7 @@ t('rented_mhe default months: uses [10,11,12] when missing', () => {
 // 4. Mass conservation — sum of series = annual total
 // ────────────────────────────────────────────────────────────────────────────
 
-t('sum of monthly series equals totalEquipmentCost + totalEquipmentAmort', () => {
+t('sum of monthly series equals totalEquipmentCost (amort excluded since 2026-07-04)', () => {
   const lines = [
     { line_type: 'owned_mhe', quantity: 20, acquisition_type: 'lease', monthly_cost: 800, monthly_maintenance: 150 },
     { line_type: 'rented_mhe', quantity: 6, monthly_cost: 1000, seasonal_months: [10, 11, 12] },
@@ -100,8 +99,11 @@ t('sum of monthly series equals totalEquipmentCost + totalEquipmentAmort', () =>
   ];
   const s = computeEquipmentMonthlySeries(lines);
   const sumSeries = s.reduce((a, b) => a + b, 0);
-  const totalAnnual = totalEquipmentCost(lines) + totalEquipmentAmort(lines);
-  near(sumSeries, totalAnnual, 0.5, 'series sum ≈ annual opex + capital amort');
+  const totalAnnual = totalEquipmentCost(lines);
+  near(sumSeries, totalAnnual, 0.5, 'series sum ≈ annual equipment opex (no amort)');
+  // Amort is nonzero on this fixture — guards against a refactor that makes
+  // this assertion pass vacuously by zeroing amort itself.
+  if (!(totalEquipmentAmort(lines) > 0)) throw new Error('fixture must carry amort');
 });
 
 // ────────────────────────────────────────────────────────────────────────────

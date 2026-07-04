@@ -13,13 +13,13 @@ import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=2026060
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
 import { auth } from '../../shared/auth.js?v=20260702-sec2';
-import * as calc from './calc.js?v=20260702-p1m1';
+import * as calc from './calc.js?v=20260704-ebr1';
 import * as api from './api.js?v=20260703-p33';
-import * as scenarios from './calc.scenarios.js?v=20260702-p1m1';
+import * as scenarios from './calc.scenarios.js?v=20260704-ebr1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260511-port8';
 import { renderImplementation } from './render-implementation.js?v=20260511-port9';
-import * as monthlyCalc from './calc.monthly.js?v=20260702-p1m1';
+import * as monthlyCalc from './calc.monthly.js?v=20260704-ebr1';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
@@ -98,11 +98,11 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260702-p1m1';
+} from './operational-flow-render.js?v=20260704-ebr1';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260702-p1m1';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260702-p1m1';
+import { computeHeaderKpis } from './header-kpis.js?v=20260704-ebr1';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260704-ebr1';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -2027,8 +2027,8 @@ function getCellProvenance(rowKey, year) {
         formula: 'equipment = baseEquipmentCost × (1 + equipmentEsc)^(yr − 1)',
         value: p.equipment,
         inputs: [
-          { label: 'Base Equipment Cost', value: _fmtMoney(s.equipmentCost), source: 'Sum of equipmentLines (own + rent + IT + 3-way)' },
-          { label: 'Equipment Capital Amort', value: _fmtMoney(s.equipmentAmort || 0), source: 'Capital acquisition ÷ amort_years — amortized into opex (2026-06-10 fix)' },
+          { label: 'Base Equipment Cost', value: _fmtMoney(s.equipmentCost), source: 'Sum of equipmentLines (own + rent + IT + 3-way) — lease/rent/service only' },
+          { label: 'Equipment Capital Amort', value: _fmtMoney(s.equipmentAmort || 0), source: 'Reclassed to D&A 2026-07-04 — no longer in this COGS row; see the D&A row below' },
           { label: 'Equipment Escalation', value: (((ch.equipmentEscPct ?? ch.costEscPct) || 0).toFixed(1) + '%/yr'), source: ch.equipmentEscPct != null ? 'Heuristics → Equipment Esc' : 'Heuristics → Cost Esc (default)' },
           { label: 'Cumulative escalation', value: _fmtPct(calc.cumulativeEscalation((ch.equipmentEscPct ?? ch.costEscPct) || 0, year)), source: `Compounded over ${year - 1} year(s)` },
         ],
@@ -2136,13 +2136,14 @@ function getCellProvenance(rowKey, year) {
     case 'depreciation':
       return {
         label: `D&A (Year ${year})`,
-        formula: 'depreciation = startupAmort  (constant across all years)',
+        formula: 'depreciation = startupAmort + equipmentAmort × (1 + equipEsc)^(yr − 1)',
         value: p.depreciation ?? p.startup,
         inputs: [
           { label: 'Startup Amort.', value: _fmtMoney(s.startupAmort), source: 'Sum of startupLines ÷ contract term' },
+          { label: 'Equipment Depr.', value: _fmtMoney(p.equipmentDepr || 0), source: 'Capital acquisition ÷ amort years — reclassed from COGS into D&A (2026-07-04)' },
           { label: 'Contract Term', value: ctx.contractYears + ' yr', source: 'Project Details' },
         ],
-        notes: 'Equipment capital is excluded (own_then_buy treatment). TI is folded into Facility cost via amortization.',
+        notes: 'Equipment capital amortization sits in D&A since the 2026-07-04 reclass — EBITDA excludes it, EBIT is unchanged. TI remains folded into Facility cost via amortization.',
       };
 
     case 'ebit':
@@ -2413,7 +2414,7 @@ function getCellProvenance(rowKey, year) {
           { label: 'Σ EBIT (contract)', value: _fmtMoney(totalEbit), source: ctx.contractYears + '-yr aggregate' },
           { label: 'Aggregate EBIT Margin', value: _fmtPct(aggPct / 100, 2), source: 'Σ EBIT ÷ Σ Revenue (contract horizon)' },
         ],
-        notes: 'Contract-life aggregate. EBIT differs from EBITDA only by D&A (startup amortization). Click the EBIT cell on any year for the per-year breakdown.',
+        notes: 'Contract-life aggregate. EBIT differs from EBITDA only by D&A (startup amortization + equipment depreciation). Click the EBIT cell on any year for the per-year breakdown.',
       };
     }
   }
@@ -7692,7 +7693,11 @@ function renderSummary() {
   const baseCosts = {
     labor:     p1.labor     ?? summary.laborCost,
     facility:  p1.facility  ?? summary.facilityCost,
-    equipment: p1.equipment ?? (summary.equipmentCost + (summary.equipmentAmort || 0)),
+    // Breakdown shows WHERE THE MONEY GOES — equipment total includes its
+    // depreciation line even though the P&L now books that to D&A (2026-07-04).
+    equipment: (p1.equipment != null)
+      ? p1.equipment + (p1.equipmentDepr || 0)
+      : (summary.equipmentCost + (summary.equipmentAmort || 0)),
     overhead:  p1.overhead  ?? summary.overheadCost,
     vas:       p1.vas       ?? summary.vasCost,
     startup:   p1.startup   ?? summary.startupAmort,

@@ -49,9 +49,15 @@ t('SG&A overlay rides on every surface (finding #11 lock)', () => {
   assert(p.sgaAppliesTo === 'gross_revenue', 'sgaAppliesTo from model.financial');
 });
 
-t('capital amort baked into baseEquipmentCost (Critical #3 lock)', () => {
+t('EBITDA reclass 2026-07-04: amort rides equipmentAmort, NOT baseEquipmentCost', () => {
+  // Supersedes the Critical #3 lock (amort baked into baseEquipmentCost).
+  // Amort must still be present — just on its own param, where the engines
+  // book it to EQUIP_DEPR (D&A). Losing it from BOTH keys would regress
+  // Critical #3 (acquisition cost silently dropped); folding it back into
+  // baseEquipmentCost would regress the EBITDA reclass.
   const p = buildProjectionParams(ctx());
-  near(p.baseEquipmentCost, 80_000 + 27_360, 1e-6);
+  near(p.baseEquipmentCost, 80_000, 1e-6, 'baseEquipmentCost excludes amort');
+  near(p.equipmentAmort, 27_360, 1e-6, 'equipmentAmort carries it separately');
 });
 
 t('deterministic: same inputs => identical bags (the no-drift property)', () => {

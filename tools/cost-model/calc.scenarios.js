@@ -1223,8 +1223,11 @@ export function buildProjectionParams(ctx) {
     years: contractYears,
     baseLaborCost:     summary.laborCost,
     baseFacilityCost:  summary.facilityCost,
-    // Capital amort included since the 2026-06-10 Critical #3 fix
-    baseEquipmentCost: summary.equipmentCost + (summary.equipmentAmort || 0),
+    // EBITDA reclass 2026-07-04: amort no longer folded in — it rides the
+    // dedicated equipmentAmort param and books to EQUIP_DEPR (D&A), so
+    // EBITDA excludes it while opex/EBIT/cash stay identical.
+    baseEquipmentCost: summary.equipmentCost,
+    equipmentAmort:    summary.equipmentAmort || 0,
     baseOverheadCost:  summary.overheadCost,
     baseVasCost:       summary.vasCost,
     startupAmort:      summary.startupAmort,

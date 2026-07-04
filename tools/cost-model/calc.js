@@ -14,8 +14,8 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260702-p1m1';
-import { permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260702-p1m1';
+import * as monthly from './calc.monthly.js?v=20260704-ebr1';
+import { permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260704-ebr1';
 import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260430-hours-first';
 import {
   getAnnualVolume as _getAnnualVolume,
@@ -1288,7 +1288,8 @@ export function totalRentedMheCost(lines) {
  *
  * Used by the monthly engine so Q4 shows the real peak-rental bump rather
  * than a smoothed /12 spread. Sum across months equals totalEquipmentCost
- * + totalEquipmentAmort (capital amort included since 2026-06-10).
+ * (capital amort split out 2026-07-04 — it rides equipment_amort_annual and
+ * books to EQUIP_DEPR, so the series must not carry it).
  *
  * @param {import('./types.js?v=20260612-mix1').EquipmentLine[]} lines
  * @returns {number[]} length-12 array, index 0 = January
@@ -1304,11 +1305,12 @@ export function computeEquipmentMonthlySeries(lines) {
       const months = _normalizeSeasonalMonths(line.seasonal_months);
       for (const m of months) series[m - 1] += qty * monthly;
     } else {
-      // 2026-06-10: include capital amortization so the series sum equals
-      // totalEquipmentCost + totalEquipmentAmort — the monthly engine's
-      // base_equipment_cost now carries amort (Critical #3 fix), and a series
-      // that omitted it would silently drop amort whenever the series path won.
-      const annual = equipLineAnnual(line) + equipLineAmort(line);
+      // EBITDA reclass 2026-07-04: amort REMOVED from the series (added
+      // 2026-06-10 while base_equipment_cost carried amort). The engine now
+      // receives equipment_amort_annual separately and emits EQUIP_DEPR rows;
+      // a series still carrying amort would double-count it whenever the
+      // series path won.
+      const annual = equipLineAnnual(line);
       const perMonth = annual / 12;
       for (let i = 0; i < 12; i++) series[i] += perMonth;
     }
@@ -2246,6 +2248,7 @@ export function buildYearlyProjections(params) {
 
   const {
     years, baseLaborCost, baseFacilityCost, baseEquipmentCost,
+    equipmentAmort = 0,
     baseOverheadCost, baseVasCost, startupAmort, startupCapital,
     baseOrders, marginPct,
     volGrowthPct = 0, laborEscPct = 0, uphYoyPct = 0, costEscPct = 0.03,
@@ -2285,6 +2288,10 @@ export function buildYearlyProjections(params) {
     const labor = baseLaborCost * laborMult * volMult * learningMult;
     const facility = baseFacilityCost * facilityMult;
     const equipment = baseEquipmentCost * equipmentMult;
+    // EBITDA reclass 2026-07-04: capital amort escalates with the same
+    // equipment multiplier it had when folded into baseEquipmentCost —
+    // totalCost/EBIT stay byte-identical while it moves COGS → D&A.
+    const equipmentDepr = equipmentAmort * equipmentMult;
     // 2026-04-21 audit: overhead had `* Math.pow(1 + volGrowthPct * 0.3, yr - 1)`
     // tacked on — an undocumented hybrid that compounded cost-escalation with
     // 30% of volume growth (10% vol growth → overhead escalated at ~6%/yr
@@ -2295,7 +2302,7 @@ export function buildYearlyProjections(params) {
     const overhead = baseOverheadCost * costMult;
     const vas = baseVasCost * volMult;
     const startup = startupAmort;
-    const totalCost = labor + facility + equipment + overhead + vas + startup;
+    const totalCost = labor + facility + equipment + equipmentDepr + overhead + vas + startup;
     // Reference-aligned gross-up: Revenue = Cost / (1 − margin).
     // Per-category breakout exposed via laborRevenue/facilityRevenue/etc. for
     // the Pricing Schedule and P&L line-level display. Sum is identical to the
@@ -2303,7 +2310,7 @@ export function buildYearlyProjections(params) {
     const mFrac = Math.min(0.999, Math.max(0, marginPct || 0));
     const laborRevenue     = labor     / (1 - mFrac);
     const facilityRevenue  = facility  / (1 - mFrac);
-    const equipmentRevenue = equipment / (1 - mFrac);
+    const equipmentRevenue = (equipment + equipmentDepr) / (1 - mFrac);
     const overheadRevenue  = overhead  / (1 - mFrac);
     const vasRevenue       = vas       / (1 - mFrac);
     const startupRevenue   = startup   / (1 - mFrac);
@@ -2313,9 +2320,10 @@ export function buildYearlyProjections(params) {
     // to match 3PL site-level cost convention; site utilities/supplies/
     // sanitation/security are direct cost of providing the warehousing
     // service, not corporate SG&A. Mgmt-fee overlay remains in SG&A).
-    //   COGS = Labor + Facility + Equipment + VAS + Overhead
+    //   COGS = Labor + Facility + Equipment (lease/rent/service) + VAS + Overhead
     //   SG&A = sgaOverlay (mgmt fee / corporate allocation only)
-    //   D&A  = startup amortization
+    //   D&A  = startup amortization + equipment depreciation (2026-07-04
+    //          reclass — EBITDA no longer eats capital-equipment amort)
     //   GP   = Revenue − COGS
     //   EBITDA = GP − SG&A
     //   EBIT = EBITDA − D&A = Revenue − totalCost (unchanged)
@@ -2328,7 +2336,7 @@ export function buildYearlyProjections(params) {
       ? revenue * Math.min(0.50, Math.max(0, params.sgaOverlayPct / 100))
       : 0;
     const sga          = sgaCategory + sgaOverlay;
-    const depreciation = startupAmort;
+    const depreciation = startupAmort + equipmentDepr;
     const grossProfit  = revenue - cogs;
     const ebitda       = grossProfit - sga;
     const ebit         = ebitda - depreciation;
@@ -2345,12 +2353,16 @@ export function buildYearlyProjections(params) {
     const workingCapitalChange = yr === 1
       ? revenue * WC_PROXY_PCT
       : revenue * volGrowthPct * WC_PROXY_PCT;
-    const operatingCashFlow = netIncome + depreciation - workingCapitalChange;
+    // Cash add-back = startup amortization ONLY. Equipment cash is modeled
+    // as amortized outflow (R5 convention: totalInvestment = startupCapital),
+    // so adding EQUIP_DEPR back would fabricate cash. FCF/NPV unchanged by
+    // the 2026-07-04 reclass.
+    const operatingCashFlow = netIncome + startupAmort - workingCapitalChange;
     const freeCashFlow = operatingCashFlow - capex;
     cumFcfRun += freeCashFlow;
 
     projections.push({
-      year: yr, orders, labor, facility, equipment, overhead, vas, startup,
+      year: yr, orders, labor, facility, equipment, equipmentDepr, overhead, vas, startup,
       cogs, sga,
       // M2 (2026-04-21): expose sgaCategory + sgaOverlay separately for P&L UI
       sgaCategory, sgaOverlay,
@@ -4728,6 +4740,8 @@ export function adaptYearlyToMonthlyParams(p) {
     base_labor_cost:     p.baseLaborCost,
     base_facility_cost:  p.baseFacilityCost,
     base_equipment_cost: p.baseEquipmentCost,
+    // EBITDA reclass 2026-07-04 — capital amort rides separately → EQUIP_DEPR
+    equipment_amort_annual: Number(p.equipmentAmort) || 0,
     // Phase 2e follow-up (2026-04-22): pass the 12-month equipment series
     // so rented_mhe lines with seasonal_months actually land in Q4 (or
     // whichever months) instead of smoothed /12 across the year. Prefer
