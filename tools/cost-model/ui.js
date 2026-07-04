@@ -854,12 +854,26 @@ function _resolveDealTargetModel() {
 }
 
 /** Render whichever view (landing vs editor) is active. Re-wires its events. */
+/** UX-2 — quick-tier editor opens land on the Standard spine. Must run
+ *  BEFORE renderShell(): the chrome (tabs/pills/toggle label) is built from
+ *  activeSection, so remapping later leaves Engineering chrome over Standard
+ *  content (live-walk bug, 2026-07-04). Only remaps mapped sections — deep
+ *  links to unmapped sections (whatif, scenarios, linked…) keep Engineering
+ *  chrome deliberately. */
+function _applyTierOpenRemap() {
+  if (viewMode === 'editor' && !_isStdKey(activeSection)
+      && tierSvc.getTier('cm') === 'quick' && ENG_TO_STD[activeSection]) {
+    activeSection = ENG_TO_STD[activeSection];
+  }
+}
+
 function renderCurrentView() {
   if (!rootEl) return;
   if (viewMode === 'landing') {
     rootEl.innerHTML = renderLanding();
     wireLandingEvents();
   } else {
+    _applyTierOpenRemap();
     rootEl.innerHTML = renderShell();
     wireEditorEvents();
   }
@@ -2996,15 +3010,6 @@ function _refreshTopChrome() {
 function renderSection() {
   const container = rootEl?.querySelector('#cm-section-content');
   if (!container) return;
-
-  // UX-2 — quick-tier editor opens land on the Standard spine: remap the
-  // Engineering default ('setup' etc.) to its std counterpart. Only fires
-  // for mapped sections, so deep links to unmapped sections (whatif,
-  // scenarios, linked…) still render with Engineering chrome.
-  if (viewMode === 'editor' && !_isStdKey(activeSection)
-      && tierSvc.getTier('cm') === 'quick' && ENG_TO_STD[activeSection]) {
-    activeSection = ENG_TO_STD[activeSection];
-  }
 
   const renderers = {
     setup: renderSetup,
