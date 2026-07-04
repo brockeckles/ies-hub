@@ -111,3 +111,22 @@ export async function fetchFacilityRates(marketId) {
   if (error) throw error;
   return data || [];
 }
+
+// ============================================================
+// N2 (2026-07-04) — WSC design-factor catalog (ref_planning_ratios)
+// ============================================================
+
+/**
+ * Fetch the live WSC factor catalog (wsc_* categories, active rows).
+ * Scenario-side pinning/drift lives in factors-calc.js.
+ * @returns {Promise<any[]>}
+ */
+export async function fetchWscFactors() {
+  const { data, error } = await db.from('ref_planning_ratios')
+    .select('category_code, ratio_code, display_name, description, value_type, numeric_value, value_unit, value_jsonb, source, source_detail, source_date, sort_order, notes')
+    .in('category_code', ['wsc_media_selection', 'wsc_dynamics', 'wsc_layout_compliance', 'wsc_profile_defaults'])
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true });
+  if (error) { console.warn('[WSC] fetchWscFactors failed:', error); return []; }
+  return data || [];
+}

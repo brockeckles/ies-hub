@@ -23,7 +23,8 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260704-wq1';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260703-ux0';
 import { renderDashboard } from './ui-dashboard.js?v=20260703-ux0';
-import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260704-n1a';
+import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260704-n2a';
+import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260702-p1b';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
 import { wscExtraStyles } from './ui-styles.js?v=20260513-stylesextract';
@@ -91,6 +92,11 @@ let volumes = createDefaultVolumes();
  *  sparse mode). Persisted inside config_data.profile; null = no basis yet.
  *  @type {import('./types.js?v=20260418-sL').DesignProfile|null} */
 let profile = null;
+
+/** N2 (2026-07-04) — WSC factor catalog pinned to this scenario at first
+ *  save (CM House-Assumptions governance). null = pins on next save.
+ *  @type {{pinnedAt: string, rows: Object[]}|null} */
+let pinnedFactors = null;
 
 /** @type {boolean} */
 let isDirty = false;
@@ -292,6 +298,7 @@ function openEditor(savedRow) {
     const data = savedRow.config_data || savedRow;
     facility = { ...createDefaultFacility(), ...data, id: savedRow.id, parent_cost_model_id: savedRow.parent_cost_model_id || null };
     profile = data.profile || null;   // N1 — design basis rides config_data
+    pinnedFactors = data.pinnedFactors || null;  // N2 — legacy scenarios pin on next save
     resetBasisState();
     zones = { ...createDefaultZones(), ...(data.zones || {}) };
     volumes = { ...createDefaultVolumes(), ...(data.volumes || {}) };
@@ -305,6 +312,7 @@ function openEditor(savedRow) {
   } else {
     facility = createDefaultFacility();
     profile = null;                   // N1 — fresh scenario, no basis yet
+    pinnedFactors = null;             // N2 — pins at first save
     resetBasisState();
     zones = createDefaultZones();
     volumes = createDefaultVolumes();
@@ -549,7 +557,15 @@ function debounceRender(fn, ms = 100) {
 /** Save the current design — extracted so the chrome's onAction handler can dispatch. */
 async function handleSaveWsc() {
   try {
-    const saved = await api.saveConfig({ ...facility, zones, volumes, profile });
+    // N2 — pin the org factor catalog at first save (CM House-Assumptions
+    // pattern). Best-effort: an unreachable catalog never blocks a save.
+    if (!pinnedFactors) {
+      try {
+        const live = await api.fetchWscFactors();
+        if (live.length > 0) pinnedFactors = pinWscFactors(live);
+      } catch (_) { /* pin on a later save instead */ }
+    }
+    const saved = await api.saveConfig({ ...facility, zones, volumes, profile, pinnedFactors });
     facility.id = saved.id || saved[0]?.id || facility.id;
     _clearDirty();
     showToast(`Saved "${facility.name || 'Untitled'}"`, 'success');
@@ -829,6 +845,10 @@ function renderContentView() {
     case 'basis': renderBasisView(container, {
       getProfile: () => profile,
       setProfile: (p) => { profile = p; _markDirty(); },
+      // N2 — factor pinning (drift badge + explicit adopt)
+      getPinnedFactors: () => pinnedFactors,
+      adoptFactors: (live) => { pinnedFactors = pinWscFactors(live); _markDirty(); },
+      fetchFactors: () => api.fetchWscFactors(),
       rerender: renderContentView,
       toast: showToast,
     }); break;

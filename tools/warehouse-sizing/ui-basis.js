@@ -20,6 +20,7 @@ import {
   computeProfile, computeSparseProfile, profileReadiness,
   autoDetectMapping, SKU_MASTER_ROLES, INVENTORY_ROLES, ORDER_ROLES,
 } from './profile-calc.js?v=20260704-n1a';
+import { wscFactorsDrift } from './factors-calc.js?v=20260704-n2a';
 
 // ── Module state (session-scoped; raw rows never persisted) ──
 /** Parsed datasets awaiting/backing the profile. */
@@ -28,6 +29,8 @@ let _data = { skus: null, inventory: null, orders: null };
 let _sources = { skuMaster: null, inventory: null, orders: null };
 /** Pending upload wizard: { slot, fileName, aoa, headerRow, mapping } */
 let _pending = null;
+/** N2 — live factor catalog cache (session): null = not fetched yet. */
+let _liveFactors = null;
 
 const SLOTS = [
   { key: 'skuMaster', label: 'SKU Master',         roles: SKU_MASTER_ROLES, hint: 'Item #, units/case, Ti×Hi, case dims' },
@@ -74,10 +77,12 @@ export function renderBasisView(container, ctx) {
       </div>
       <div id="wsc-basis-wizard" style="display:none;"></div>
       ${profile ? _renderProfileSummary(profile) : _renderEmptyState()}
+      <div id="wsc-basis-factors"></div>
     </div>
   `;
   _bindEvents(container, ctx);
   if (_pending) _renderWizard(container.querySelector('#wsc-basis-wizard'), ctx);
+  _renderFactorsCard(container.querySelector('#wsc-basis-factors'), ctx);
 }
 
 function _renderHeader(profile, readiness) {
@@ -394,6 +399,84 @@ function _recomputeDataProfile(ctx) {
   profile.sources = { ..._sources };
   ctx.setProfile(profile);
   ctx.rerender();
+}
+
+// ============================================================
+// HOUSE FACTORS (N2) — pinned catalog + drift badge + explicit adopt
+// ============================================================
+
+const _SRC_CHIP = {
+  'standard':        ['#dcfce7', '#15803d'],
+  'industry method': ['#dbeafe', '#1d4ed8'],
+  'vendor heuristic':['#fef3c7', '#b45309'],
+  'IES assumption':  ['#f3e8ff', '#7e22ce'],
+};
+function _srcChip(source) {
+  const [bg, fg] = _SRC_CHIP[source] || ['#f3f4f6', '#374151'];
+  return `<span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700;letter-spacing:0.4px;background:${bg};color:${fg};white-space:nowrap;">${esc(source || '?')}</span>`;
+}
+function _factorValueLabel(r) {
+  if (r.numeric_value != null) return `${fmt(r.numeric_value, 2)}${r.value_unit ? ' ' + esc(r.value_unit) : ''}`;
+  const j = r.value_jsonb;
+  if (j && typeof j === 'object' && !Array.isArray(j) && 'min' in j && 'max' in j) {
+    return `${fmt(j.min, 2)}–${fmt(j.max, 2)}${r.value_unit ? ' ' + esc(r.value_unit) : ''}`;
+  }
+  return '<span style="color:var(--ies-gray-500);">structured</span>';
+}
+
+async function _renderFactorsCard(el, ctx) {
+  if (!el) return;
+  const pinned = ctx.getPinnedFactors?.();
+  el.innerHTML = `<div class="hub-card" style="padding:14px 16px;margin-top:14px;font-size:12px;color:var(--ies-gray-500);">Loading design-factor catalog…</div>`;
+  if (_liveFactors === null) {
+    try { _liveFactors = await ctx.fetchFactors(); }
+    catch (_) { _liveFactors = []; }
+  }
+  const live = _liveFactors;
+  if ((!live || live.length === 0) && !pinned) {
+    el.innerHTML = `<div class="hub-card" style="padding:14px 16px;margin-top:14px;font-size:12px;color:var(--ies-gray-500);">Design-factor catalog unavailable (offline or empty) — factors pin at first save once reachable.</div>`;
+    return;
+  }
+  const drift = pinned ? wscFactorsDrift(pinned, live) : null;
+  const rows = pinned ? drift.rows : live.map(r => ({ ...r, changed: false, missing: false }));
+  const byCat = {};
+  for (const r of rows) (byCat[r.category_code] = byCat[r.category_code] || []).push(r);
+  const CAT_LABEL = {
+    wsc_media_selection: 'Media selection', wsc_dynamics: 'Dock / staging / aisles',
+    wsc_layout_compliance: 'Layout & compliance', wsc_profile_defaults: 'Profile & height',
+  };
+  el.innerHTML = `
+    <div class="hub-card" style="padding:14px 16px;margin-top:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+        <div style="font-size:12px;font-weight:700;">Design Factors
+          <span style="font-weight:400;color:var(--ies-gray-500);font-size:11px;">
+            · ${pinned ? `pinned ${esc(pinned.pinnedAt)}` : 'not pinned yet — pins at first save'}</span>
+          ${drift?.anyDrift ? '<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:#fee2e2;color:#b91c1c;">CATALOG MOVED</span>' : ''}
+        </div>
+        ${drift?.anyDrift ? '<button class="hub-btn hub-btn-sm hub-btn-secondary" id="wsc-factors-adopt" title="Re-pin this scenario to today\'s catalog. Nothing else about the design changes.">Adopt current catalog</button>' : ''}
+      </div>
+      ${Object.entries(byCat).map(([cat, list]) => `
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin:10px 0 2px;">${CAT_LABEL[cat] || esc(cat)}</div>
+        ${list.map(r => `
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-top:1px solid var(--ies-gray-100);font-size:11.5px;">
+            <span style="flex:1;" title="${esc(r.source_detail || '')}">${esc(r.display_name)}</span>
+            ${_srcChip(r.source)}
+            <span style="width:120px;text-align:right;font-weight:600;">${_factorValueLabel(r)}</span>
+            ${r.changed ? `<span style="color:#b91c1c;font-size:10px;font-weight:700;" title="Catalog now: ${esc(_factorValueLabel(r.current).replace(/<[^>]*>/g, ''))}">Δ</span>` : r.missing ? '<span style="color:#b45309;font-size:10px;font-weight:700;" title="Removed from catalog">✕</span>' : '<span style="width:10px;"></span>'}
+          </div>
+        `).join('')}
+      `).join('')}
+      ${drift?.added?.length ? `<div style="font-size:10.5px;color:#b45309;margin-top:8px;">＋ ${drift.added.length} new factor(s) in the catalog since this scenario pinned — adopt to include.</div>` : ''}
+      <div style="font-size:10px;color:var(--ies-gray-500);margin-top:8px;">
+        Org-wide guidance pinned per scenario — catalog changes never silently alter a saved design. Sources cited per factor (hover names).
+      </div>
+    </div>
+  `;
+  el.querySelector('#wsc-factors-adopt')?.addEventListener('click', () => {
+    ctx.adoptFactors(live);
+    _renderFactorsCard(el, ctx);
+    ctx.toast?.('Scenario re-pinned to the current factor catalog.', 'success');
+  });
 }
 
 // ============================================================
