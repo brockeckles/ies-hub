@@ -679,6 +679,32 @@ async function run() {
       }
     }
     console.log(`  Cleaned up ${createdCmp.length} cost_model_projects + ${createdFleet.length} fleet_scenarios + ${createdNetopt.length} netopt_configs + ${createdWsc.length} wsc_facility_configs rows`);
+
+    // 2026-07-04 — marker sweep. A hard kill (SIGKILL / harness timeout)
+    // mid-suite skips this finally block entirely, and 10 leaked rls-iso-*
+    // rows were found in prod. The tracked-id loops above only know about
+    // THIS run; this sweep deletes every remaining rls-iso-* row persona A
+    // owns — self-healing leftovers from any previous killed run. RLS
+    // scopes the delete to A's own rows, so it can never touch real data.
+    const SWEEP = [
+      ['cost_model_projects', 'name'],
+      ['fleet_scenarios', 'name'],
+      ['netopt_configs', 'name'],
+      ['wsc_facility_configs', 'name'],
+    ];
+    for (const [table, col] of SWEEP) {
+      const r = await rest('DELETE', table, {
+        token: tokA,
+        params: `?${col}=like.rls-iso-*`,
+        prefer: 'return=representation',
+      });
+      const n = Array.isArray(r.body) ? r.body.length : 0;
+      if (r.status !== 200 && r.status !== 204) {
+        console.log(`  (sweep warning) ${table} status=${r.status}`);
+      } else if (n > 0) {
+        console.log(`  Sweep: removed ${n} leftover rls-iso-* row(s) from ${table} (prior killed run)`);
+      }
+    }
   }
 
   // ─── Summary ──────────────────────────────────────────────────

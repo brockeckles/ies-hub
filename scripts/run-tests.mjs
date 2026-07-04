@@ -14,10 +14,20 @@
 // Exits 0 if both phases pass, 1 if either fails.
 //
 // Usage:
-//   node scripts/run-tests.mjs              # parse + run every test
+//   node scripts/run-tests.mjs              # parse + run the PURE suite
 //   node scripts/run-tests.mjs --filter wsc # only test-*wsc*.mjs files
 //   node scripts/run-tests.mjs --skip-parse # skip parse pass (debug only)
+//   node scripts/run-tests.mjs --live       # ALSO run live-net tests
 //   npm test                                # via package.json
+//
+// 2026-07-04 — live-net tests EXCLUDED by default. test-rls-isolation.mjs
+// (and friends) default their SUPABASE_URL to PROD, so every local "pure"
+// run was writing persona rows to the production DB — and a hard kill
+// mid-file (bash timeouts land in its 14s network window) skipped the
+// finally-teardown and leaked rls-iso-* rows (found 10 in prod 2026-07-04).
+// The list below mirrors ci.yml's LIVE_NET set; keep them in sync. CI's
+// live-net job runs them against STAGING with explicit env — that is the
+// only sanctioned automated caller.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -32,6 +42,16 @@ const args = process.argv.slice(2);
 const filterIdx = args.indexOf('--filter');
 const filter = filterIdx >= 0 ? args[filterIdx + 1] : null;
 const skipParse = args.includes('--skip-parse');
+const includeLive = args.includes('--live');
+
+// Mirrors .github/workflows/ci.yml LIVE_NET — tests that open network
+// connections to Supabase (and default to PROD when env is unset).
+const LIVE_NET_FILES = new Set([
+  'test-invite.mjs',
+  'test-rls.mjs',
+  'test-rls-isolation.mjs',
+  'test-signup-disabled.mjs',
+]);
 
 // ============================================================
 // PHASE 1 — ES-module parse check
@@ -242,8 +262,16 @@ if (!skipParse) {
 
 const files = readdirSync(REPO_ROOT)
   .filter(f => /^test-.*\.mjs$/.test(f))
+  .filter(f => includeLive || !LIVE_NET_FILES.has(f))
   .filter(f => !filter || f.includes(filter))
   .sort();
+
+const skippedLive = includeLive ? [] : [...LIVE_NET_FILES].filter(f => {
+  try { statSync(join(REPO_ROOT, f)); return true; } catch { return false; }
+});
+if (skippedLive.length) {
+  console.log(`Live-net tests skipped (${skippedLive.join(', ')}) — pass --live to include. They hit a real Supabase project (PROD by default!).`);
+}
 
 if (files.length === 0) {
   console.error(`No test files matched${filter ? ` filter "${filter}"` : ''}.`);
