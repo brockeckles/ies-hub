@@ -10,6 +10,7 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260703-ls1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
+import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260703-dc2';
 // Note: MOST intentionally opts out of run-state tracking. Its Quick Analysis
@@ -17,8 +18,9 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202607
 // button is a convenience trigger rather than a discrete compute step, so a
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
-import * as calc from './calc.js?v=20260703-ux0';
-import * as api from './api.js?v=20260703-dc2';
+import * as calc from './calc.js?v=20260704-ux2d';
+import * as api from './api.js?v=20260704-ux2d';
+import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -30,6 +32,20 @@ const MOST_GROUPS = [
   { key: 'workflow', label: 'Workflow Composer', description: 'Compose templates into a flow · preview' },
 ];
 const MOST_SECTIONS = [];  // No sub-sections — Row 2 shows only the KPI strip.
+
+// UX-2 MOST catalog/editor split (2026-07-04, assessment §6 D3) — Quick tier
+// is the CONSUMER product: catalog-as-picker + staffing analysis. The IE
+// bench (template editor, workflow composer) lives behind Engineering.
+const MOST_QUICK_GROUPS = [
+  { key: 'library',  label: 'Template Catalog',  description: 'Browse activities · click for detail · send to staffing' },
+  { key: 'analysis', label: 'Staffing Analysis', description: 'Volumes → FTEs → labor cost' },
+];
+/** Quick chrome = quick tier AND a consumer tab. Editor/workflow tabs always
+ *  get Engineering chrome, so deep links + saved-workflow opens stay honest. */
+function _mostQuickChrome() {
+  return tierSvc.getTier('most') === 'quick'
+    && (activeTab === 'library' || activeTab === 'analysis');
+}
 
 import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, getMostElSequence, getMostElTmu } from './types.js?v=20260418-sM';
 
@@ -225,6 +241,27 @@ async function openTemplateInEditor(id) {
   renderContent();
 }
 
+/** UX-2 — tier-aware card click. Quick = read-only detail panel (the
+ *  assessment's 'unreachable dead code' panel, now the consumer click
+ *  target); Engineering = straight into the sequence editor (IE bench). */
+function _openTemplateFromCard(id) {
+  if (tierSvc.getTier('most') === 'quick' && activeTab === 'library') {
+    openTemplateDetail(id);
+  } else {
+    openTemplateInEditor(id);
+  }
+}
+
+/** Quick tier — load a template into the read-only detail panel. */
+async function openTemplateDetail(id) {
+  if (!rootEl || !id) return;
+  const tpl = (refData.templates || []).find(t => String(t.id) === String(id));
+  if (!tpl) return;
+  selectedTemplate = tpl;
+  try { selectedElements = (await api.listElements(id)) || []; } catch { selectedElements = []; }
+  renderContent();
+}
+
 /**
  * Mount the MOST Labor Standards tool.
  * @param {HTMLElement} el
@@ -367,7 +404,7 @@ async function enterTool(savedRow) {
       const tileCard = target.closest('.most-tpl-card[data-action="select-template"]');
       if (tileCard) {
         const id = tileCard.getAttribute('data-id');
-        openTemplateInEditor(id);
+        _openTemplateFromCard(id);
       }
     });
   }
@@ -397,6 +434,22 @@ export function unmount() {
 // SHELL
 // ============================================================
 
+/** UX-2 — flip Quick ⇄ Engineering. Editor→Catalog, Composer→Staffing on
+ *  the way down so the user never lands on a hidden tab. Crossing the
+ *  boundary persists the tier (CM/COG pattern). */
+function handleMostTierToggle() {
+  const toQuick = !_mostQuickChrome();
+  tierSvc.setTier('most', toQuick ? 'quick' : 'engineering');
+  if (toQuick) {
+    if (activeTab === 'editor') activeTab = 'library';
+    else if (activeTab === 'workflow') activeTab = 'analysis';
+  }
+  if (!rootEl) return;
+  rootEl.innerHTML = renderShell();
+  renderContent();
+  _refreshMostKpis();
+}
+
 /** Re-buildable handler set for MOST chrome events. */
 function _buildMostChromeHandlers() {
   // Kept for legacy callers but no longer used to re-bind — the mount-time
@@ -424,6 +477,10 @@ function _buildMostChromeHandlers() {
 /** Route a chrome action click to MOST's existing handlers. */
 function _handleMostAction(actionId) {
   if (!rootEl) return;
+  if (actionId === 'most-tier') {
+    handleMostTierToggle();
+    return;
+  }
   // P2-2 (2026-07-02): these used to click phantom in-canvas buttons via
   // selectors that matched nothing (prefixed most-* action names etc.)
   // — every chrome action flashed and did nothing. Call the handlers.
@@ -732,7 +789,13 @@ function _mostExtraStyles() {
 
 function _buildMostChromeOpts() {
   // Conditional actions per phase. analysis + workflow get Run buttons.
-  const actions = [];
+  const _quick = _mostQuickChrome();
+  const actions = [
+    { id: 'most-tier',
+      label: _quick ? 'Engineering' : 'Quick',
+      title: _quick ? 'Switch to Engineering mode — template editor + workflow composer'
+                    : 'Switch to Quick mode — catalog picker + staffing analysis' },
+  ];
   if (activeTab === 'editor' && editorTemplate) {
     actions.push({
       id: 'most-save-template',
@@ -774,7 +837,7 @@ function _buildMostChromeOpts() {
 
   return {
     toolKey: 'most',
-    groups: MOST_GROUPS,
+    groups: _quick ? MOST_QUICK_GROUPS : MOST_GROUPS,
     sections: MOST_SECTIONS,
     activePhase: activeTab,
     activeSection: null,
@@ -960,6 +1023,10 @@ function renderTemplateDetail() {
   const tplName = getMostTplName(t);
   const tplUph = getMostTplBaseUph(t);
   const tplTmu = getMostTplTmuTotal(t);
+  // UX-2 — quick tier de-emphasizes TMU internals (consumer surface) and
+  // adds the "Use in staffing analysis" send button. Engineering keeps the
+  // full IE view (sequence strings + TMU columns).
+  const _quickDetail = _mostQuickChrome();
 
   return `
     <div class="most-detail-panel">
@@ -970,16 +1037,20 @@ function renderTemplateDetail() {
             ${t.process_area} · <span class="most-cat-badge most-cat-${t.labor_category}">${(t.labor_category || 'manual').toUpperCase()}</span> · ${t.uom || 'each'}
           </div>
         </div>
-        <button class="cm-delete-btn" data-action="close-detail" style="font-size:16px;">✕</button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          ${_quickDetail ? `<button class="hub-btn hub-btn-primary hub-btn-sm" data-action="use-in-staffing" data-id="${t.id}" title="Add this activity as a line in the Staffing Analysis — set a daily volume there to get FTEs + cost">→ Use in staffing analysis</button>` : ''}
+          <button class="cm-delete-btn" data-action="close-detail" style="font-size:16px;">✕</button>
+        </div>
       </div>
 
       ${t.description ? `<div style="font-size:13px; color:var(--ies-gray-600); margin-bottom:16px;">${escapeHtml(t.description)}</div>` : ''}
 
-      <!-- KPIs -->
+      <!-- KPIs — quick tier leads with the business numbers; TMU is the
+           Engineering view's concern (assessment D3: TMU de-emphasized). -->
       <div class="hub-kpi-bar mb-4">
         <div class="hub-kpi-item"><div class="hub-kpi-label">Base UPH</div><div class="hub-kpi-value">${calc.formatUph(tplUph)}</div></div>
-        <div class="hub-kpi-item"><div class="hub-kpi-label">Total TMU</div><div class="hub-kpi-value">${tplTmu}</div></div>
         <div class="hub-kpi-item"><div class="hub-kpi-label">Cycle Time</div><div class="hub-kpi-value">${calc.formatTmu(tplTmu)}</div></div>
+        ${_quickDetail ? '' : `<div class="hub-kpi-item"><div class="hub-kpi-label">Total TMU</div><div class="hub-kpi-value">${tplTmu}</div></div>`}
         <div class="hub-kpi-item"><div class="hub-kpi-label">Elements</div><div class="hub-kpi-value">${elBreak.total} <span style="font-size:11px; font-weight:400; color:var(--ies-gray-400);">(${elBreak.variable} var)</span></div></div>
       </div>
 
@@ -988,15 +1059,15 @@ function renderTemplateDetail() {
         <div style="font-size:13px; font-weight:700; margin-bottom:8px;">Element Sequence</div>
         <table class="cm-grid-table" style="font-size:12px;">
           <thead>
-            <tr><th>#</th><th>Description</th><th>MOST Sequence</th><th class="cm-num">TMU</th><th class="cm-num">Time</th><th>Type</th></tr>
+            <tr><th>#</th><th>Description</th>${_quickDetail ? '' : '<th>MOST Sequence</th><th class="cm-num">TMU</th>'}<th class="cm-num">Time</th><th>Type</th></tr>
           </thead>
           <tbody>
             ${selectedElements.map(el => `
               <tr>
                 <td>${getMostElSequence(el)}</td>
                 <td>${escapeHtml(getMostElName(el) || '')}</td>
-                <td style="font-family:monospace; font-size:11px; color:var(--ies-gray-500);">${el.most_sequence || ''}</td>
-                <td class="cm-num">${getMostElTmu(el)}</td>
+                ${_quickDetail ? '' : `<td style="font-family:monospace; font-size:11px; color:var(--ies-gray-500);">${el.most_sequence || ''}</td>
+                <td class="cm-num">${getMostElTmu(el)}</td>`}
                 <td class="cm-num">${calc.formatTmu(getMostElTmu(el))}</td>
                 <td>${el.is_variable ? '<span style="color:var(--ies-orange); font-weight:600;">Variable</span>' : 'Fixed'}</td>
               </tr>
@@ -1732,6 +1803,29 @@ function renderWorkflowSummary(result, steps) {
 // EVENT BINDING
 // ============================================================
 
+/** Hydrate an analysis line from a template — shared by the per-line
+ *  template dropdown and the quick catalog's Use-in-staffing button. */
+function _fillLineFromTemplate(line, tpl) {
+  line.template_id = tpl.id;
+  line.activity_name = getMostTplName(tpl);
+  line.process_area = tpl.process_area;
+  line.labor_category = tpl.labor_category || 'manual';
+  line.base_uph = getMostTplBaseUph(tpl);
+  line.uom = tpl.uom || 'each';
+  // Q3: seed Variable/Driver/Formula from template
+  const elements = tpl.elements || tpl.element_list || [];
+  const firstVar = elements.find(el => el && el.is_variable);
+  if (firstVar) {
+    line.is_variable = true;
+    line.variable_driver = firstVar.variable_driver || '';
+    line.variable_formula = firstVar.variable_formula || '';
+  } else {
+    line.is_variable = false;
+    line.variable_driver = '';
+    line.variable_formula = '';
+  }
+}
+
 function bindContentEvents(container) {
   // Filter inputs (library)
   container.querySelector('#most-search')?.addEventListener('input', e => {
@@ -1754,8 +1848,27 @@ function bindContentEvents(container) {
   container.querySelectorAll('.most-tpl-card[data-action="select-template"]').forEach(card => {
     card.addEventListener('click', () => {
       const id = card.getAttribute('data-id');
-      if (id) openTemplateInEditor(id);
+      if (id) _openTemplateFromCard(id);
     });
+  });
+
+  // UX-2 quick catalog — send template to the staffing analysis as a line.
+  container.querySelector('[data-action="use-in-staffing"]')?.addEventListener('click', (e) => {
+    const id = /** @type {HTMLElement} */ (e.currentTarget).dataset.id;
+    const tpl = (refData.templates || []).find(t => String(t.id) === String(id));
+    if (!tpl) return;
+    const line = createEmptyAnalysisLine();
+    _fillLineFromTemplate(line, tpl);
+    analysis.lines.push(line);
+    selectedTemplate = null;
+    selectedElements = [];
+    activeTab = 'analysis';
+    if (rootEl) {
+      rootEl.innerHTML = renderShell(); // tab change → chrome actions flip
+      renderContent();
+      _refreshMostKpis();
+    }
+    showToast(`Added "${getMostTplName(tpl)}" to the staffing analysis — set its daily volume to get FTEs + cost.`, 'ok');
   });
 
   // Close detail
@@ -1828,26 +1941,7 @@ function bindContentEvents(container) {
       const idx = parseInt(/** @type {HTMLSelectElement} */ (e.target).dataset.idx);
       const tplId = /** @type {HTMLSelectElement} */ (e.target).value;
       const tpl = (refData.templates || []).find(t => String(t.id) === String(tplId));
-      if (tpl && analysis.lines[idx]) {
-        analysis.lines[idx].template_id = tpl.id;
-        analysis.lines[idx].activity_name = getMostTplName(tpl);
-        analysis.lines[idx].process_area = tpl.process_area;
-        analysis.lines[idx].labor_category = tpl.labor_category || 'manual';
-        analysis.lines[idx].base_uph = getMostTplBaseUph(tpl);
-        analysis.lines[idx].uom = tpl.uom || 'each';
-        // Q3: seed Variable/Driver/Formula from template
-        const elements = tpl.elements || tpl.element_list || [];
-        const firstVar = elements.find(el => el && el.is_variable);
-        if (firstVar) {
-          analysis.lines[idx].is_variable = true;
-          analysis.lines[idx].variable_driver = firstVar.variable_driver || '';
-          analysis.lines[idx].variable_formula = firstVar.variable_formula || '';
-        } else {
-          analysis.lines[idx].is_variable = false;
-          analysis.lines[idx].variable_driver = '';
-          analysis.lines[idx].variable_formula = '';
-        }
-      }
+      if (tpl && analysis.lines[idx]) _fillLineFromTemplate(analysis.lines[idx], tpl);
       renderContent();
     });
   });
@@ -1898,7 +1992,8 @@ function bindContentEvents(container) {
   container.querySelectorAll('[data-action]').forEach(btn => {
     const action = btn.dataset.action;
     if (action === 'select-template' || action === 'close-detail' || action === 'set-template-line' ||
-        action === 'edit-template' || action === 'duplicate-template' || action === 'delete-template') return;
+        action === 'edit-template' || action === 'duplicate-template' || action === 'delete-template' ||
+        action === 'use-in-staffing') return;
 
     btn.addEventListener('click', () => {
       const idx = parseInt(btn.dataset.idx);
@@ -2564,13 +2659,17 @@ function createEmptyAnalysis() {
     id: null,
     name: 'New Analysis',
     allowance_profile_id: null,
-    pfd_pct: 14,
-    shift_hours: 8,
-    operating_days: 260,
+    // UX-2 (2026-07-04): params seeded from calc.DEFAULT_ANALYSIS_PARAMS —
+    // ONE defaults set shared with the Workflow Composer (X11 split-brain
+    // fix). productivity_pct now explicit so display and engine agree.
+    pfd_pct: calc.DEFAULT_ANALYSIS_PARAMS.pfd_pct,
+    shift_hours: calc.DEFAULT_ANALYSIS_PARAMS.shift_hours,
+    operating_days: calc.DEFAULT_ANALYSIS_PARAMS.operating_days,
+    productivity_pct: calc.DEFAULT_ANALYSIS_PARAMS.productivity_pct,
     // MOS-E3: legacy single rate kept for backwards compat. Effective per-line
     // rate is now resolved via resolveCategoryRate(rates_by_category, ...).
     hourly_rate: 18,
-    rates_by_category: { manual: 18, mhe: 22, hybrid: 20 },
+    rates_by_category: { ...calc.DEFAULT_ANALYSIS_PARAMS.rates_by_category },
     // MOS-B5: learning-curve productivity index (100 = mature operator).
     // Multiplies adjusted UPH; default 100 = no effect.
     learning_curve_pct: 100,
@@ -2611,10 +2710,15 @@ function createEmptyWorkflow() {
     id: null,
     name: 'New Workflow',
     target_volume_per_day: 5000,
-    shift_hours: 8,
-    pfd_pct: 14,
-    operating_days: 250,
-    rates_by_category: { manual: 0, mhe: 0, hybrid: 0 },
+    // UX-2 (2026-07-04): same defaults set as Quick Analysis (X11 fix) —
+    // was shift 8 / pfd 14 / days 250 / rates 0-0-0, so the same templates
+    // produced different FTEs + $0 costs vs the Analysis tab. Saved
+    // workflows keep their own persisted values via workflowFromAnalysisData.
+    shift_hours: calc.DEFAULT_ANALYSIS_PARAMS.shift_hours,
+    pfd_pct: calc.DEFAULT_ANALYSIS_PARAMS.pfd_pct,
+    productivity_pct: calc.DEFAULT_ANALYSIS_PARAMS.productivity_pct,
+    operating_days: calc.DEFAULT_ANALYSIS_PARAMS.operating_days,
+    rates_by_category: { ...calc.DEFAULT_ANALYSIS_PARAMS.rates_by_category },
     steps: [],
   };
 }

@@ -1007,6 +1007,68 @@ async function loadModelByCmId(id) {
   }
 }
 
+/** UX-2 / D6 — create a fresh model from a starter template and enter the
+ *  editor. Shared by the template-picker cards. */
+function _createNewModelFromTemplate(templateKey) {
+  model = setModel(applyStarterTemplate(createEmptyModel(), templateKey));
+  // UX-1 D2 (2026-07-03): if a deal context is active (set by the deal
+  // workspace), prestamp the new model so Save links it — replaces the
+  // cm_pending_new_for_deal 60s relay as the durable path.
+  {
+    const _ctx = dealContext.getActive();
+    if (_ctx && model?.projectDetails) model.projectDetails.dealId = _ctx.id;
+  }
+  resetDirty();
+  userHasInteracted = setUserHasInteracted(false);
+  activeSection = 'setup';
+  viewMode = 'editor';
+  renderCurrentView();
+}
+
+/** UX-2 / D6 — starter-template picker overlay (Blank / eComm DC /
+ *  B2B Retail / Cold Chain). Body-level with data-hub-overlay so the P3-4
+ *  unmount sweep tears it down; Escape + backdrop close. */
+function openCmTemplatePicker() {
+  document.querySelectorAll('body > [data-hub-overlay="cm-tpl-picker"]').forEach(n => n.remove());
+  const ov = document.createElement('div');
+  ov.setAttribute('data-hub-overlay', 'cm-tpl-picker');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;';
+  ov.innerHTML = `
+    <div style="background:#fff;border-radius:12px;max-width:720px;width:100%;padding:22px 24px;box-shadow:0 24px 64px rgba(0,0,0,0.35);" role="dialog" aria-label="Choose a starting point">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div style="font-size:16px;font-weight:800;color:var(--ies-navy);">Start a new cost model</div>
+        <button data-tpl-close style="border:none;background:none;font-size:18px;cursor:pointer;color:var(--ies-gray-400);">✕</button>
+      </div>
+      <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:14px;">Templates pre-fill volumes, building and assets with catalog defaults — every number stays editable and nothing is saved until you hit Save.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;">
+        ${Object.entries(CM_STARTER_TEMPLATES).map(([k, t]) => `
+          <button data-cm-template="${k}" style="text-align:left;border:1px solid var(--ies-gray-200);border-radius:10px;padding:14px;background:#fff;cursor:pointer;transition:border-color .12s, box-shadow .12s;"
+                  onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 2px 10px rgba(0,71,171,0.12)';"
+                  onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='none';">
+            <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:4px;">${t.label}${k === 'blank' ? '' : ' <span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;background:#fef3c7;color:#92400e;letter-spacing:0.04em;">DEFAULTS</span>'}</div>
+            <div style="font-size:12px;color:var(--ies-gray-500);line-height:1.45;">${t.description}</div>
+          </button>
+        `).join('')}
+      </div>
+    </div>`;
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  ov.addEventListener('click', (e) => {
+    if (e.target === ov) { close(); return; }
+    const closeBtn = /** @type {HTMLElement} */ (e.target).closest('[data-tpl-close]');
+    if (closeBtn) { close(); return; }
+    const card = /** @type {HTMLElement} */ (e.target).closest('[data-cm-template]');
+    if (card) {
+      const key = card.getAttribute('data-cm-template');
+      close();
+      _createNewModelFromTemplate(key);
+    }
+  });
+  document.addEventListener('keydown', onKey);
+  ov.__hubOverlayTeardown = close;
+  document.body.appendChild(ov);
+}
+
 function wireLandingEvents() {
   if (!rootEl) return;
   // UX-1 D2: drop the deal binding from the landing chip.
@@ -1014,20 +1076,10 @@ function wireLandingEvents() {
     dealContext.clearActive();
     renderCurrentView();
   });
+  // UX-2 / D6 (decision #3): Create New opens the starter-template picker
+  // instead of silently seeding the demo eComm DC.
   rootEl.querySelector('#cm-create-new')?.addEventListener('click', () => {
-    model = setModel(createEmptyModel());
-    // UX-1 D2 (2026-07-03): if a deal context is active (set by the deal
-    // workspace), prestamp the new model so Save links it — replaces the
-    // cm_pending_new_for_deal 60s relay as the durable path.
-    {
-      const _ctx = dealContext.getActive();
-      if (_ctx && model?.projectDetails) model.projectDetails.dealId = _ctx.id;
-    }
-    resetDirty();
-    userHasInteracted = setUserHasInteracted(false);
-    activeSection = 'setup';
-    viewMode = 'editor';
-    renderCurrentView();
+    openCmTemplatePicker();
   });
 
   // Delete button on landing card — confirms, removes row from Supabase, re-renders.
@@ -2831,7 +2883,13 @@ function _buildCmChromeOpts() {
     : 'color:rgba(255,255,255,0.85);background:rgba(255,255,255,0.10);';
   const _pillLabel = _isBaseline ? '\u2605 Baseline' : (_scenarioLabel || 'Scenario');
   const _safeName = _modelName.replace(/"/g, '&quot;');
-  const _modelTitleHtml = (_modelName || _scenarioLabel) ? (
+  // UX-2 / D6 — starter-template provenance chip. Shown while the model is
+  // still an unsaved draft so seeded numbers read as defaults, not facts.
+  const _starterKey = (!model?.id && model?.projectDetails?.starterTemplate) ? model.projectDetails.starterTemplate : null;
+  const _starterChip = (_starterKey && CM_STARTER_TEMPLATES[_starterKey] && _starterKey !== 'blank')
+    ? '<span style="display:inline-block;font-size:9px;font-weight:700;padding:3px 8px;border-radius:8px;letter-spacing:0.04em;text-transform:uppercase;background:#fef3c7;color:#92400e;white-space:nowrap;" title="Seeded from the ' + CM_STARTER_TEMPLATES[_starterKey].label + ' starter template — every value is a catalog default until you edit or save it.">' + CM_STARTER_TEMPLATES[_starterKey].label + ' defaults</span>'
+    : '';
+  const _modelTitleHtml = (_modelName || _scenarioLabel || _starterChip) ? (
     '<div class="cm-model-title" style="display:flex;align-items:center;gap:8px;padding:0 12px 0 0;border-right:1px solid rgba(255,255,255,0.18);margin-right:10px;flex-shrink:0;min-width:0;">' +
       (_modelName
         ? '<span style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;" title="' + _safeName + '">' + _modelName + '</span>'
@@ -2840,6 +2898,7 @@ function _buildCmChromeOpts() {
         ? '<span style="display:inline-block;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;' + _pillCss + '" title="Scenario">' + _pillLabel + '</span>'
         : '') +
       (_statusBg ? '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;letter-spacing:0.04em;text-transform:uppercase;background:' + _statusBg + ';color:' + _statusFg + ';white-space:nowrap;">' + _scStatus + '</span>' : '') +
+      _starterChip +
     '</div>'
   ) : '';
 
@@ -13423,20 +13482,128 @@ function _legacyEnvToVertical(legacy) {
   return '';
 }
 
+// ============================================================
+// UX-2 / D6 (2026-07-04) — STARTER TEMPLATES (Brock decision #3)
+// ============================================================
+// createEmptyModel() is now a BLANK skeleton: structural + policy defaults
+// only (shifts, burden %s, pricing buckets, ramp), NO demo operating data.
+// The old "representative 150k-sqft eComm DC" seed lives on as the ecomm_dc
+// template below. Every template seed patches ONLY keys createEmptyModel
+// owns (volumeLines / facility / equipmentLines / overheadLines /
+// projectDetails) — pinned by test-ux2-cm-template-picker.mjs.
+const CM_STARTER_TEMPLATES = {
+  blank: {
+    label: 'Blank model',
+    description: 'Empty spine — you enter every volume, asset and cost line. Nothing pre-filled.',
+    seed: {},
+  },
+  ecomm_dc: {
+    label: 'eComm DC',
+    description: 'Mid-size 150k-sqft each-pick fulfillment: 80k orders/yr, 800k each picks, reach trucks + selective rack + WMS.',
+    seed: {
+      volumeLines: [
+        { name: 'Receiving (Pallets)', volume: 15000, uom: 'pallets', isOutboundPrimary: false },
+        { name: 'Put-Away',            volume: 15000, uom: 'pallets', isOutboundPrimary: false },
+        { name: 'Orders Shipped',      volume: 80000, uom: 'orders',  isOutboundPrimary: true  },
+        { name: 'Each Picks',          volume: 800000, uom: 'eaches', isOutboundPrimary: false },
+        { name: 'Case Picks',          volume: 200000, uom: 'cases',  isOutboundPrimary: false },
+      ],
+      facility: { totalSqft: 150000, clearHeightFt: 32 },
+      equipmentLines: [
+        { equipment_name: 'Reach Truck',              category: 'MHE',     line_type: 'owned_mhe',       quantity: 4,    acquisition_type: 'lease',    monthly_cost: 850,  acquisition_cost: 0,     monthly_maintenance: 100, amort_years: 7,  notes: '' },
+        { equipment_name: 'RF Scanners',              category: 'IT',      line_type: 'it_equipment',    quantity: 15,   acquisition_type: 'lease',    monthly_cost: 45,   acquisition_cost: 0,     monthly_maintenance: 12,  amort_years: 5,  notes: '' },
+        { equipment_name: 'Selective Pallet Racking', category: 'Racking', line_type: 'owned_facility',  quantity: 3000, acquisition_type: 'purchase', monthly_cost: 0,    acquisition_cost: 95,    monthly_maintenance: 0,   amort_years: 15, notes: 'Position count' },
+        { equipment_name: 'Dock Levelers',            category: 'Dock',    line_type: 'owned_facility',  quantity: 20,   acquisition_type: 'purchase', monthly_cost: 0,    acquisition_cost: 4500,  monthly_maintenance: 21,  amort_years: 10, notes: '' },
+        { equipment_name: 'WMS License',              category: 'IT',      line_type: 'it_equipment',    quantity: 1,    acquisition_type: 'service',  monthly_cost: 8500, acquisition_cost: 0,     monthly_maintenance: 0,   amort_years: 5,  notes: 'Annual SaaS license' },
+      ],
+      overheadLines: [
+        { category: 'Maintenance',  annual_cost: 60000,  driver: 'equipment value',  notes: '' },
+        { category: 'Supplies',     annual_cost: 48000,  driver: 'per unit shipped', notes: 'Labels, tape, stretch wrap' },
+      ],
+    },
+  },
+  b2b_retail: {
+    label: 'B2B Retail',
+    description: 'Case/pallet store replenishment: 250k sqft, 30k orders/yr, 900k case picks, full-pallet lane + deeper rack.',
+    seed: {
+      volumeLines: [
+        { name: 'Receiving (Pallets)', volume: 25000,  uom: 'pallets', isOutboundPrimary: false },
+        { name: 'Put-Away',            volume: 25000,  uom: 'pallets', isOutboundPrimary: false },
+        { name: 'Orders Shipped',      volume: 30000,  uom: 'orders',  isOutboundPrimary: true  },
+        { name: 'Case Picks',          volume: 900000, uom: 'cases',   isOutboundPrimary: false },
+        { name: 'Full-Pallet Picks',   volume: 120000, uom: 'pallets', isOutboundPrimary: false },
+      ],
+      facility: { totalSqft: 250000, clearHeightFt: 36 },
+      equipmentLines: [
+        { equipment_name: 'Reach Truck',              category: 'MHE',     line_type: 'owned_mhe',      quantity: 8,    acquisition_type: 'lease',    monthly_cost: 850,  acquisition_cost: 0,    monthly_maintenance: 100, amort_years: 7,  notes: '' },
+        { equipment_name: 'Sit-Down Counterbalance',  category: 'MHE',     line_type: 'owned_mhe',      quantity: 4,    acquisition_type: 'lease',    monthly_cost: 780,  acquisition_cost: 0,    monthly_maintenance: 95,  amort_years: 7,  notes: 'Dock + full-pallet lane' },
+        { equipment_name: 'RF Scanners',              category: 'IT',      line_type: 'it_equipment',   quantity: 25,   acquisition_type: 'lease',    monthly_cost: 45,   acquisition_cost: 0,    monthly_maintenance: 12,  amort_years: 5,  notes: '' },
+        { equipment_name: 'Selective Pallet Racking', category: 'Racking', line_type: 'owned_facility', quantity: 8000, acquisition_type: 'purchase', monthly_cost: 0,    acquisition_cost: 95,   monthly_maintenance: 0,   amort_years: 15, notes: 'Position count' },
+        { equipment_name: 'Dock Levelers',            category: 'Dock',    line_type: 'owned_facility', quantity: 30,   acquisition_type: 'purchase', monthly_cost: 0,    acquisition_cost: 4500, monthly_maintenance: 21,  amort_years: 10, notes: '' },
+        { equipment_name: 'WMS License',              category: 'IT',      line_type: 'it_equipment',   quantity: 1,    acquisition_type: 'service',  monthly_cost: 8500, acquisition_cost: 0,    monthly_maintenance: 0,   amort_years: 5,  notes: 'Annual SaaS license' },
+      ],
+      overheadLines: [
+        { category: 'Maintenance',  annual_cost: 90000,  driver: 'equipment value',  notes: '' },
+        { category: 'Supplies',     annual_cost: 36000,  driver: 'per unit shipped', notes: 'Stretch wrap, corner boards' },
+      ],
+    },
+  },
+  cold_chain: {
+    label: 'Cold Chain',
+    description: 'Refrigerated/frozen F&B: 120k sqft, pallet-in/pallet-out, reefer maintenance + cold-rated MHE.',
+    seed: {
+      projectDetails: { environment: 'cold' },
+      volumeLines: [
+        { name: 'Receiving (Pallets)', volume: 40000,  uom: 'pallets', isOutboundPrimary: false },
+        { name: 'Put-Away',            volume: 40000,  uom: 'pallets', isOutboundPrimary: false },
+        { name: 'Orders Shipped',      volume: 20000,  uom: 'orders',  isOutboundPrimary: true  },
+        { name: 'Full-Pallet Picks',   volume: 36000,  uom: 'pallets', isOutboundPrimary: false },
+        { name: 'Case Picks',          volume: 250000, uom: 'cases',   isOutboundPrimary: false },
+      ],
+      facility: { totalSqft: 120000, clearHeightFt: 30 },
+      equipmentLines: [
+        { equipment_name: 'Cold-Rated Reach Truck',   category: 'MHE',     line_type: 'owned_mhe',      quantity: 6,    acquisition_type: 'lease',    monthly_cost: 1050, acquisition_cost: 0,    monthly_maintenance: 140, amort_years: 6,  notes: 'Freezer package' },
+        { equipment_name: 'RF Scanners (cold-rated)', category: 'IT',      line_type: 'it_equipment',   quantity: 15,   acquisition_type: 'lease',    monthly_cost: 60,   acquisition_cost: 0,    monthly_maintenance: 15,  amort_years: 4,  notes: 'Condensation-hardened' },
+        { equipment_name: 'Drive-In Racking',         category: 'Racking', line_type: 'owned_facility', quantity: 4500, acquisition_type: 'purchase', monthly_cost: 0,    acquisition_cost: 140,  monthly_maintenance: 0,   amort_years: 15, notes: 'Position count' },
+        { equipment_name: 'Dock Levelers (insulated)',category: 'Dock',    line_type: 'owned_facility', quantity: 12,   acquisition_type: 'purchase', monthly_cost: 0,    acquisition_cost: 6200, monthly_maintenance: 30,  amort_years: 10, notes: '' },
+        { equipment_name: 'WMS License',              category: 'IT',      line_type: 'it_equipment',   quantity: 1,    acquisition_type: 'service',  monthly_cost: 8500, acquisition_cost: 0,    monthly_maintenance: 0,   amort_years: 5,  notes: 'Annual SaaS license' },
+      ],
+      overheadLines: [
+        { category: 'Refrigeration Maintenance', annual_cost: 180000, driver: 'refrigeration plant', notes: 'Compressors, evaporators, ammonia/CO2 loop PM' },
+        { category: 'Maintenance',               annual_cost: 60000,  driver: 'equipment value',     notes: '' },
+        { category: 'Supplies',                  annual_cost: 30000,  driver: 'per unit shipped',    notes: '' },
+      ],
+    },
+  },
+};
+
+/** Apply a starter template onto a (blank) model. Deep-copies seed arrays so
+ *  two models never share line objects. Stamps projectDetails.starterTemplate
+ *  for the draft-chip provenance hint. Unknown key = no-op (stays blank). */
+function applyStarterTemplate(m, key) {
+  const tpl = CM_STARTER_TEMPLATES[key];
+  if (!tpl || !m) return m;
+  const seed = tpl.seed || {};
+  for (const [k, v] of Object.entries(seed)) {
+    if (Array.isArray(v)) m[k] = v.map(row => ({ ...row }));
+    else if (v && typeof v === 'object') m[k] = { ...m[k], ...v };
+    else m[k] = v;
+  }
+  if (m.projectDetails) m.projectDetails.starterTemplate = key;
+  return m;
+}
+
 function createEmptyModel() {
-  // Starter profile: representative mid-size 150k-sqft eComm DC. Replace values as you go.
+  // UX-2 / D6: BLANK skeleton — no demo operating data. Structural + policy
+  // defaults (shifts, burden %s, buckets, ramp) stay: they are corporate
+  // catalog conventions, not fabricated customer numbers. Starter data comes
+  // from CM_STARTER_TEMPLATES via the landing template picker.
   return {
     id: null,
     projectDetails: { name: '', clientName: '', market: '', storageEnvironment: '', vertical: '', environment: '', facilityLocation: '', contractTerm: 5, dealId: null },
-    volumeLines: [
-      { name: 'Receiving (Pallets)', volume: 15000, uom: 'pallets', isOutboundPrimary: false },
-      { name: 'Put-Away',            volume: 15000, uom: 'pallets', isOutboundPrimary: false },
-      { name: 'Orders Shipped',      volume: 80000, uom: 'orders',  isOutboundPrimary: true  },
-      { name: 'Each Picks',          volume: 800000, uom: 'eaches', isOutboundPrimary: false },
-      { name: 'Case Picks',          volume: 200000, uom: 'cases',  isOutboundPrimary: false },
-    ],
+    volumeLines: [],
     orderProfile: {},
-    facility: { totalSqft: 150000, clearHeightFt: 32 },
+    facility: { totalSqft: 0, clearHeightFt: 0 },
     shifts: {
       shiftsPerDay: 1, hoursPerShift: 8, daysPerWeek: 5, weeksPerYear: 52,
       // Brock 2026-04-21 pm: PTO + Holiday are now hour-based (editable ints).
@@ -13458,27 +13625,8 @@ function createEmptyModel() {
     // the standard Position Catalog (Brock 2026-04-21 pm).
     laborLines: [],
     indirectLaborLines: [],
-    equipmentLines: [
-      // Field names match renderEquipment DOM (monthly_cost / monthly_maintenance / amort_years).
-      // 2026-04-29 (demo audit): added line_type per row so the dropdown
-      // doesn't default-render every row as "Owned MHE". categoryToLineType:
-      //   MHE -> owned_mhe, IT -> it_equipment, Racking/Dock/etc -> owned_facility.
-      { equipment_name: 'Reach Truck',              category: 'MHE',     line_type: 'owned_mhe',       quantity: 4,    acquisition_type: 'lease',    monthly_cost: 850,  acquisition_cost: 0,     monthly_maintenance: 100, amort_years: 7,  notes: '' },
-      { equipment_name: 'RF Scanners',              category: 'IT',      line_type: 'it_equipment',    quantity: 15,   acquisition_type: 'lease',    monthly_cost: 45,   acquisition_cost: 0,     monthly_maintenance: 12,  amort_years: 5,  notes: '' },
-      { equipment_name: 'Selective Pallet Racking', category: 'Racking', line_type: 'owned_facility',  quantity: 3000, acquisition_type: 'purchase', monthly_cost: 0,    acquisition_cost: 95,    monthly_maintenance: 0,   amort_years: 15, notes: 'Position count' },
-      { equipment_name: 'Dock Levelers',            category: 'Dock',    line_type: 'owned_facility',  quantity: 20,   acquisition_type: 'purchase', monthly_cost: 0,    acquisition_cost: 4500,  monthly_maintenance: 21,  amort_years: 10, notes: '' },
-      { equipment_name: 'WMS License',              category: 'IT',      line_type: 'it_equipment',    quantity: 1,    acquisition_type: 'service',  monthly_cost: 8500, acquisition_cost: 0,     monthly_maintenance: 0,   amort_years: 5,  notes: 'Annual SaaS license' },
-    ],
-    overheadLines: [
-      // 2026-04-29 (R4 demo audit): Utilities and Insurance were ALSO booked in
-      // the Facility Cost Breakdown (totalFacilityCost), so summing both
-      // overhead and facility double-counted ~$204K/yr. Removed from the
-      // overhead seed; the facility breakdown is the source of truth for
-      // those two cost categories. Maintenance and Supplies are not in the
-      // facility breakdown, so they stay here.
-      { category: 'Maintenance',  annual_cost: 60000,  driver: 'equipment value',  notes: '' },
-      { category: 'Supplies',     annual_cost: 48000,  driver: 'per unit shipped', notes: 'Labels, tape, stretch wrap' },
-    ],
+    equipmentLines: [],
+    overheadLines: [],
     vasLines: [],
     financial: { gaMargin: 4.5, mgmtFeeMargin: 7.5, targetMargin: 12, volumeGrowth: 3, laborEscalation: 4, annualEscalation: 3, discountRate: 10, reinvestRate: 8 },
     laborCosting: {

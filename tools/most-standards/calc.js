@@ -21,6 +21,22 @@ export const DEFAULT_PFD = { personal: 5, fatigue: 4, delay: 5 }; // 14% total
 /** Standard operating days per year */
 export const DEFAULT_OPERATING_DAYS = 260;
 
+// UX-2 MOST split (2026-07-04) — ONE defaults set for Quick Analysis AND
+// Workflow Composer (assessment X11: the two tabs previously seeded
+// different params — productivity 90 vs 100 displayed, operating days
+// 260 vs 250, rates 18/22/20 vs 0/0/0 — same templates, different FTEs).
+// Both creators in ui.js now spread from here. productivity_pct is 90
+// EXPLICITLY: the Analysis tab has always DISPLAYED 90 as the default
+// while the engine computed at 100 until the field was touched — setting
+// it in state makes the display and the math agree.
+export const DEFAULT_ANALYSIS_PARAMS = {
+  pfd_pct: 14,
+  shift_hours: 8,
+  operating_days: DEFAULT_OPERATING_DAYS,
+  productivity_pct: 90,
+  rates_by_category: { manual: 18, mhe: 22, hybrid: 20 },
+};
+
 // ============================================================
 // TMU CONVERSIONS
 // ============================================================
