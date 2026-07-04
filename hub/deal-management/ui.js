@@ -1835,7 +1835,7 @@ function renderDealFinancialsMsa() {
               <td style="padding:9px 16px;font-weight:600;">${sx.inBid ? '<span style="color:#16a34a;">★</span> ' : ''}${escapeHtml(sx.name)}</td>
               <td style="padding:9px 12px;text-align:right;">${money(f.annualRevenue)}</td>
               <td style="padding:9px 12px;text-align:right;">${money(f.annualCost)}</td>
-              <td style="padding:9px 12px;text-align:right;font-weight:600;">${f.marginPct.toFixed(1)}%</td>
+              <td style="padding:9px 12px;text-align:right;font-weight:600;">${f.grossMarginPct.toFixed(1)}%</td>
               <td style="padding:9px 12px;text-align:right;">${(sx.sqft || 0).toLocaleString()}</td>
               <td style="padding:9px 16px;text-align:right;">${sx.sqft > 0 ? '$' + (f.annualRevenue / sx.sqft).toFixed(2) : '—'}</td>
             </tr>`; }).join('')}
@@ -1913,7 +1913,7 @@ function renderDealCompare() {
         <tbody>
           ${row('Annual revenue', fA.annualRevenue, fB.annualRevenue, money)}
           ${row('Annual cost', fA.annualCost, fB.annualCost, money)}
-          ${row('Margin %', fA.marginPct, fB.marginPct, (x) => x.toFixed(1) + '%')}
+          ${row('Margin %', fA.grossMarginPct, fB.grossMarginPct, (x) => x.toFixed(1) + '%')}
           ${row('Facility SF', A.sqft || 0, B.sqft || 0, (x) => x.toLocaleString())}
           ${row('Startup cost', A.startupCost || 0, B.startupCost || 0, money)}
           ${row('Rev $/SF', A.sqft > 0 ? fA.annualRevenue / A.sqft : 0, B.sqft > 0 ? fB.annualRevenue / B.sqft : 0, (x) => x > 0 ? '$' + x.toFixed(2) : '—')}
