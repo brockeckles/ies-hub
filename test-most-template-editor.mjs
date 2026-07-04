@@ -187,8 +187,10 @@ await tAsync('stub proves the old bug: raw editor element (UUID id) fails bigint
   // 2026-07-03 live-walk regressions — BIGSERIAL ids are numbers, select
   // values are strings; strict === silently no-ops the template pickers.
   t('template pickers compare ids type-safely (String() both sides)', () =>
+    // WC retirement (decision #10 C, 2026-07-04) removed the set-wf-template
+    // picker — the Quick Analysis line picker remains, still String()-safe.
     assert(!ui.includes('find(t => t.id === tplId)')
-        && ui.split('find(t => String(t.id) === String(tplId))').length >= 3));
+        && ui.split('find(t => String(t.id) === String(tplId))').length >= 2));
   t('workflow/analysis selected-option compare is type-safe', () =>
     assert(!ui.includes('step.template_id === t.id')
         && !ui.includes('line.template_id === t.id')));
@@ -202,9 +204,13 @@ await tAsync('stub proves the old bug: raw editor element (UUID id) fails bigint
     assert(!cmUi.includes("activeSection = 'projectDetails'")));
   t('cost-model renderSection has unknown-key fallback', () =>
     assert(cmUi.includes('Unknown section key')));
-  t('landing open discriminates workflow rows (kind) → composer, not empty QA', () =>
+  t('landing open still discriminates legacy workflow rows (kind) — lands library w/ notice, never an empty QA', () =>
+    // Decision #10 C: composer retired. Legacy rows must NOT hydrate as an
+    // empty Quick Analysis (the 2026-07-03 bug) and must NOT try to open a
+    // composer that no longer exists.
     assert(/savedRow\.analysis_data\.kind === 'workflow'/.test(ui)
-        && /workflowFromAnalysisData\(savedRow\.analysis_data/.test(ui)));
+        && !ui.includes('workflowFromAnalysisData')
+        && /kind === 'workflow'\)\s*\{\s*\n\s*showToast\(/.test(ui)));
 }
 
 console.log(`test-most-template-editor: ${pass} passed, ${fail} failed.`);

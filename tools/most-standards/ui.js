@@ -1,7 +1,9 @@
 /**
  * IES Hub v3 — MOST Labor Standards UI
  * Analyzer-pattern layout: top tab bar + full-width content.
- * Three modes: Template Library, Quick Labor Analysis, Workflow Composer.
+ * Two modes: Template Library/Catalog + Quick Labor Analysis. The Workflow
+ * Composer tab was retired 2026-07-04 (decision #10, option C) — its
+ * bottleneck insight lives on as the catalog's Sequence Preview.
  *
  * @module tools/most-standards/ui
  */
@@ -14,12 +16,12 @@ import { showToast } from '../../shared/toast.js?v=20260419-uC';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260703-dc2';
 // Note: MOST intentionally opts out of run-state tracking. Its Quick Analysis
-// and Workflow tabs recompute inline on every render — the primary "Run"
+// tab recomputes inline on every render — the primary "Run"
 // button is a convenience trigger rather than a discrete compute step, so a
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
 import * as calc from './calc.js?v=20260704-ux2d';
-import * as api from './api.js?v=20260704-ux2d';
+import * as api from './api.js?v=20260704-wcr1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================
@@ -29,19 +31,19 @@ const MOST_GROUPS = [
   { key: 'library',  label: 'Template Library',  description: 'Browse activity catalog' },
   { key: 'editor',   label: 'Template Editor',   description: 'Author or edit templates' },
   { key: 'analysis', label: 'Quick Analysis',    description: 'Pick templates · set volumes · compute' },
-  { key: 'workflow', label: 'Workflow Composer', description: 'Compose templates into a flow · preview' },
 ];
 const MOST_SECTIONS = [];  // No sub-sections — Row 2 shows only the KPI strip.
 
 // UX-2 MOST catalog/editor split (2026-07-04, assessment §6 D3) — Quick tier
 // is the CONSUMER product: catalog-as-picker + staffing analysis. The IE
-// bench (template editor, workflow composer) lives behind Engineering.
+// bench (template editor) lives behind Engineering. Workflow Composer
+// retired 2026-07-04 (decision #10 C) — see SEQUENCE PREVIEW below.
 const MOST_QUICK_GROUPS = [
   { key: 'library',  label: 'Template Catalog',  description: 'Browse activities · click for detail · send to staffing' },
   { key: 'analysis', label: 'Staffing Analysis', description: 'Volumes → FTEs → labor cost' },
 ];
-/** Quick chrome = quick tier AND a consumer tab. Editor/workflow tabs always
- *  get Engineering chrome, so deep links + saved-workflow opens stay honest. */
+/** Quick chrome = quick tier AND a consumer tab. The editor tab always
+ *  gets Engineering chrome, so deep links stay honest. */
 function _mostQuickChrome() {
   return tierSvc.getTier('most') === 'quick'
     && (activeTab === 'library' || activeTab === 'analysis');
@@ -53,7 +55,7 @@ import { getMostTplName, getMostTplBaseUph, getMostTplTmuTotal, getMostElName, g
 // STATE — tool-local
 // ============================================================
 
-/** @type {'library' | 'editor' | 'analysis' | 'workflow'} */
+/** @type {'library' | 'editor' | 'analysis'} */
 let activeTab = 'library';
 
 /** @type {HTMLElement|null} */
@@ -80,9 +82,9 @@ let editorDeletedElementIds = [];
 
 /** Saved scenarios for Quick Analysis (Supabase-backed via api.most_analyses) */
 let savedScenarios = [];
-/** P2-3a — saved Workflow Composer scenarios (most_analyses rows with
- * analysis_data.kind='workflow'). */
-let workflowScenarios = [];
+// Workflow Composer retired 2026-07-04 (decision #10 C). Rows with
+// analysis_data.kind='workflow' stay EXCLUDED from savedScenarios below so
+// a legacy row can never hydrate as an empty Quick Analysis.
 
 /**
  * Load saved scenarios from Supabase. Falls back to legacy localStorage
@@ -96,13 +98,6 @@ async function loadSavedScenarios() {
     // jsonb kind discriminator so neither list shows the other's rows.
     const isWf = (r) => r.analysis_data && r.analysis_data.kind === 'workflow';
     savedScenarios = rows.filter(r => !isWf(r)).map(row => analysisRowToScenario(row));
-    workflowScenarios = rows.filter(isWf).map(row => ({
-      id: row.id,
-      name: row.name || 'Untitled Workflow',
-      stepCount: (row.analysis_data.workflow?.steps || []).length,
-      timestamp: row.updated_at ? new Date(row.updated_at).toLocaleString() : '',
-      data: row.analysis_data,
-    }));
 
     // One-shot migration of legacy localStorage scenarios: push any local-only
     // entries up to Supabase, then clear the cache so we don't re-import.
@@ -195,9 +190,11 @@ let filters = { search: '', processArea: '', laborCategory: '' };
 /** @type {import('./types.js?v=20260418-sM').LaborAnalysis} */
 let analysis = createEmptyAnalysis();
 
-// --- Workflow state ---
-/** @type {import('./types.js?v=20260418-sM').Workflow} */
-let workflow = createEmptyWorkflow();
+// --- Sequence preview state (catalog) — session-only, decision #10 C ---
+/** Ordered template ids chained in the catalog's Sequence Preview. */
+let seqTray = [];
+/** Units/day for the Sequence Preview; null → 5000 default. */
+let seqVolume = null;
 
 // ============================================================
 // PROCESS AREAS & CATEGORIES
@@ -270,8 +267,8 @@ export async function mount(el) {
   rootEl = el;
   // Scenario-landing adoption (2026-06-11): MOST now opens on the shared
   // saved-scenarios landing like Fleet/COG/NetOpt/WSC. Saved analyses
-  // (most_analyses) are the tool's scenarios; the library/editor/analysis/
-  // workflow tabs live inside the editor experience entered via Open/New.
+  // (most_analyses) are the tool's scenarios; the library/editor/analysis
+  // tabs live inside the editor experience entered via Open/New.
   // Reset the chrome-bind guard in case the router reuses the container
   // across mounts (stale closures would otherwise survive).
   el.__tcBound = false;
@@ -323,7 +320,7 @@ async function renderMostLanding() {
 }
 
 /**
- * Enter the tool proper (library/editor/analysis/workflow shell).
+ * Enter the tool proper (library/editor/analysis shell).
  * @param {Object|null} savedRow — most_analyses row to open on the Analysis
  *   tab, or null for a fresh session landing on the Library tab.
  */
@@ -338,18 +335,19 @@ async function enterTool(savedRow) {
   guardMarkClean('most'); // fresh session — no pending edits
   filters = { search: '', processArea: '', laborCategory: '' };
   analysis = createEmptyAnalysis();
-  workflow = createEmptyWorkflow();
+  seqTray = [];
+  seqVolume = null;
 
   // Opening a saved analysis from the landing: hydrate the Quick Analysis
   // state from the row (same mapping the in-tool saved list uses) and land
-  // straight on the Analysis tab. P2-3a workflow rows share most_analyses —
-  // discriminate on kind (2026-07-03: previously hydrated workflows as an
-  // EMPTY Quick Analysis) and land those on the Workflow Composer instead.
+  // straight on the Analysis tab. Workflow Composer retired (decision #10 C,
+  // 2026-07-04): legacy kind='workflow' rows (0 in prod at retirement) land
+  // on the Library with a notice instead of hydrating as an empty analysis.
   if (savedRow) {
     try {
       if (savedRow.analysis_data && savedRow.analysis_data.kind === 'workflow') {
-        workflow = calc.workflowFromAnalysisData(savedRow.analysis_data, savedRow.id);
-        activeTab = 'workflow';
+        showToast('The Workflow Composer was retired — this saved workflow no longer opens. Rebuild it from the catalog\u2019s Sequence Preview.', 'warning');
+        activeTab = 'library';
       } else {
         analysis = JSON.parse(JSON.stringify(analysisRowToScenario(savedRow).data));
         activeTab = 'analysis';
@@ -440,15 +438,14 @@ export function unmount() {
 // SHELL
 // ============================================================
 
-/** UX-2 — flip Quick ⇄ Engineering. Editor→Catalog, Composer→Staffing on
- *  the way down so the user never lands on a hidden tab. Crossing the
+/** UX-2 — flip Quick ⇄ Engineering. Editor→Catalog on the way down so
+ *  the user never lands on a hidden tab. Crossing the
  *  boundary persists the tier (CM/COG pattern). */
 function handleMostTierToggle() {
   const toQuick = !_mostQuickChrome();
   tierSvc.setTier('most', toQuick ? 'quick' : 'engineering');
   if (toQuick) {
     if (activeTab === 'editor') activeTab = 'library';
-    else if (activeTab === 'workflow') activeTab = 'analysis';
   }
   if (!rootEl) return;
   rootEl.innerHTML = renderShell();
@@ -504,13 +501,9 @@ function _handleMostAction(actionId) {
     saveCurrentScenario();
     return;
   }
-  if (actionId === 'most-save-workflow') {
-    saveCurrentWorkflow(false);
-    return;
-  }
-  if (actionId === 'most-run-analysis' || actionId === 'most-run-workflow') {
-    // Analysis + Workflow recompute inline on every render — "Run" is a
-    // deliberate recompute trigger (see the run-state opt-out note at top).
+  if (actionId === 'most-run-analysis') {
+    // Analysis recomputes inline on every render — "Run" is a deliberate
+    // recompute trigger (see the run-state opt-out note at top).
     renderContent();
     _refreshMostKpis();
     flashPrimaryAction(rootEl);
@@ -602,24 +595,6 @@ function _mostExtraStyles() {
         outline: none;
         border-color: var(--ies-blue);
         box-shadow: 0 0 0 2px rgba(0,71,171,0.1);
-      }
-
-      .most-workflow-step {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px 16px;
-        border: 1px solid var(--ies-gray-200);
-        border-radius: 8px;
-        background: #fff;
-        margin-bottom: 8px;
-      }
-      .most-workflow-step.bottleneck { border-color: var(--ies-red); background: rgba(220,53,69,0.03); }
-      .most-workflow-arrow {
-        text-align: center;
-        color: var(--ies-gray-300);
-        font-size: 18px;
-        margin-bottom: 8px;
       }
 
       /* .most-push-btn removed 2026-04-18 (X2) — buttons now use shared .hub-btn + .hub-btn-primary */
@@ -800,12 +775,12 @@ function _mostExtraStyles() {
 }
 
 function _buildMostChromeOpts() {
-  // Conditional actions per phase. analysis + workflow get Run buttons.
+  // Conditional actions per phase. analysis gets the Run button.
   const _quick = _mostQuickChrome();
   const actions = [
     { id: 'most-tier',
       label: _quick ? 'Engineering' : 'Quick',
-      title: _quick ? 'Switch to Engineering mode — template editor + workflow composer'
+      title: _quick ? 'Switch to Engineering mode — template editor'
                     : 'Switch to Quick mode — catalog picker + staffing analysis' },
   ];
   if (activeTab === 'editor' && editorTemplate) {
@@ -830,23 +805,6 @@ function _buildMostChromeOpts() {
       kind: 'primary',
     });
   }
-  if (activeTab === 'workflow') {
-    // P2-3a: Save is back and REAL now — routes to saveCurrentWorkflow
-    // (P2-2 had stripped the dead selector while persistence didn't exist).
-    actions.push({
-      id: 'most-save-workflow',
-      label: '\u{1F4BE} Save',
-      title: 'Save this workflow',
-    });
-    actions.push({
-      id: 'most-run-workflow',
-      label: 'Run Workflow',
-      icon: '▶',
-      title: 'Compute workflow (Cmd/Ctrl+Enter)',
-      kind: 'primary',
-    });
-  }
-
   return {
     toolKey: 'most',
     groups: _quick ? MOST_QUICK_GROUPS : MOST_GROUPS,
@@ -895,7 +853,7 @@ function _computeMostKpis() {
     } else {
       items.push({ label: 'Editing', value: '—', hint: 'Open a template from the Library to edit' });
     }
-  } else if (activeTab === 'analysis' || activeTab === 'workflow') {
+  } else if (activeTab === 'analysis') {
     const lines = (analysis && Array.isArray(analysis.lines)) ? analysis.lines : [];
     const totalActs = lines.length;
     const totalTmu = lines.reduce((sum, l) => sum + (l.estTmu || 0), 0);
@@ -922,7 +880,7 @@ function renderContent() {
   // 2026-04-28 — keep phase stepper status in sync with activeTab after re-renders.
   renderMostPhaseStepper();
 
-  const renderers = { library: renderLibrary, editor: renderEditor, analysis: renderAnalysis, workflow: renderWorkflowComposer };
+  const renderers = { library: renderLibrary, editor: renderEditor, analysis: renderAnalysis };
   const render = renderers[activeTab];
   if (render) {
     container.innerHTML = render();
@@ -935,8 +893,8 @@ function renderContent() {
  * MOS-D4: re-render the active tab while preserving focus + caret position
  * on the input the user is typing into. Without this, every Analysis-tab
  * field change blew away focus mid-tab — making rapid data entry painful.
- * The selector strategy keys on data-line/data-param/data-rate-cat/data-wf
- * pairs which uniquely identify each input across renders.
+ * The selector strategy keys on data-line/data-param/data-rate-cat pairs
+ * which uniquely identify each input across renders.
  */
 function rerenderPreservingFocus() {
   const container = rootEl?.querySelector('#most-content');
@@ -950,8 +908,6 @@ function rerenderPreservingFocus() {
     if (ds.line != null && ds.field) selector = `[data-line="${ds.line}"][data-field="${ds.field}"]`;
     else if (ds.param) selector = `[data-param="${ds.param}"]`;
     else if (ds.rateCat) selector = `[data-rate-cat="${ds.rateCat}"]`;
-    else if (ds.wf) selector = `[data-wf="${ds.wf}"]`;
-    else if (ds.wfStep != null && ds.field) selector = `[data-wf-step="${ds.wfStep}"][data-field="${ds.field}"]`;
     else if (ds.elemIdx != null && ds.elemField) selector = `[data-elem-idx="${ds.elemIdx}"][data-elem-field="${ds.elemField}"]`;
     if (active.selectionStart != null && typeof active.selectionStart === 'number') {
       try { selStart = active.selectionStart; selEnd = active.selectionEnd; } catch (_) {}
@@ -1003,6 +959,8 @@ function renderLibrary() {
     ${filtered.length === 0 ? '<div style="text-align:center; padding:40px; color:var(--ies-gray-400);">No templates match your filters.</div>' : ''}
 
     ${selectedTemplate ? renderTemplateDetail() : ''}
+
+    ${renderSequenceTray()}
   `;
 }
 
@@ -1051,6 +1009,7 @@ function renderTemplateDetail() {
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
           ${_quickDetail ? `<button class="hub-btn hub-btn-primary hub-btn-sm" data-action="use-in-staffing" data-id="${t.id}" title="Add this activity as a line in the Staffing Analysis — set a daily volume there to get FTEs + cost">→ Use in staffing analysis</button>` : ''}
+          <button class="hub-btn hub-btn-sm" data-action="seq-add" data-id="${t.id}" title="Chain this activity onto the Sequence Preview to spot the bottleneck across steps">+ Add to sequence</button>
           <button class="cm-delete-btn" data-action="close-detail" style="font-size:16px;">✕</button>
         </div>
       </div>
@@ -1628,186 +1587,72 @@ function renderSavedScenarios() {
 }
 
 // ============================================================
-// TAB 3: WORKFLOW COMPOSER
+// SEQUENCE PREVIEW (catalog) — decision #10 option C, 2026-07-04
+// The Workflow Composer tab is retired. Its one unique insight —
+// chained-flow bottleneck identification — survives here as a
+// session-only preview under the Template Catalog. No persistence,
+// no push; staffing math (FTEs + cost) lives in the Quick Analysis.
 // ============================================================
 
-function renderWorkflowComposer() {
-  const steps = workflow.steps || [];
-  const pfd = workflow.pfd_pct || 14;
-  const productivity = workflow.productivity_pct == null ? 100 : workflow.productivity_pct;
-
-  // Compute derived fields
-  const computedSteps = steps.map(step => {
-    const derived = calc.computeWorkflowStep({
-      base_uph: step.base_uph,
-      pfd_pct: pfd,
-      productivity_pct: productivity,
-      target_volume: workflow.target_volume_per_day,
-      volume_ratio: step.volume_ratio ?? 1,
-      shift_hours: workflow.shift_hours,
-    });
-    return { ...step, ...derived };
-  });
-
-  const wfResult = calc.analyzeWorkflow(computedSteps);
-  const tplsByArea = groupByProcessArea(refData.templates || []);
-
-  return `
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-      <div>
-        <div style="font-size:16px; font-weight:700; color:var(--ies-navy);">Workflow Composer</div>
-        <div style="font-size:13px; color:var(--ies-gray-500);">Chain templates into an end-to-end warehouse workflow to identify bottlenecks.</div>
-      </div>
-    </div>
-
-    <!-- Workflow Parameters -->
-    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:20px;">
-      <div>
-        <label class="cm-form-label">Workflow Name</label>
-        <input class="hub-input" value="${escapeAttr(workflow.name)}" id="wf-name" data-wf="name" />
-      </div>
-      <div>
-        <label class="cm-form-label">Target Volume/Day</label>
-        <input class="hub-input" type="number" value="${workflow.target_volume_per_day}" data-wf="target_volume_per_day" />
-      </div>
-      <div>
-        <label class="cm-form-label">Shift Hours</label>
-        <input class="hub-input" type="number" value="${workflow.shift_hours}" step="0.5" data-wf="shift_hours" />
-      </div>
-      <div>
-        <label class="cm-form-label">PFD %</label>
-        <input class="hub-input" type="number" value="${pfd}" step="1" data-wf="pfd_pct" />
-      </div>
-      <div>
-        <label class="cm-form-label">Operating Days/Yr</label>
-        <input class="hub-input" type="number" value="${workflow.operating_days || 250}" step="1" data-wf="operating_days" title="Used to annualize hours and cost when pushing to the Cost Model." />
-      </div>
-      <div>
-        <label class="cm-form-label">Manual Rate ($/hr)</label>
-        <input class="hub-input" type="number" value="${(workflow.rates_by_category && workflow.rates_by_category.manual) || 0}" step="0.5" data-wf-rate-cat="manual" title="Hourly rate for MANUAL-category steps. Pushed to the Cost Model." />
-      </div>
-      <div>
-        <label class="cm-form-label">MHE Rate ($/hr)</label>
-        <input class="hub-input" type="number" value="${(workflow.rates_by_category && workflow.rates_by_category.mhe) || 0}" step="0.5" data-wf-rate-cat="mhe" title="Hourly rate for MHE-category steps. Pushed to the Cost Model." />
-      </div>
-      <div>
-        <label class="cm-form-label">Hybrid Rate ($/hr)</label>
-        <input class="hub-input" type="number" value="${(workflow.rates_by_category && workflow.rates_by_category.hybrid) || 0}" step="0.5" data-wf-rate-cat="hybrid" title="Hourly rate for HYBRID-category steps. Pushed to the Cost Model." />
-      </div>
-    </div>
-
-    <!-- Pipeline Steps -->
-    <div id="most-wf-steps">
-      ${computedSteps.map((step, i) => {
-        const isBottleneck = step.adjusted_uph > 0 && step.adjusted_uph === wfResult.bottleneckUph;
-        return `
-          ${i > 0 ? '<div class="most-workflow-arrow">↓</div>' : ''}
-          <div class="most-workflow-step${isBottleneck ? ' bottleneck' : ''}">
-            <div style="flex:1;">
-              <select style="width:180px;" data-action="set-wf-template" data-idx="${i}">
-                <option value="">— Select Template —</option>
-                ${Object.entries(tplsByArea).map(([area, tpls]) =>
-                  `<optgroup label="${area}">
-                    ${tpls.map(t => `<option value="${t.id}"${String(step.template_id) === String(t.id) ? ' selected' : ''}>${escapeHtml(getMostTplName(t))}</option>`).join('')}
-                  </optgroup>`
-                ).join('')}
-              </select>
-              <div style="font-size:12px; color:var(--ies-gray-400); margin-top:4px;">${step.process_area || ''} · <span class="most-cat-badge most-cat-${step.labor_category || 'manual'}" style="font-size:10px;">${(step.labor_category || '').toUpperCase()}</span></div>
-            </div>
-            <div style="text-align:center; min-width:60px;">
-              <div style="font-size:11px; color:var(--ies-gray-500);">Vol Ratio</div>
-              <input type="number" value="${step.volume_ratio ?? 1}" style="width:55px; text-align:center;" step="0.1" min="0" max="1" data-wf-step="${i}" data-field="volume_ratio" />
-            </div>
-            <div style="text-align:center; min-width:60px;">
-              <div style="font-size:11px; color:var(--ies-gray-500);">Adj UPH</div>
-              <div style="font-size:16px; font-weight:700;${isBottleneck ? ' color:var(--ies-red);' : ''}">${calc.formatUph(step.adjusted_uph)}</div>
-            </div>
-            <div style="text-align:center; min-width:50px;">
-              <div style="font-size:11px; color:var(--ies-gray-500);">FTE</div>
-              <div style="font-size:16px; font-weight:700;">${calc.formatFte(step.fte)}</div>
-            </div>
-            <div style="text-align:center; min-width:50px;">
-              <div style="font-size:11px; color:var(--ies-gray-500);">Hrs/Day</div>
-              <div style="font-size:14px; font-weight:600;">${step.hours_per_day.toFixed(1)}</div>
-            </div>
-            <button class="cm-delete-btn" data-action="delete-wf-step" data-idx="${i}">✕</button>
-          </div>
-        `;
-      }).join('')}
-    </div>
-    <button class="cm-add-row-btn" data-action="add-wf-step" style="margin-top:12px;">+ Add Step</button>
-
-    <!-- Workflow Summary -->
-    ${computedSteps.length > 0 ? renderWorkflowSummary(wfResult, computedSteps) : ''}
-
-    <!-- P2-3a: persistence + export + push (the composer previously kept nothing) -->
-    <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
-      <button class="cm-add-row-btn" data-action="save-workflow" style="font-size:12px; padding:6px 12px;">💾 ${workflow.id ? 'Update' : 'Save'} Workflow</button>
-      <button class="cm-add-row-btn" data-action="save-workflow-as" style="font-size:12px; padding:6px 12px;" ${workflow.id ? '' : 'hidden'}>Save As New</button>
-      <button class="cm-add-row-btn" data-action="most-wf-export-xlsx" style="font-size:12px; padding:6px 12px;" title="Export this workflow to Excel (.xlsx)">⬇ Export Excel</button>
-      <button class="cm-add-row-btn" data-action="push-wf-to-cm" style="font-size:12px; padding:6px 12px;" title="Send workflow steps to the Cost Model as labor lines">→ Push to Cost Model</button>
-    </div>
-
-    <div style="margin-top:20px;">
-      <div style="font-size:13px; font-weight:700; color:var(--ies-navy); margin-bottom:8px;">Saved Workflows</div>
-      ${workflowScenarios.length === 0
-        ? '<div style="text-align:center; padding:16px; color:var(--ies-gray-400); border:1px dashed var(--ies-gray-200); border-radius:10px;">No saved workflows yet.</div>'
-        : `<div style="display:flex; flex-direction:column; gap:6px;">
-            ${workflowScenarios.map((w, idx) => `
-              <div style="display:flex; align-items:center; gap:12px; padding:8px 12px; border:1px solid var(--ies-gray-200); border-radius:8px;${workflow.id === w.id ? ' background:var(--ies-gray-50); border-color:var(--ies-blue);' : ''}">
-                <div style="flex:1;">
-                  <span style="font-weight:600; font-size:13px;">${escapeHtml(w.name)}</span>
-                  <span style="font-size:11px; color:var(--ies-gray-400); margin-left:8px;">${w.stepCount} steps · ${escapeHtml(w.timestamp)}</span>
-                </div>
-                <button class="most-icon-btn" data-action="load-workflow" data-idx="${idx}" title="Load">${ICON.pencil}</button>
-                <button class="most-icon-btn most-icon-btn-danger" data-action="delete-workflow" data-idx="${idx}" title="Delete">${ICON.trash}</button>
-              </div>`).join('')}
-          </div>`}
-    </div>
-  `;
+/** Resolve the tray's template ids to computed step objects at the
+ *  shared defaults (DEFAULT_ANALYSIS_PARAMS) and the preview volume. */
+function _seqSteps(vol) {
+  const p = calc.DEFAULT_ANALYSIS_PARAMS;
+  return seqTray
+    .map(id => (refData.templates || []).find(t => String(t.id) === String(id)))
+    .filter(Boolean)
+    .map(tpl => ({
+      template_id: tpl.id,
+      step_name: getMostTplName(tpl),
+      labor_category: tpl.labor_category || 'manual',
+      ...calc.computeWorkflowStep({
+        base_uph: getMostTplBaseUph(tpl),
+        pfd_pct: p.pfd_pct,
+        productivity_pct: p.productivity_pct,
+        target_volume: vol,
+        volume_ratio: 1,
+        shift_hours: p.shift_hours,
+      }),
+    }));
 }
 
-function renderWorkflowSummary(result, steps) {
-  const cats = result.ftesByCategory;
+function renderSequenceTray() {
+  if (seqTray.length === 0) return '';
+  const vol = seqVolume == null ? 5000 : seqVolume;
+  const steps = _seqSteps(vol);
+  const res = calc.analyzeWorkflow(steps);
   return `
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px;">
-      <div class="hub-card">
-        <div class="text-subtitle mb-4">Workflow Results</div>
-        <div class="hub-kpi-bar">
-          <div class="hub-kpi-item"><div class="hub-kpi-label">Total FTEs</div><div class="hub-kpi-value">${calc.formatFte(result.totalFtes)}</div></div>
-          <div class="hub-kpi-item"><div class="hub-kpi-label">Total Hrs/Day</div><div class="hub-kpi-value">${result.totalHoursPerDay.toFixed(1)}</div></div>
-          <div class="hub-kpi-item"><div class="hub-kpi-label">Steps</div><div class="hub-kpi-value">${steps.length}</div></div>
+    <div class="most-detail-panel" id="most-seq-tray">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+        <div>
+          <div style="font-size:16px; font-weight:800; color:var(--ies-navy);">Sequence Preview</div>
+          <div style="font-size:12px; color:var(--ies-gray-500);">Chained flow at shared defaults — the red step caps throughput. Session-only; send to staffing for FTEs + cost.</div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <label style="font-size:12px; color:var(--ies-gray-500);">Volume/day
+            <input class="hub-input" type="number" value="${vol}" data-seq-vol style="width:90px; margin-left:6px;" />
+          </label>
+          <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="seq-send" title="Add every step as a line in the staffing analysis at this volume">→ Send to staffing analysis</button>
+          <button class="hub-btn hub-btn-sm" data-action="seq-clear" title="Empty the sequence preview">Clear</button>
         </div>
       </div>
-      <div class="hub-card" style="${result.bottleneckStep ? 'border-left:3px solid var(--ies-red);' : ''}">
-        <div class="text-subtitle mb-4">Bottleneck</div>
-        ${result.bottleneckStep ? `
-          <div style="font-size:16px; font-weight:700; color:var(--ies-red); margin-bottom:4px;">${result.bottleneckStep}</div>
-          <div style="font-size:13px; color:var(--ies-gray-500);">Lowest throughput: ${calc.formatUph(result.bottleneckUph)} UPH</div>
-        ` : `<div style="color:var(--ies-gray-400);">Add steps to identify bottleneck</div>`}
-      </div>
-    </div>
-
-    <!-- Throughput Bar Chart (CSS-only) -->
-    ${steps.length > 1 ? `
-      <div class="hub-card mt-4">
-        <div class="text-subtitle mb-4">Throughput Comparison (UPH)</div>
-        ${steps.map(s => {
-          const maxUph = Math.max(...steps.map(st => st.adjusted_uph || 0));
-          const pct = maxUph > 0 ? ((s.adjusted_uph || 0) / maxUph * 100) : 0;
-          const isBottle = s.adjusted_uph > 0 && s.adjusted_uph === result.bottleneckUph;
-          return `
-            <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
-              <div style="width:120px; font-size:12px; font-weight:600; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${s.step_name || 'Unnamed'}</div>
-              <div style="flex:1; background:var(--ies-gray-100); border-radius:4px; height:24px; overflow:hidden;">
-                <div style="height:100%; width:${pct}%; background:${isBottle ? 'var(--ies-red)' : 'var(--ies-blue)'}; border-radius:4px; transition:width 0.3s;"></div>
-              </div>
-              <div style="width:60px; font-size:13px; font-weight:700;${isBottle ? ' color:var(--ies-red);' : ''}">${calc.formatUph(s.adjusted_uph)}</div>
-            </div>
-          `;
+      <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:12px;">
+        ${steps.map((s, i) => {
+          const isBottle = s.adjusted_uph > 0 && s.adjusted_uph === res.bottleneckUph;
+          return `${i > 0 ? '<span style="color:var(--ies-gray-400);">→</span>' : ''}
+            <span style="display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border:1px solid ${isBottle ? 'var(--ies-red)' : 'var(--ies-gray-200)'}; border-radius:14px; font-size:12px;${isBottle ? ' color:var(--ies-red); font-weight:700;' : ''}">
+              ${escapeHtml(s.step_name)} · ${calc.formatUph(s.adjusted_uph)} UPH
+              <button class="most-icon-btn" data-action="seq-remove" data-idx="${i}" title="Remove step" style="font-size:11px;">✕</button>
+            </span>`;
         }).join('')}
       </div>
-    ` : ''}
+      <div class="hub-kpi-bar">
+        <div class="hub-kpi-item"><div class="hub-kpi-label">Bottleneck</div><div class="hub-kpi-value"${res.bottleneckStep ? ' style="color:var(--ies-red);"' : ''}>${res.bottleneckStep ? escapeHtml(res.bottleneckStep) : '—'}</div></div>
+        <div class="hub-kpi-item"><div class="hub-kpi-label">Flow Cap (UPH)</div><div class="hub-kpi-value">${calc.formatUph(res.bottleneckThroughputUph || res.bottleneckUph || 0)}</div></div>
+        <div class="hub-kpi-item"><div class="hub-kpi-label">Total FTEs</div><div class="hub-kpi-value">${calc.formatFte(res.totalFtes)}</div></div>
+        <div class="hub-kpi-item"><div class="hub-kpi-label">Hrs/Day</div><div class="hub-kpi-value">${(res.totalHoursPerDay || 0).toFixed(1)}</div></div>
+      </div>
+    </div>
   `;
 }
 
@@ -1881,6 +1726,39 @@ function bindContentEvents(container) {
       _refreshMostKpis();
     }
     showToast(`Added "${getMostTplName(tpl)}" to the staffing analysis — set its daily volume to get FTEs + cost.`, 'ok');
+  });
+
+  // Sequence Preview (decision #10 C) — add / volume / send-all binders.
+  container.querySelectorAll('[data-action="seq-add"]').forEach(btn => btn.addEventListener('click', (e) => {
+    const id = /** @type {HTMLElement} */ (e.currentTarget).dataset.id;
+    if (!id) return;
+    seqTray.push(id);
+    renderContent();
+  }));
+  container.querySelector('[data-seq-vol]')?.addEventListener('change', (e) => {
+    seqVolume = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
+    renderContent();
+  });
+  container.querySelector('[data-action="seq-send"]')?.addEventListener('click', () => {
+    const vol = seqVolume == null ? 5000 : seqVolume;
+    const tpls = seqTray
+      .map(id => (refData.templates || []).find(t => String(t.id) === String(id)))
+      .filter(Boolean);
+    if (tpls.length === 0) return;
+    for (const tpl of tpls) {
+      const line = createEmptyAnalysisLine();
+      _fillLineFromTemplate(line, tpl);
+      line.daily_volume = vol;
+      analysis.lines.push(line);
+    }
+    seqTray = [];
+    activeTab = 'analysis';
+    if (rootEl) {
+      rootEl.innerHTML = renderShell(); // tab change → chrome actions flip
+      renderContent();
+      _refreshMostKpis();
+    }
+    showToast(`Added ${tpls.length} step${tpls.length === 1 ? '' : 's'} to the staffing analysis at ${vol}/day.`, 'ok');
   });
 
   // Close detail
@@ -2005,60 +1883,11 @@ function bindContentEvents(container) {
     const action = btn.dataset.action;
     if (action === 'select-template' || action === 'close-detail' || action === 'set-template-line' ||
         action === 'edit-template' || action === 'duplicate-template' || action === 'delete-template' ||
-        action === 'use-in-staffing') return;
+        action === 'use-in-staffing' || action === 'seq-add' || action === 'seq-send') return;
 
     btn.addEventListener('click', () => {
       const idx = parseInt(btn.dataset.idx);
       handleAction(action, idx);
-    });
-  });
-
-  // Workflow param inputs
-  container.querySelectorAll('[data-wf]').forEach(input => {
-    input.addEventListener('change', e => {
-      const field = /** @type {HTMLInputElement} */ (e.target).dataset.wf;
-      const val = input.type === 'number' ? parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0 : /** @type {HTMLInputElement} */ (e.target).value;
-      workflow[field] = val;
-      renderContent();
-    });
-  });
-
-  // Workflow category-rate inputs (UX0-1)
-  container.querySelectorAll('[data-wf-rate-cat]').forEach(input => {
-    input.addEventListener('change', e => {
-      const cat = /** @type {HTMLInputElement} */ (e.target).dataset.wfRateCat;
-      if (!workflow.rates_by_category) workflow.rates_by_category = { manual: 0, mhe: 0, hybrid: 0 };
-      workflow.rates_by_category[cat] = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
-      renderContent();
-    });
-  });
-
-  // Workflow step field inputs
-  container.querySelectorAll('[data-wf-step]').forEach(input => {
-    input.addEventListener('change', e => {
-      const idx = parseInt(/** @type {HTMLInputElement} */ (e.target).dataset['wfStep']);
-      const field = /** @type {HTMLInputElement} */ (e.target).dataset.field;
-      if (workflow.steps[idx]) {
-        workflow.steps[idx][field] = parseFloat(/** @type {HTMLInputElement} */ (e.target).value) || 0;
-        renderContent();
-      }
-    });
-  });
-
-  // Workflow template dropdown
-  container.querySelectorAll('[data-action="set-wf-template"]').forEach(select => {
-    select.addEventListener('change', e => {
-      const idx = parseInt(/** @type {HTMLSelectElement} */ (e.target).dataset.idx);
-      const tplId = /** @type {HTMLSelectElement} */ (e.target).value;
-      const tpl = (refData.templates || []).find(t => String(t.id) === String(tplId));
-      if (tpl && workflow.steps[idx]) {
-        workflow.steps[idx].template_id = tpl.id;
-        workflow.steps[idx].step_name = getMostTplName(tpl);
-        workflow.steps[idx].process_area = tpl.process_area;
-        workflow.steps[idx].labor_category = tpl.labor_category || 'manual';
-        workflow.steps[idx].base_uph = getMostTplBaseUph(tpl);
-      }
-      renderContent();
     });
   });
 
@@ -2226,38 +2055,16 @@ function handleAction(action, idx) {
       analysis.lines.splice(idx, 1);
       break;
 
-    // Workflow Composer
-    case 'add-wf-step':
-      workflow.steps.push(createEmptyWorkflowStep());
+    // Sequence Preview (decision #10 C)
+    case 'seq-remove':
+      seqTray.splice(idx, 1);
       break;
-    case 'delete-wf-step':
-      workflow.steps.splice(idx, 1);
+    case 'seq-clear':
+      seqTray = [];
       break;
     case 'push-to-cm':
       pushToCostModel();
       return; // don't re-render
-
-    // P2-3a -- Workflow Composer persistence
-    case 'save-workflow':
-      saveCurrentWorkflow(false);
-      return;
-    case 'save-workflow-as':
-      saveCurrentWorkflow(true);
-      return;
-    case 'load-workflow': {
-      const w = workflowScenarios[idx];
-      if (w) workflow = calc.workflowFromAnalysisData(w.data, w.id);
-      break;
-    }
-    case 'delete-workflow':
-      deleteWorkflowScenario(idx);
-      return;
-    case 'most-wf-export-xlsx':
-      exportWorkflowToXlsx();
-      return;
-    case 'push-wf-to-cm':
-      pushWorkflowToCostModel();
-      return;
 
     // MOS-F5: Allowance profile CRUD
     case 'manage-allowance-profiles':
@@ -2501,145 +2308,6 @@ function pushToCostModel() {
 }
 
 // ============================================================
-// P2-3a — WORKFLOW COMPOSER PERSISTENCE / EXPORT / PUSH
-// ============================================================
-
-/** Compute derived fields for the current workflow's steps (same math the
- * composer renders with). */
-function computeCurrentWorkflowSteps() {
-  const pfd = workflow.pfd_pct || 14;
-  const productivity = workflow.productivity_pct == null ? 100 : workflow.productivity_pct;
-  return (workflow.steps || []).map(step => ({
-    ...step,
-    ...calc.computeWorkflowStep({
-      base_uph: step.base_uph,
-      pfd_pct: pfd,
-      productivity_pct: productivity,
-      target_volume: workflow.target_volume_per_day,
-      volume_ratio: step.volume_ratio ?? 1,
-      shift_hours: workflow.shift_hours,
-    }),
-  }));
-}
-
-/**
- * Save (or Save-As) the current workflow to most_analyses.
- * @param {boolean} asNew — true forces a new row even when workflow.id is set
- */
-async function saveCurrentWorkflow(asNew) {
-  if ((workflow.steps || []).length === 0) {
-    alert('Add at least one step before saving.');
-    return;
-  }
-  const proposed = workflow.name && workflow.name !== 'New Workflow'
-    ? workflow.name
-    : `Workflow ${workflowScenarios.length + 1}`;
-  const name = await showPrompt('Workflow name:', proposed);
-  if (!name) return;
-  try {
-    workflow.name = name;
-    const saved = await api.saveWorkflow({ ...workflow, id: asNew ? null : workflow.id });
-    workflow.id = saved?.id || workflow.id;
-    await loadSavedScenarios();
-    renderContent();
-  } catch (err) {
-    console.error('[MOST] Save workflow failed:', err);
-    alert('Could not save workflow: ' + (err.message || 'unknown'));
-  }
-}
-
-async function deleteWorkflowScenario(idx) {
-  const w = workflowScenarios[idx];
-  if (!w) return;
-  if (!(await showConfirm(`Delete workflow "${w.name}"?`))) return;
-  try {
-    await api.deleteAnalysis(w.id);
-    if (workflow.id === w.id) workflow.id = null;
-    await loadSavedScenarios();
-    renderContent();
-  } catch (err) {
-    console.error('[MOST] Delete workflow failed:', err);
-    alert('Could not delete workflow: ' + (err.message || 'unknown'));
-  }
-}
-
-/** Export the current workflow (steps + summary) to a 2-sheet XLSX. */
-async function exportWorkflowToXlsx() {
-  const exp = await import('../../shared/export.js?v=20260702-p1m1');
-  const computed = computeCurrentWorkflowSteps();
-  if (computed.length === 0) {
-    alert('Add at least one step before exporting.');
-    return;
-  }
-  const wfResult = calc.analyzeWorkflow(computed);
-  const stepRows = computed.map((st, i) => ({
-    seq: i + 1,
-    step: st.step_name || '',
-    process_area: st.process_area || '',
-    labor_category: st.labor_category || 'manual',
-    base_uph: st.base_uph || 0,
-    adjusted_uph: st.adjusted_uph || 0,
-    volume_ratio: st.volume_ratio ?? 1,
-    daily_volume: st.daily_volume || 0,
-    hours_per_day: st.hours_per_day || 0,
-    fte: st.fte || 0,
-  }));
-  const summaryRows = [
-    { metric: 'Workflow', value: workflow.name || '' },
-    { metric: 'Target volume/day', value: workflow.target_volume_per_day || 0 },
-    { metric: 'Shift hours', value: workflow.shift_hours || 0 },
-    { metric: 'PFD %', value: workflow.pfd_pct || 0 },
-    { metric: 'Bottleneck step', value: wfResult.bottleneckStep || '—' },
-    { metric: 'Bottleneck UPH (step)', value: wfResult.bottleneckUph || 0 },
-    { metric: 'Bottleneck UPH (whole flow)', value: wfResult.bottleneckThroughputUph || 0 },
-    { metric: 'Total FTEs', value: wfResult.totalFtes || 0 },
-    { metric: 'Total hours/day', value: wfResult.totalHoursPerDay || 0 },
-  ];
-  exp.downloadXLSX({
-    filename: `most-workflow-${(workflow.name || 'untitled').replace(/[^\w-]+/g, '_')}.xlsx`,
-    sheets: [
-      { name: 'Steps', rows: stepRows },
-      { name: 'Summary', rows: summaryRows },
-    ],
-  });
-}
-
-/** Push the workflow's computed steps to the Cost Model as labor lines —
- * same sessionStorage handoff contract as the Quick Analysis push. */
-function pushWorkflowToCostModel() {
-  const computed = computeCurrentWorkflowSteps();
-  const eligible = calc.workflowStepsToCmLines(computed, {
-    ratesByCategory: workflow.rates_by_category,
-  });
-  if (eligible.length === 0) {
-    alert('No steps with volume yet — set Target Volume/Day and pick templates first.');
-    return;
-  }
-  // UX0-1: never silently push $0 labor rates to the Cost Model.
-  if (eligible.every(l => !(l.hourly_rate > 0))) {
-    if (!confirm('No hourly rates are set — the Cost Model would receive $0 labor rates. Set the category rates in Workflow Parameters first, or push anyway?')) return;
-  }
-  const templateMap = new Map();
-  (refData.templates || []).forEach(t => templateMap.set(t.id, t));
-  const cmLines = calc.convertToCmLaborLines(eligible, {
-    operatingDays: workflow.operating_days || 250,
-    shiftHours: workflow.shift_hours,
-    defaultBurdenPct: 30,
-    templateMap,
-  });
-  const payload = {
-    laborLines: cmLines,
-    operatingDays: workflow.operating_days || 250,
-    shiftHours: workflow.shift_hours,
-    source: 'workflow',
-    workflowName: workflow.name || '',
-  };
-  try { sessionStorage.setItem('most_pending_push', JSON.stringify({ ...payload, at: Date.now() })); } catch {}
-  bus.emit('most:push-to-cm', payload);
-  window.location.hash = '#designtools/cost-model';
-}
-
-// ============================================================
 // HELPERS
 // ============================================================
 
@@ -2671,9 +2339,9 @@ function createEmptyAnalysis() {
     id: null,
     name: 'New Analysis',
     allowance_profile_id: null,
-    // UX-2 (2026-07-04): params seeded from calc.DEFAULT_ANALYSIS_PARAMS —
-    // ONE defaults set shared with the Workflow Composer (X11 split-brain
-    // fix). productivity_pct now explicit so display and engine agree.
+    // UX-2 (2026-07-04): params seeded from calc.DEFAULT_ANALYSIS_PARAMS
+    // (X11 split-brain fix — the shared set outlived the Workflow Composer,
+    // retired same day). productivity_pct explicit so display + engine agree.
     pfd_pct: calc.DEFAULT_ANALYSIS_PARAMS.pfd_pct,
     shift_hours: calc.DEFAULT_ANALYSIS_PARAMS.shift_hours,
     operating_days: calc.DEFAULT_ANALYSIS_PARAMS.operating_days,
@@ -2717,39 +2385,6 @@ function createEmptyAnalysisLine() {
   };
 }
 
-function createEmptyWorkflow() {
-  return {
-    id: null,
-    name: 'New Workflow',
-    target_volume_per_day: 5000,
-    // UX-2 (2026-07-04): same defaults set as Quick Analysis (X11 fix) —
-    // was shift 8 / pfd 14 / days 250 / rates 0-0-0, so the same templates
-    // produced different FTEs + $0 costs vs the Analysis tab. Saved
-    // workflows keep their own persisted values via workflowFromAnalysisData.
-    shift_hours: calc.DEFAULT_ANALYSIS_PARAMS.shift_hours,
-    pfd_pct: calc.DEFAULT_ANALYSIS_PARAMS.pfd_pct,
-    productivity_pct: calc.DEFAULT_ANALYSIS_PARAMS.productivity_pct,
-    operating_days: calc.DEFAULT_ANALYSIS_PARAMS.operating_days,
-    rates_by_category: { ...calc.DEFAULT_ANALYSIS_PARAMS.rates_by_category },
-    steps: [],
-  };
-}
-
-function createEmptyWorkflowStep() {
-  return {
-    id: Date.now().toString(),
-    template_id: null,
-    step_name: '',
-    process_area: '',
-    labor_category: 'manual',
-    base_uph: 0,
-    adjusted_uph: 0,
-    volume_ratio: 1,
-    daily_volume: 0,
-    hours_per_day: 0,
-    fte: 0,
-  };
-}
 
 function formatDollar(val) {
   return '$' + (val || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });

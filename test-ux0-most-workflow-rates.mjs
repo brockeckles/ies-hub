@@ -67,19 +67,19 @@ t('legacy payloads (no new fields) default sanely', () => {
 // ── source wiring scans ────────────────────────────────────────────────────
 const ui = readFileSync('./tools/most-standards/ui.js', 'utf8');
 
-t('push passes ratesByCategory to workflowStepsToCmLines', () =>
-  /workflowStepsToCmLines\(computed,\s*\{\s*ratesByCategory:\s*workflow\.rates_by_category/.test(ui));
+// Decision #10 C (2026-07-04): the composer UI is retired — its push /
+// rate-input wiring must be GONE from ui.js. The calc helpers above stay:
+// they are the engine contract (and the catalog Sequence Preview's math).
+t('composer push wiring fully removed from ui.js', () =>
+  !ui.includes('workflowStepsToCmLines') && !ui.includes('would receive $0 labor rates'));
 
-t('push no longer hardcodes operatingDays 250', () => {
-  if (/operatingDays:\s*250\s*,/.test(ui)) throw new Error('hardcoded 250 still present');
-  return /operatingDays:\s*workflow\.operating_days\s*\|\|\s*250/.test(ui);
+t('ui.js still never hardcodes operatingDays 250 in a push payload', () => {
+  if (/operatingDays:\s*250\s*,/.test(ui)) throw new Error('hardcoded 250 present');
+  return true;
 });
 
-t('$0-rate push guarded by confirm', () => /hourly_rate > 0.*\n.*confirm\(/.test(ui) || ui.includes('would receive $0 labor rates'));
-
-t('composer renders category-rate + operating-days inputs', () =>
-  ui.includes('data-wf-rate-cat="manual"') && ui.includes('data-wf-rate-cat="mhe"')
-  && ui.includes('data-wf-rate-cat="hybrid"') && ui.includes('data-wf="operating_days"'));
+t('composer rate/param inputs removed', () =>
+  !ui.includes('data-wf-rate-cat=') && !ui.includes('data-wf="operating_days"'));
 
 console.log(`test-ux0-most-workflow-rates: ${pass} passed, ${fail} failed.`);
 if (fail > 0) process.exit(1);

@@ -90,14 +90,19 @@ t('demand CSV: header-only / no-demand-column / no-location-column all error cle
   const mostUi = readFileSync('./tools/most-standards/ui.js', 'utf8');
   const mostApi = readFileSync('./tools/most-standards/api.js', 'utf8');
   const netUi = readFileSync('./tools/network-opt/ui.js', 'utf8');
-  t('MOST ui partitions most_analyses rows on the workflow kind discriminator', () =>
-    mostUi.includes("analysis_data.kind === 'workflow'") && mostUi.includes('workflowScenarios'));
-  t('MOST api.saveWorkflow persists via serializeWorkflow', () =>
-    mostApi.includes('export async function saveWorkflow') && mostApi.includes('serializeWorkflow(workflow)'));
-  t('workflow chrome Save routes to saveCurrentWorkflow', () =>
-    /actionId === 'most-save-workflow'.\s*\{\s*saveCurrentWorkflow\(false\);/s.test(mostUi));
-  t('workflow composer offers save/export/push actions', () =>
-    mostUi.includes("data-action=\"save-workflow\"") && mostUi.includes("data-action=\"most-wf-export-xlsx\"") && mostUi.includes("data-action=\"push-wf-to-cm\""));
+  // Decision #10 C (2026-07-04): Workflow Composer retired. The pins below
+  // flipped from "composer is wired" to "composer is fully unwired" — the
+  // kind discriminator must survive so legacy rows stay quarantined.
+  t('MOST ui still excludes workflow-kind rows from savedScenarios', () =>
+    mostUi.includes("analysis_data.kind === 'workflow'") && !mostUi.includes('workflowScenarios'));
+  t('MOST api no longer exports saveWorkflow (composer retired)', () =>
+    !mostApi.includes('saveWorkflow') && !mostApi.includes('serializeWorkflow'));
+  t('no composer chrome/save actions survive', () =>
+    !mostUi.includes('most-save-workflow') && !mostUi.includes('saveCurrentWorkflow')
+    && !mostUi.includes('most-wf-export-xlsx') && !mostUi.includes('push-wf-to-cm'));
+  t('catalog gained the Sequence Preview replacement', () =>
+    mostUi.includes('renderSequenceTray') && mostUi.includes('data-action="seq-add"')
+    && mostUi.includes('data-action="seq-send"'));
   t('NetOpt demand tab has the CSV upload wired to parseDemandCsv', () =>
     netUi.includes('no-upload-demand-csv') && netUi.includes('calc.parseDemandCsv'));
   t('NetOpt surfaces skipped rows instead of silently dropping', () =>

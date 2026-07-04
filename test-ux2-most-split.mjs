@@ -84,21 +84,20 @@ t('detail panel: quick de-emphasizes TMU + has use-in-staffing', () => {
   assert(ui.includes('function _fillLineFromTemplate(line, tpl)'), 'shared line-fill helper missing');
 });
 
-t('tier toggle remaps hidden tabs (editor→library, workflow→analysis)', () => {
+t('tier toggle remaps hidden tabs (editor→library; composer retired)', () => {
   assert(/if \(activeTab === 'editor'\) activeTab = 'library';/.test(ui), 'editor remap');
-  assert(/else if \(activeTab === 'workflow'\) activeTab = 'analysis';/.test(ui), 'workflow remap');
+  // Decision #10 C (2026-07-04): no workflow tab left to remap.
+  assert(!/activeTab === 'workflow'/.test(ui), 'workflow tab refs must be gone');
 });
 
-t('both creators seed from calc.DEFAULT_ANALYSIS_PARAMS', () => {
+t('analysis creator seeds from calc.DEFAULT_ANALYSIS_PARAMS (composer creator retired)', () => {
   const an = ui.slice(ui.indexOf('function createEmptyAnalysis()'), ui.indexOf('function createEmptyAnalysisLine()'));
-  const wf = ui.slice(ui.indexOf('function createEmptyWorkflow()'), ui.indexOf('function createEmptyWorkflowStep()'));
-  for (const [name, block] of [['analysis', an], ['workflow', wf]]) {
-    for (const k of ['pfd_pct', 'shift_hours', 'operating_days', 'productivity_pct', 'rates_by_category']) {
-      assert(block.includes(`calc.DEFAULT_ANALYSIS_PARAMS.${k}`), `${name} creator misses shared ${k}`);
-    }
+  for (const k of ['pfd_pct', 'shift_hours', 'operating_days', 'productivity_pct', 'rates_by_category']) {
+    assert(an.includes(`calc.DEFAULT_ANALYSIS_PARAMS.${k}`), `analysis creator misses shared ${k}`);
   }
-  assert(!wf.includes('operating_days: 250'), 'workflow 250-day literal must be gone');
-  assert(!wf.includes('{ manual: 0, mhe: 0, hybrid: 0 }'), 'workflow zero-rates seed must be gone');
+  assert(!ui.includes('function createEmptyWorkflow()'), 'composer creator must be gone (decision #10 C)');
+  // The Sequence Preview must run on the SAME shared defaults set.
+  assert(/_seqSteps[\s\S]{0,200}calc\.DEFAULT_ANALYSIS_PARAMS/.test(ui), 'sequence preview must use DEFAULT_ANALYSIS_PARAMS');
 });
 
 console.log('');
