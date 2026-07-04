@@ -1,7 +1,9 @@
 /**
  * IES Hub v3 — Warehouse Sizing Calculator UI
  * Builder-pattern layout: config panel on left, capacity dashboard + visualizations on right.
- * 3-way view toggle: Dashboard / Elevation / 3D.
+ * Views: Dashboard / 2D Plan / Elevation / 3D. UX-2 Quick tier (2026-07-04)
+ * shows Quick Size panel + Dashboard + 3D; Plan/Elevation are the IE bench
+ * behind the Engineering toggle. 3D is the keeper (Brock) — beef-up thread open.
  *
  * @module tools/warehouse-sizing/ui
  */
@@ -18,13 +20,14 @@ import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { render3DView, disposeScene3d } from './ui-3d.js?v=20260703-ls1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
-import { renderConfigHtml, bindConfigEvents } from './ui-config.js?v=20260703-ux0';
+import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260704-wq1';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260703-ux0';
 import { renderDashboard } from './ui-dashboard.js?v=20260703-ux0';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260702-p1b';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
 import { wscExtraStyles } from './ui-styles.js?v=20260513-stylesextract';
-import { bindShellEvents } from './ui-shell-events.js?v=20260703-ls1';
+import { bindShellEvents } from './ui-shell-events.js?v=20260704-wq1';
+import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -38,6 +41,27 @@ const WSC_SECTIONS = [
   { key: 'elevation', label: '2D — Elevation', group: 'design' },
   { key: '3d',        label: '3D View',        group: 'design' },
 ];
+
+// UX-2 WSC Quick Size (2026-07-04) — consumer tier: Quick Size panel +
+// Dashboard numbers + the 3D walkthrough (the keeper — design-process
+// critical per Brock; enhancement thread open). Plan/Elevation = IE bench.
+const WSC_QUICK_SECTIONS = WSC_SECTIONS.filter(s => s.key === 'dashboard' || s.key === '3d');
+function _wscQuickChrome() { return tierSvc.getTier('wsc') === 'quick'; }
+
+/** UX-2 — flip Quick ⇄ Engineering (CM/COG/MOST pattern; persists per
+ *  user). Plan/Elevation are Engineering-only, so land on Dashboard when
+ *  hiding them. */
+function handleWscTierToggle() {
+  const toQuick = !_wscQuickChrome();
+  tierSvc.setTier('wsc', toQuick ? 'quick' : 'engineering');
+  if (toQuick && (activeView === 'plan' || activeView === 'elevation')) activeView = 'dashboard';
+  if (!rootEl) return;
+  rootEl.innerHTML = renderShell();
+  bindShellEvents(_makeShellEventsCtx());
+  renderConfigPanel();
+  renderContentView();
+  _refreshWscKpis();
+}
 
 // ============================================================
 // STATE
@@ -335,7 +359,12 @@ function _buildWscChromeOpts() {
     ? 'Brand-new design — Save to capture an audit timestamp'
     : (modified ? 'Save to capture the latest changes' : 'Saved');
 
+  const _quick = _wscQuickChrome();
   const actions = [
+    { id: 'wsc-tier',
+      label: _quick ? 'Engineering' : 'Quick',
+      title: _quick ? 'Switch to Engineering mode — full stepped Configure panel + 2D Plan/Elevation IE bench'
+                    : 'Switch to Quick mode — five inputs, Dashboard + 3D' },
     { id: 'wsc-save',
       label: facility.id ? 'Save' : 'Save Design',
       title: facility.id ? 'Update this design' : 'Save this design so you can reopen it later',
@@ -354,15 +383,15 @@ function _buildWscChromeOpts() {
   return {
     toolKey: 'wsc',
     groups: WSC_GROUPS,
-    sections: WSC_SECTIONS,
+    sections: _quick ? WSC_QUICK_SECTIONS : WSC_SECTIONS,
     activePhase: 'design',
     activeSection: activeView,
     sectionCompleteness: () => 'complete',
     saveState: { state: stateName, title: stateTitle },
     actions,
     showSidebar: _wscDrawerOpen,
-    sidebarHeader: 'Configure',
-    sidebarBody: '<div id="wsc-config">' + renderConfigHtml(_makeConfigCtx()) + '</div>',
+    sidebarHeader: _quick ? 'Quick Size' : 'Configure',
+    sidebarBody: '<div id="wsc-config">' + (_quick ? renderQuickConfigHtml : renderConfigHtml)(_makeConfigCtx()) + '</div>',
     sidebarFooter,
     // Drawer-toggle pill — labeled, sits at the start of Row 2 so it's
     // discoverable next to the section pills (instead of relying on the
@@ -460,6 +489,7 @@ function _makeShellEventsCtx() {
     makeCmCtx: _makeCmCtx,
     makePlanCtx: _makePlanCtx,
     handleSaveWsc,
+    handleWscTierToggle,
     renderLanding,
     markDirty: _markDirty,
     canvasMouseCoords,
@@ -579,7 +609,7 @@ async function handleSaveWsc() {
 
 function renderConfigPanel() {
   // CM Chrome v3 ripple — the WSC config panel now lives inside the chrome's
-  // collapsible left drawer. renderConfigHtml() (from ui-config.js) returns
+  // collapsible left drawer. (_wscQuickChrome() ? renderQuickConfigHtml : renderConfigHtml)() (from ui-config.js) returns
   // the HTML; this function targets whichever element holds it (id=wsc-config
   // wrapper inside the chrome's .tc-sidebar__body) and binds the events.
   const panel = rootEl?.querySelector('#wsc-config');

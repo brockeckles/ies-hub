@@ -131,6 +131,7 @@ export async function bindShellEvents(sctx) {
         return;
       }
       if (id === 'wsc-save') return sctx.handleSaveWsc();
+      if (id === 'wsc-tier') return sctx.handleWscTierToggle();
     },
     onPrimaryShortcut: () => {
       pushToCm(sctx.makeCmCtx());

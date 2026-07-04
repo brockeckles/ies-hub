@@ -650,6 +650,79 @@ export function renderConfigHtml(ctx) {
   `;
 }
 
+
+// ============================================================
+// UX-2 WSC QUICK SIZE (2026-07-04) — consumer tier panel.
+// Five inputs → sized SF, reusing the SAME data-fac / data-vol
+// attributes so bindConfigEvents wires them with zero new plumbing.
+// Everything else rides engineering defaults; the full stepped
+// Configure panel stays behind the Engineering toggle.
+// ============================================================
+
+export const WSC_QUICK_MIX_PRESETS = [
+  { key: 'fp',       label: 'Full-Pallet DC',   hint: 'Bulk reserve · low touch',        mix: { fullPallet: 80, cartonOnPallet: 15, cartonOnShelving: 5 } },
+  { key: 'balanced', label: 'Mixed Case-Pick',  hint: 'Standard distribution mix',       mix: { fullPallet: 60, cartonOnPallet: 30, cartonOnShelving: 10 } },
+  { key: 'ecom',     label: 'E-Comm Each-Pick', hint: 'High shelving · forward pick',    mix: { fullPallet: 40, cartonOnPallet: 35, cartonOnShelving: 25 } },
+];
+
+export function renderQuickConfigHtml(ctx) {
+  let sized = null;
+  try { sized = calc.sizeFacility(ctx.toSizingInputs()); } catch {}
+  const sizedSqft = Math.round(sized?.totalSqft || 0);
+  const alloc = ctx.zones.storageAllocation || {};
+  const activeKey = (WSC_QUICK_MIX_PRESETS.find(p =>
+    p.mix.fullPallet === +alloc.fullPallet
+    && p.mix.cartonOnPallet === +alloc.cartonOnPallet
+    && p.mix.cartonOnShelving === +alloc.cartonOnShelving) || {}).key || null;
+
+  return `
+    <div class="wsc-config-section" style="margin-bottom:12px;">
+      <div style="font-size:12px;color:var(--ies-gray-500);line-height:1.5;">Answer five things — get a sized building and walk it in 3D. Flip to <strong>Engineering</strong> for throughput derivation, docks, carton profile, and ABC tiers.</div>
+    </div>
+
+    <div class="wsc-config-section wsc-step">
+      <div class="wsc-config-field" style="margin-bottom:10px;">
+        <label>Facility Name</label>
+        <input value="${ctx.facility.name}" data-fac="name" />
+      </div>
+      <div class="wsc-config-field" style="margin-bottom:10px;">
+        <label title="Total pallet positions on hand at peak. The engine sizes racking from this directly.">Peak Pallet Positions</label>
+        <input type="number" min="0" value="${+ctx.volumes.totalPallets || 0}" data-vol="totalPallets" />
+      </div>
+      <div class="wsc-config-field" style="margin-bottom:10px;">
+        <label title="Carton-on-shelving locations at peak. Leave 0 if everything lives in rack.">Shelving Locations <span style="color:var(--ies-gray-500);font-weight:400;">(0 = none)</span></label>
+        <input type="number" min="0" value="${+ctx.volumes.totalShelvingLocations || 0}" data-vol="totalShelvingLocations" />
+      </div>
+      <div class="wsc-config-field" style="margin-bottom:10px;">
+        <label title="Clear stacking height to the lowest obstruction. Drives rack levels.">Clear Height (ft)</label>
+        <input type="number" min="12" max="60" value="${+ctx.facility.clearHeight || 32}" data-fac="clearHeight" />
+      </div>
+      <div class="wsc-config-field">
+        <label title="How inventory splits across full-pallet rack, case-pick faces, and shelving. Sets the storage allocation mix.">Operation Type</label>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
+          ${WSC_QUICK_MIX_PRESETS.map(p => `
+            <button type="button" data-wsc-mix-preset="${p.key}"
+                    style="text-align:left;padding:8px 10px;border-radius:6px;cursor:pointer;border:1px solid ${activeKey === p.key ? 'var(--ies-blue,#0047AB)' : 'var(--ies-gray-200)'};background:${activeKey === p.key ? 'rgba(0,71,171,0.06)' : '#fff'};">
+              <div style="font-size:12px;font-weight:700;color:var(--ies-gray-700);">${p.label} <span style="font-weight:500;color:var(--ies-gray-500);">· ${p.mix.fullPallet}/${p.mix.cartonOnPallet}/${p.mix.cartonOnShelving}</span></div>
+              <div style="font-size:11px;color:var(--ies-gray-500);">${p.hint}</div>
+            </button>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="wsc-config-section" style="margin-top:12px;padding:12px;background:linear-gradient(180deg,#f8fafc 0%,#eef2f7 100%);border:1px solid var(--ies-gray-200);border-radius:8px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ies-gray-500);">Sized Facility</div>
+      <div style="font-size:24px;font-weight:800;color:var(--ies-navy);margin:4px 0;">${sizedSqft > 0 ? sizedSqft.toLocaleString() + ' SF' : '—'}</div>
+      ${sized && sizedSqft > 0 ? `
+        <div style="font-size:11px;color:var(--ies-gray-600);line-height:1.6;">
+          ${(sized.positions?.grossPositions || 0).toLocaleString()} gross positions · ${(sized.positions?.shelvingPositions || 0).toLocaleString()} shelving loc<br/>
+          Storage ${Math.round(sized.storageSqft || 0).toLocaleString()} SF · docks + staging + circulation included
+        </div>` : `
+        <div style="font-size:11px;color:var(--ies-gray-500);">Enter peak pallet positions to size the building.</div>`}
+    </div>
+  `;
+}
+
 export function bindConfigEvents(panel, ctx) {
   const debouncedRender = ctx.debounceRender(ctx.refreshContent, 100);
 
@@ -701,6 +774,21 @@ export function bindConfigEvents(panel, ctx) {
       // path still consulting the legacy boolean. Constraint = override on;
       // design = override off.
       ctx.facility.buildingDimsOverride = (next === 'constraint');
+      ctx.setDirty(true);
+      ctx.refreshConfig();
+      ctx.refreshContent();
+      ctx.refreshKpis();
+    });
+  });
+
+  // UX-2 WSC Quick Size — storage-mix preset chips (quick panel only;
+  // querySelectorAll is empty on the engineering panel).
+  panel.querySelectorAll('[data-wsc-mix-preset]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const key = /** @type {HTMLElement} */ (e.currentTarget).dataset.wscMixPreset;
+      const preset = WSC_QUICK_MIX_PRESETS.find(p => p.key === key);
+      if (!preset) return;
+      ctx.zones.storageAllocation = { ...preset.mix };
       ctx.setDirty(true);
       ctx.refreshConfig();
       ctx.refreshContent();
