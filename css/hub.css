@@ -21,6 +21,7 @@
   --ies-gray-600: #495057;
   --ies-gray-700: #343a40;
   --ies-gray-800: #212529;
+  --ies-gray-900: #111827; /* U0: was referenced 13x but never defined — 10 sites carried this as fallback, 3 silently inherited */
 
   /* Status Colors */
   --ies-green: #28a745;
@@ -74,6 +75,36 @@
   /* Transitions */
   --ease-default: 0.2s ease;
   --ease-slow: 0.35s ease;
+
+  /* ---- Semantic tokens (U0 overhaul, 2026-07-05) ----
+     Intent-named layer over the palette that organically grew in JS
+     templates (Tailwind-derived hexes). Values match the de-facto usage
+     exactly so literal->token migration is byte-identical on screen.
+     New code: use these or --ies-*; NO raw hex in JS templates. */
+  --c-success:        #16a34a;
+  --c-success-strong: #15803d;
+  --c-success-bright: #22c55e;
+  --c-success-bg:     #dcfce7;
+  --c-success-ink:    #166534;
+  --c-danger:         #dc2626;
+  --c-danger-strong:  #b91c1c;
+  --c-danger-bg:      #fee2e2;
+  --c-danger-ink:     #991b1b;
+  --c-warn:           #f59e0b;
+  --c-warn-strong:    #d97706;
+  --c-warn-bg:        #fef3c7;
+  --c-warn-ink:       #92400e;
+  --c-info:           #2563eb;
+  --c-info-bg:        #dbeafe;
+  --c-info-ink:       #1e40af;
+  --c-muted:          #6b7280;
+  --c-ink-deep:       #0a1628;
+  --c-purple:         #7c3aed;
+
+  /* Accent semantics (Brock 2026-07-05): orange = brand + primary action,
+     blue = informational / links / selected-state. */
+  --accent-primary:   var(--ies-orange);
+  --accent-info:      var(--ies-blue);
 }
 
 /* ---- Reset & Base ---- */
@@ -171,9 +202,22 @@ a:hover { text-decoration: underline; }
 }
 .hub-btn-danger:hover { background: #c82333; }
 
-.hub-btn-sm {
+.hub-btn-sm,
+.hub-btn--sm { /* --sm = alias (U0); canonical is -sm. Migrate ui-3d.js in U3-WSC, then drop alias. */
   padding: 8px 14px;
   font-size: var(--fs-caption);
+}
+
+/* U0 fix: hub-btn--ghost was used by the WSC 3D toolbar (8 sites) but never
+   defined -- toggle buttons had no visible off-state. Ghost = subdued/off. */
+.hub-btn--ghost {
+  background: transparent;
+  border-color: var(--ies-gray-300);
+  color: var(--ies-gray-500);
+}
+.hub-btn--ghost:hover {
+  background: var(--ies-gray-100);
+  color: var(--ies-gray-700);
 }
 
 .hub-btn-icon { gap: 6px; }
@@ -4259,3 +4303,63 @@ textarea.hub-input {
   .hub-feedback-fab { padding: 12px; border-radius: 50%; }
   .hub-feedback-modal__row--inline { flex-direction: column; align-items: stretch; gap: 14px; }
 }
+
+/* ============================================================
+   U0 overhaul (2026-07-05) — utility + component classes.
+   Targets the highest-frequency inline style="" patterns found in the
+   audit (4,166 sites). Values are byte-identical to the inline styles
+   they replace — migration must not shift a pixel until U4.
+   Utilities are u-*; compose them (e.g. class="u-cap u-faint u-right").
+   ============================================================ */
+
+/* -- text -- */
+.u-right   { text-align: right; }
+.u-left    { text-align: left; }
+.u-center  { text-align: center; }
+.u-semibold { font-weight: 600; }
+.u-bold    { font-weight: 700; }
+.u-cap     { font-size: var(--fs-caption); }   /* 11px */
+.u-12      { font-size: 12px; }                /* off-scale; fold into --fs at U4 */
+.u-muted   { color: var(--ies-gray-500); }
+.u-faint   { color: var(--ies-gray-400); }
+.u-dim     { color: var(--ies-gray-600); }
+
+/* -- box -- */
+.u-m0      { margin: 0; }
+.u-mt-1 { margin-top: var(--sp-1); } .u-mt-2 { margin-top: var(--sp-2); }
+.u-mt-3 { margin-top: var(--sp-3); } .u-mt-4 { margin-top: var(--sp-4); }
+.u-mb-1 { margin-bottom: var(--sp-1); } .u-mb-2 { margin-bottom: var(--sp-2); }
+.u-mb-3 { margin-bottom: var(--sp-3); } .u-mb-4 { margin-bottom: var(--sp-4); }
+.u-p-4     { padding: var(--sp-4); }
+.u-full    { width: 100%; }
+
+/* -- flex -- */
+.u-row        { display: flex; align-items: center; gap: 8px; }
+.u-row-tight  { display: flex; align-items: center; gap: 6px; }
+.u-inline-row { display: inline-flex; align-items: center; gap: 6px; }
+.u-flex       { display: flex; gap: 8px; }
+.u-between    { display: flex; justify-content: space-between; align-items: center; }
+
+/* -- table (the "44x padding:6px;text-align:right" family) -- */
+.u-table   { width: 100%; border-collapse: collapse; font-size: var(--fs-body); }
+.u-td-num  { padding: 6px; text-align: right; }
+.u-th-rule { border-bottom: 2px solid var(--ies-gray-200); }
+
+/* -- components -- */
+/* form micro-label (14x): block caption above an input */
+.hub-field-label {
+  display: block;
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  color: var(--ies-gray-500);
+  margin-bottom: 3px;
+}
+/* key/value row in summary panels (13x) */
+.hub-kv {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  font-size: 12px;
+}
+/* inline SVG icon (shared/icons.js) */
+.hub-icon { display: inline-block; vertical-align: -2px; flex-shrink: 0; }
