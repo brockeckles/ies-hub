@@ -129,8 +129,8 @@ export function renderShiftPlanningSection(ctx) {
       .sp-col-total-row { font-weight: 600; background: var(--ies-gray-50); }
       .sp-col-total-row td { border-top: 2px solid var(--ies-gray-300); }
       .sp-validation-banner { margin: 8px 0 0 0; padding: 10px 12px; border-radius: 6px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; }
-      .sp-validation-banner.sp-ok    { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
-      .sp-validation-banner.sp-bad   { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+      .sp-validation-banner.sp-ok    { background: var(--c-success-soft); color: var(--c-success-ink); border: 1px solid #bbf7d0; }
+      .sp-validation-banner.sp-bad   { background: var(--c-danger-soft); color: var(--c-danger-ink); border: 1px solid var(--c-danger-border); }
       .sp-validation-banner button   { padding: 5px 10px; font-size: 12px; border-radius: 4px; border: 1px solid currentColor; background: white; color: inherit; cursor: pointer; }
       .sp-preview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 0; }
       .sp-kpi { background: white; padding: 16px; border: 1px solid var(--ies-gray-200); border-radius: 8px; }
@@ -498,7 +498,7 @@ export function renderStructureCard(shiftsCfg, opts) {
     <div class="hub-card sp-structure">
       <div class="sp-structure__header">
         <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
-          <div class="text-subtitle" style="margin:0;">Shift Structure</div>
+          <div class="text-subtitle u-m0">Shift Structure</div>
           ${crossRef}
         </div>
         <span class="sp-structure__summary" title="Facility operating hours/year implied by these structure inputs (hours/shift × shifts/day × days/week × weeks/year).">
@@ -619,7 +619,7 @@ function renderDowPatternsCard(alloc, shiftsCfg, dowVolumeMultipliers, dowPremiu
       .sp-dow-card__header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; gap: 16px; flex-wrap: wrap; }
       .sp-dow-card__title { font-size: 14px; font-weight: 600; color: var(--ies-navy); margin: 0; display: flex; align-items: center; gap: 8px; }
       .sp-dow-card__pill { font-size: 11px; color: var(--ies-gray-600); padding: 3px 9px; background: var(--ies-gray-50); border: 1px solid var(--ies-gray-200); border-radius: 12px; font-variant-numeric: tabular-nums; }
-      .sp-dow-card__pill.warn { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+      .sp-dow-card__pill.warn { background: var(--c-warn-bg); color: var(--c-warn-ink); border-color: #fde68a; }
       .sp-dow-card__sub { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ies-gray-500); margin: 16px 0 8px 0; }
       .sp-dow-card__sub:first-of-type { margin-top: 0; }
       .sp-dow-shifts { display: flex; flex-direction: column; gap: 6px; }
@@ -799,7 +799,7 @@ function renderMatrixCard(alloc, shiftCount, validation, derived) {
   return `
     <div class="hub-card sp-matrix-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 12px 0;">
-        <h3 style="margin:0;">Throughput Matrix — ${isFte ? 'direct FTE by shift × function' : '% of daily volume by shift × function'}</h3>
+        <h3 class="u-m0">Throughput Matrix — ${isFte ? 'direct FTE by shift × function' : '% of daily volume by shift × function'}</h3>
         ${modeToggleHtml}
       </div>
       <div style="overflow-x:auto;">
@@ -820,8 +820,8 @@ function renderMatrixCard(alloc, shiftCount, validation, derived) {
               <td>${isFte ? 'Total FTE per shift' : 'Shift workload mix'}</td>
               ${
                 isFte
-                  ? colFteTotals.map(c => `<td class="hub-num" style="text-align:right;">${c.toFixed(1)} FTE</td>`).join('')
-                  : colMixPct.map(c => `<td class="hub-num" style="text-align:right;">${c.toFixed(0)}%</td>`).join('')
+                  ? colFteTotals.map(c => `<td class="hub-num u-right">${c.toFixed(1)} FTE</td>`).join('')
+                  : colMixPct.map(c => `<td class="hub-num u-right">${c.toFixed(0)}%</td>`).join('')
               }
               <td></td>
               <td></td>
@@ -897,7 +897,7 @@ function renderByShiftCard(derived, alloc, indirectByShift) {
           <span>Labor $/yr</span><span>${fmtDollars(s.costAnnual)}</span>
         </div>
         ${s.premiumAnnual > 0 ? `
-          <div class="sp-shift-card__metric" style="color:var(--ies-gray-600);">
+          <div class="sp-shift-card__metric u-dim">
             <span>+ Premium $/yr</span><span>${fmtDollars(s.premiumAnnual)}</span>
           </div>` : ''}
       </div>
@@ -984,7 +984,7 @@ function renderStaffingHeatmap(hourlyStaffing, daysPerWeek) {
   return `
     <div class="hub-card sp-heatmap">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;">
-        <h3 style="margin:0;">Weekly Staffing Heatmap</h3>
+        <h3 class="u-m0">Weekly Staffing Heatmap</h3>
         <span class="sp-hm-legend">
           Total HC per hour
           <span class="sp-hm-legend-scale" aria-hidden="true"></span>

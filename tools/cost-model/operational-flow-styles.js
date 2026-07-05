@@ -28,7 +28,7 @@ export function ofpStyles() {
         overflow: hidden;
       }
       .ofp-area--wide { width: 100%; }
-      .ofp-area--warn { border-color: #DC2626; background: rgba(220, 38, 38, 0.04); }
+      .ofp-area--warn { border-color: var(--c-danger); background: rgba(220, 38, 38, 0.04); }
 
       .ofp-area__header {
         padding: 8px 10px 10px;
@@ -133,7 +133,7 @@ export function ofpStyles() {
         bottom: calc(100% + 8px);
         left: 50%;
         transform: translateX(-50%);
-        background: #1f2937;
+        background: var(--c-ink);
         color: #fff;
         font-size: 11px; font-weight: 500;
         padding: 6px 10px;
@@ -152,7 +152,7 @@ export function ofpStyles() {
         transform: translateX(-50%);
         border-left: 5px solid transparent;
         border-right: 5px solid transparent;
-        border-top: 5px solid #1f2937;
+        border-top: 5px solid var(--c-ink);
         z-index: 100;
         pointer-events: none;
         animation: ofpTipIn 0.12s ease-out forwards;
@@ -249,11 +249,11 @@ export function ofpStyles() {
         opacity: 0; transition: opacity 0.12s, color 0.12s;
       }
       .ofp-node:hover .ofp-node__del { opacity: 1; }
-      .ofp-node__del:hover { color: #DC2626; }
+      .ofp-node__del:hover { color: var(--c-danger); }
       .ofp-node__chip {
         display: inline-flex; align-items: center; justify-content: center;
         width: 16px; height: 16px; border-radius: 50%;
-        background: #F59E0B; color: #fff;
+        background: var(--c-warn); color: #fff;
         font-size: 11px; font-weight: 700; cursor: help;
       }
 
@@ -319,7 +319,7 @@ export function ofpStyles() {
         text-transform: uppercase; letter-spacing: 0.04em;
       }
       .ofp-node__uom--transform {
-        color: #fff; background: #7C3AED;
+        color: #fff; background: var(--c-purple);
         text-transform: none; letter-spacing: 0;
       }
 
@@ -464,7 +464,7 @@ export function ofpStyles() {
         font-size: 12px; line-height: 1; cursor: pointer;
         color: var(--ies-gray-500);
       }
-      .ofp-area-mgr__chip-x:hover { color: #DC2626; }
+      .ofp-area-mgr__chip-x:hover { color: var(--c-danger); }
       .ofp-area-mgr__chip-input {
         flex: 1 1 80px; min-width: 80px;
         border: none; outline: none; background: transparent;
@@ -478,7 +478,7 @@ export function ofpStyles() {
         transition: all 0.12s;
       }
       .ofp-area-mgr__del:hover:not(:disabled) {
-        color: #DC2626; border-color: #DC2626; background: rgba(220,38,38,0.05);
+        color: var(--c-danger); border-color: var(--c-danger); background: rgba(220,38,38,0.05);
       }
       .ofp-area-mgr__del:disabled { cursor: not-allowed; opacity: 0.4; }
       .ofp-area-mgr__badge {
@@ -488,7 +488,7 @@ export function ofpStyles() {
         margin-left: 6px; vertical-align: middle;
       }
       .ofp-area-mgr__badge--protected {
-        background: rgba(220,38,38,0.10); color: #B91C1C;
+        background: rgba(220,38,38,0.10); color: var(--c-danger-strong);
       }
       .ofp-area-mgr__muted {
         font-size: 11px; color: var(--ies-gray-400); font-style: italic;
@@ -647,25 +647,25 @@ export function ofpStyles() {
         border-radius: 6px;
         margin-bottom: 12px;
         font-size: 12px;
-        color: #991B1B;
+        color: var(--c-danger-ink);
       }
       .ofp-warn-banner__icon { font-size: 16px; line-height: 1; }
       .ofp-warn-banner__msg { flex: 1 1 auto; }
-      .ofp-warn-banner__msg strong { color: #B91C1C; font-weight: 700; }
+      .ofp-warn-banner__msg strong { color: var(--c-danger-strong); font-weight: 700; }
       .ofp-warn-banner__action {
         background: transparent;
         border: 1px solid rgba(220, 38, 38, 0.40);
         border-radius: 4px;
         padding: 1px 8px;
         font-size: 11px; font-weight: 600;
-        color: #B91C1C;
+        color: var(--c-danger-strong);
         cursor: pointer;
         margin: 0 2px;
         transition: all 0.12s;
       }
       .ofp-warn-banner__action:hover {
         background: rgba(220, 38, 38, 0.12);
-        border-color: #DC2626;
+        border-color: var(--c-danger);
       }
 
       /* ========================================================

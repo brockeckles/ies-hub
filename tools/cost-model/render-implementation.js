@@ -216,7 +216,7 @@ ${(() => {
                 <td><input class="hub-input hub-num" type="number" min="0" step="1" value="${Number(ph.durationWeeks) || 0}" data-array="implementationTimeline.phases" data-idx="${i}" data-field="durationWeeks" data-type="number" /></td>
                 <td style="text-align:right;font-weight:600;color:var(--ies-gray-600);">W${endWeek}</td>
                 <td><input type="color" value="${escapeAttr(ph.color || '#0047AB')}" data-array="implementationTimeline.phases" data-idx="${i}" data-field="color" style="width:36px;height:26px;padding:0;border:1px solid var(--ies-gray-200);border-radius:4px;cursor:pointer;" /></td>
-                <td style="text-align:center;"><button class="cm-delete-btn" data-action="impl-delete-phase" data-idx="${i}" title="Delete phase">×</button></td>
+                <td class="u-center"><button class="cm-delete-btn" data-action="impl-delete-phase" data-idx="${i}" title="Delete phase">×</button></td>
               </tr>
             `;
           }).join('')}
@@ -273,11 +273,11 @@ ${(() => {
         <thead>
           <tr>
             <th>Month After Go-Live</th>
-            <th style="text-align:right;">Headcount %</th>
-            <th style="text-align:right;">Implied FTE</th>
-            <th style="text-align:right;">Volume %</th>
-            <th style="text-align:right;">Direct Labor Cost</th>
-            <th style="text-align:right;">Δ vs steady-state</th>
+            <th class="u-right">Headcount %</th>
+            <th class="u-right">Implied FTE</th>
+            <th class="u-right">Volume %</th>
+            <th class="u-right">Direct Labor Cost</th>
+            <th class="u-right">Δ vs steady-state</th>
           </tr>
         </thead>
         <tbody>
@@ -291,8 +291,8 @@ ${(() => {
             return `
               <tr>
                 <td><strong>Month ${i + 1}</strong></td>
-                <td style="text-align:right;">${hcPct}%</td>
-                <td style="text-align:right;">${impliedFte.toFixed(1)}</td>
+                <td class="u-right">${hcPct}%</td>
+                <td class="u-right">${impliedFte.toFixed(1)}</td>
                 <td style="text-align:right;color:var(--ies-gray-500);">${volPct}%</td>
                 <td style="text-align:right;font-weight:600;">${calc.formatCurrency(monthlyCost)}</td>
                 <td style="text-align:right;color:${deltaColor};">${delta === 0 ? '—' : (delta > 0 ? '+' : '') + calc.formatCurrency(delta)}</td>
@@ -301,10 +301,10 @@ ${(() => {
           }).join('')}
           <tr style="background:var(--ies-gray-50);font-weight:700;border-top:2px solid var(--ies-gray-200);">
             <td>Steady-state (Month ${headcountRamp.length + 1}+)</td>
-            <td style="text-align:right;">100%</td>
-            <td style="text-align:right;">${totalFtes.toFixed(1)}</td>
+            <td class="u-right">100%</td>
+            <td class="u-right">${totalFtes.toFixed(1)}</td>
             <td style="text-align:right;color:var(--ies-gray-500);">100%</td>
-            <td style="text-align:right;">${calc.formatCurrency(steadyMonthlyCost)}</td>
+            <td class="u-right">${calc.formatCurrency(steadyMonthlyCost)}</td>
             <td style="text-align:right;color:var(--ies-gray-500);">baseline</td>
           </tr>
         </tbody>

@@ -46,13 +46,13 @@ export function renderSensitivityCard(opts) {
   const bandPct = result.p50 !== 0 ? (band / result.p50 * 100) : 0;
 
   return `
-    <div class="hub-card mb-4" style="border-left:4px solid #7c3aed;">
+    <div class="hub-card mb-4" style="border-left:4px solid var(--c-purple);">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
         <div>
           <div style="font-size:14px;font-weight:700;">Labor Cost Sensitivity</div>
-          <div style="font-size:11px;color:var(--ies-gray-500);">${result.nTrials.toLocaleString()} Monte-Carlo trials · ${withVar.length} of ${lines.length} lines have variance set</div>
+          <div class="u-cap u-muted">${result.nTrials.toLocaleString()} Monte-Carlo trials · ${withVar.length} of ${lines.length} lines have variance set</div>
         </div>
-        <div style="text-align:right;">
+        <div class="u-right">
           <div style="font-size:12px;color:var(--ies-gray-500);">80% band width</div>
           <div style="font-size:14px;font-weight:700;">${fmt(band)} (${bandPct.toFixed(1)}%)</div>
         </div>
@@ -67,7 +67,7 @@ export function renderSensitivityCard(opts) {
           <div class="hub-kpi-value">${fmt(result.p50)}</div>
         </div>
         <div class="hub-kpi-item">
-          <div class="hub-kpi-label" style="color:#dc2626;">P90 (pessimistic)</div>
+          <div class="hub-kpi-label" style="color:var(--c-danger);">P90 (pessimistic)</div>
           <div class="hub-kpi-value">${fmt(result.p90)}</div>
         </div>
         <div class="hub-kpi-item">

@@ -11,19 +11,19 @@ import { downloadXLSX } from '../../shared/export.js?v=20260702-p1m1';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
-import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
+import ofpStyles from './operational-flow-styles.js?v=20260705-u3d';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
 import * as calc from './calc.js?v=20260704-ebr1';
 import * as api from './api.js?v=20260704-cmp1';
 import * as scenarios from './calc.scenarios.js?v=20260704-ebr1';
-import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260511-port8';
-import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260511-port8';
-import { renderImplementation } from './render-implementation.js?v=20260511-port9';
+import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260705-u3d';
+import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260705-u3d';
+import { renderImplementation } from './render-implementation.js?v=20260705-u3d';
 import * as monthlyCalc from './calc.monthly.js?v=20260704-ebr1';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
-import * as shiftPlannerUi from './shift-planner-ui.js?v=20260702-p1e';
+import * as shiftPlannerUi from './shift-planner-ui.js?v=20260705-u3d';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260705-u1a';
@@ -32,6 +32,7 @@ import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-dril
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
+import { icon } from '../../shared/icons.js?v=20260705-u3d';
 import {
   OFP_MHE_OPTIONS as _OFP_MHE_OPTIONS,
   OFP_IT_OPTIONS as _OFP_IT_OPTIONS,
@@ -99,7 +100,7 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260704-ebr1';
+} from './operational-flow-render.js?v=20260705-u3d';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
 import { computeHeaderKpis } from './header-kpis.js?v=20260704-ebr1';
@@ -1045,7 +1046,7 @@ function openCmTemplatePicker() {
           <button data-cm-template="${k}" style="text-align:left;border:1px solid var(--ies-gray-200);border-radius:10px;padding:14px;background:#fff;cursor:pointer;transition:border-color .12s, box-shadow .12s;"
                   onmouseover="this.style.borderColor='var(--ies-blue)';this.style.boxShadow='0 2px 10px rgba(0,71,171,0.12)';"
                   onmouseout="this.style.borderColor='var(--ies-gray-200)';this.style.boxShadow='none';">
-            <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:4px;">${t.label}${k === 'blank' ? '' : ' <span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;background:#fef3c7;color:#92400e;letter-spacing:0.04em;">DEFAULTS</span>'}</div>
+            <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:4px;">${t.label}${k === 'blank' ? '' : ' <span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;background:var(--c-warn-bg);color:var(--c-warn-ink);letter-spacing:0.04em;">DEFAULTS</span>'}</div>
             <div style="font-size:12px;color:var(--ies-gray-500);line-height:1.45;">${t.description}</div>
           </button>
         `).join('')}
@@ -2893,7 +2894,7 @@ function _buildCmChromeOpts() {
   // still an unsaved draft so seeded numbers read as defaults, not facts.
   const _starterKey = (!model?.id && model?.projectDetails?.starterTemplate) ? model.projectDetails.starterTemplate : null;
   const _starterChip = (_starterKey && CM_STARTER_TEMPLATES[_starterKey] && _starterKey !== 'blank')
-    ? '<span style="display:inline-block;font-size:9px;font-weight:700;padding:3px 8px;border-radius:8px;letter-spacing:0.04em;text-transform:uppercase;background:#fef3c7;color:#92400e;white-space:nowrap;" title="Seeded from the ' + CM_STARTER_TEMPLATES[_starterKey].label + ' starter template — every value is a catalog default until you edit or save it.">' + CM_STARTER_TEMPLATES[_starterKey].label + ' defaults</span>'
+    ? '<span style="display:inline-block;font-size:9px;font-weight:700;padding:3px 8px;border-radius:8px;letter-spacing:0.04em;text-transform:uppercase;background:var(--c-warn-bg);color:var(--c-warn-ink);white-space:nowrap;" title="Seeded from the ' + CM_STARTER_TEMPLATES[_starterKey].label + ' starter template — every value is a catalog default until you edit or save it.">' + CM_STARTER_TEMPLATES[_starterKey].label + ' defaults</span>'
     : '';
   const _modelTitleHtml = (_modelName || _scenarioLabel || _starterChip) ? (
     '<div class="cm-model-title" style="display:flex;align-items:center;gap:8px;padding:0 12px 0 0;border-right:1px solid rgba(255,255,255,0.18);margin-right:10px;flex-shrink:0;min-width:0;">' +
@@ -2949,6 +2950,12 @@ function _cmExtraStyles() {
       .cm-section-header .cm-section-title { font-size: 18px; font-weight: 700; color: var(--ies-navy); margin: 0; }
       .cm-section-header .cm-section-desc,
       .cm-section-header__intro .cm-section-desc { font-size: 12px; color: var(--ies-gray-600); margin-top: 2px; }
+
+      /* U3-CM (2026-07-05, u3d): classes minted from repeated inline styles — values byte-identical */
+      .cm-empty { text-align: center; color: var(--ies-gray-400); padding: 24px; }
+      .cm-sub-row { padding-left: 16px; color: var(--ies-gray-600); }
+      .cm-rule-dashed { border-top: 1px dashed var(--ies-gray-200); }
+      .cm-card-flush { padding: 0; overflow: hidden; }
 
       [data-cm-cell] { cursor: pointer; transition: background-color 0.12s ease, outline 0.12s ease; }
       [data-cm-cell]:hover { background-color: rgba(0,71,171,0.06); }
@@ -3234,7 +3241,7 @@ function renderStdBasics() {
         </select>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">Standard mode shows the ~26 inputs that move the answer. Every other knob keeps its corporate-catalog default — see <button data-action="std-advanced" data-std-target="assumptions" style="font-size:11px;border:none;background:none;color:var(--ies-blue);cursor:pointer;padding:0;text-decoration:underline;">Assumptions</button> for the full effective set.</div>`;
+    <div class="u-cap u-muted u-mt-1">Standard mode shows the ~26 inputs that move the answer. Every other knob keeps its corporate-catalog default — see <button data-action="std-advanced" data-std-target="assumptions" style="font-size:11px;border:none;background:none;color:var(--ies-blue);cursor:pointer;padding:0;text-decoration:underline;">Assumptions</button> for the full effective set.</div>`;
   return _stdHeader(1, 'Deal Basics', 'Who, where, and for how long.')
     + _stdCard({ title: 'Deal Basics', desc: 'Market + vertical pick the right defaults for everything downstream.', advTarget: 'setup', advLabel: 'Full Setup', body })
     + _stdStepNav(null, 'std-volume', 'Volume');
@@ -3288,7 +3295,7 @@ function renderStdVolume() {
         <input class="hub-input" type="number" value="${(model.facility && model.facility.opDaysPerYear) || 260}" min="200" max="365" step="1" data-field="facility.opDaysPerYear" data-type="number" data-field-commit="change" />
       </div>
     </div>
-    <div style="font-size:11px;color:var(--ies-gray-500);">Orders, cases, pallets and daily rates derive from these via the conversion chain. Multi-channel mixes, returns and surge factors live in the full section.</div>`;
+    <div class="u-cap u-muted">Orders, cases, pallets and daily rates derive from these via the conversion chain. Multi-channel mixes, returns and surge factors live in the full section.</div>`;
   return _stdHeader(2, 'Volume', 'How much product moves through the building.')
     + _stdCard({ title: 'Volume', desc: 'One primary channel; conversions derive the rest.', advTarget: 'volumes', advLabel: 'Full Volumes', body })
     + _stdStepNav('std-basics', 'std-building', 'Building');
@@ -3327,7 +3334,7 @@ function renderStdBuilding() {
         </select>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--ies-gray-500);">Utilities, maintenance, TI allowances and security tiers stay on market/catalog defaults — the full Facility section exposes them all.</div>`;
+    <div class="u-cap u-muted">Utilities, maintenance, TI allowances and security tiers stay on market/catalog defaults — the full Facility section exposes them all.</div>`;
   return _stdHeader(3, 'Building', 'The box the operation runs in.')
     + _stdCard({ title: 'Building', desc: 'Size + rent drive facility cost; the market supplies the rates.', advTarget: 'facility', advLabel: 'Full Facility', body })
     + _stdStepNav('std-volume', 'std-labor', 'Labor');
@@ -3356,14 +3363,14 @@ function renderStdLabor() {
       </div>
     </div>
     ${lines.length ? `
-    <table class="hub-datatable hub-datatable--dense" style="margin-top:4px;">
+    <table class="hub-datatable hub-datatable--dense u-mt-1">
       <thead><tr><th>Activity</th><th>UPH</th><th>Annual Volume</th><th>$/hr</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <div style="font-size:11px;color:var(--ies-gray-500);margin-top:6px;">Hours, FTEs and cost recompute as you type. OT, absence, shift premiums and temp mix ride the market profile / catalog defaults.</div>`
     : `<div style="font-size:13px;color:var(--ies-gray-500);padding:12px 0;">No direct-labor activities yet. Open the full Labor section to add activities or pull them from the Operational Flow.</div>`}
     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">${(model.indirectLaborLines || []).length > 0 ? '↻ Regenerate Indirect Labor' : '⚡ Auto-Generate Indirect Labor'}</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">${(model.indirectLaborLines || []).length > 0 ? '↻ Regenerate Indirect Labor' : icon('bolt') + ' Auto-Generate Indirect Labor'}</button>
       <span style="font-size:11px;color:var(--ies-gray-500);align-self:center;">Leads, clerks & supervision sized from headcount ratios in the planning catalog.</span>
     </div>`;
   return _stdHeader(4, 'Labor', 'The activities and the people running them.')
@@ -3418,9 +3425,9 @@ function renderStdMoney() {
     <div style="border-top:1px solid var(--ies-gray-200);margin-top:8px;padding-top:12px;">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:8px;">One-click cost lines from the catalog</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-equipment">${(model.equipmentLines || []).length > 0 ? '↻ Regenerate Equipment' : '⚡ Equipment'}</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-overhead">${(model.overheadLines || []).length > 0 ? '↻ Regenerate Overhead' : '⚡ Overhead'}</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-startup">${(model.startupLines || []).length > 0 ? '↻ Regenerate Start-Up' : '⚡ Start-Up'}</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-equipment">${(model.equipmentLines || []).length > 0 ? '↻ Regenerate Equipment' : icon('bolt') + ' Equipment'}</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-overhead">${(model.overheadLines || []).length > 0 ? '↻ Regenerate Overhead' : icon('bolt') + ' Overhead'}</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-startup">${(model.startupLines || []).length > 0 ? '↻ Regenerate Start-Up' : icon('bolt') + ' Start-Up'}</button>
       </div>
       <div style="font-size:11px;color:var(--ies-gray-500);margin-top:6px;">Seeded from sqft, headcount and vertical. Every generated line is editable in its Engineering section.</div>
     </div>`;
@@ -3673,7 +3680,7 @@ function renderSetup() {
     </div>
 
     <div class="hub-card">
-    <div class="cm-narrow-form" style="margin:0;">
+    <div class="cm-narrow-form u-m0">
       <div class="hub-field hub-field--full">
         <label class="hub-field__label">Project Name</label>
         <input class="hub-input" id="cm-name" value="${escapeAttr(pd.name || '')}" placeholder="e.g., Acme Ecommerce Fulfillment" data-field="projectDetails.name" />
@@ -3779,7 +3786,7 @@ function renderSetup() {
           <div style="font-size:12px;color:var(--ies-gray-500);margin-top:2px;">Counts of master data loaded from Supabase. The model can run on fallback defaults when these are empty, but seeded references unlock per-market facility / utility / labor rates and the equipment / overhead catalogs.</div>
         </div>
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="seed-default-refdata"
-                title="Push the built-in industry defaults to Supabase: 20 markets, ~80 labor rate rows, 33 equipment catalog rows, 20 facility rate rows, 6 overhead categories. Existing rows are NOT overwritten — this only fills gaps. Idempotent.">⚡ Seed Defaults</button>
+                title="Push the built-in industry defaults to Supabase: 20 markets, ~80 labor rate rows, 33 equipment catalog rows, 20 facility rate rows, 6 overhead categories. Existing rows are NOT overwritten — this only fills gaps. Idempotent.">${icon('bolt')} Seed Defaults</button>
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px;font-size:12px;">
         ${(() => {
@@ -3801,7 +3808,7 @@ function renderSetup() {
             return `
               <div style="border:1px solid var(--ies-gray-200);border-radius:6px;padding:8px 10px;">
                 <div style="font-weight:700;color:${color};">${count}<span style="color:var(--ies-gray-400);font-weight:500;font-size:11px;"> / ${target} target</span></div>
-                <div style="color:var(--ies-gray-500);">${label}</div>
+                <div class="u-muted">${label}</div>
                 <div style="height:3px;background:var(--ies-gray-100);border-radius:2px;margin-top:4px;overflow:hidden;">
                   <div style="height:100%;width:${pct}%;background:${color};"></div>
                 </div>
@@ -3857,7 +3864,7 @@ function renderHouseAssumptionsCard() {
       <tr${r.changed ? ' style="background:rgba(217,119,6,0.05);"' : ''}>
         <td>${escapeAttr(scopeLabel(r))}</td>
         <td>${escapeAttr(r.metric || '')}</td>
-        ${y.map((v, i) => `<td class="hub-num"${r.changed && curY && curY[i] !== v ? ` title="current guidance: ${curY[i]}%" style="color:#d97706;font-weight:700;"` : ''}>${v}</td>`).join('')}
+        ${y.map((v, i) => `<td class="hub-num"${r.changed && curY && curY[i] !== v ? ` title="current guidance: ${curY[i]}%" style="color:var(--c-warn-strong);font-weight:700;"` : ''}>${v}</td>`).join('')}
         <td style="font-size:11px;color:var(--ies-gray-400);max-width:220px;">${escapeAttr(r.notes || '')}</td>
       </tr>`;
   }).join('');
@@ -3871,7 +3878,7 @@ function renderHouseAssumptionsCard() {
             Pinned to this project <b>${escapeAttr(pinned.pinnedAt || '')}</b> — read-only.
             Later corporate guidance changes never alter this project.
             ${drift.anyDrift
-              ? '<span style="color:#d97706;font-weight:700;"> ⚠ Current guidance has changed since this project was pinned.</span>'
+              ? '<span style="color:var(--c-warn-strong);font-weight:700;"> ⚠ Current guidance has changed since this project was pinned.</span>'
               : '<span style="color:#10b981;font-weight:700;"> ✓ Matches current guidance.</span>'}
           </div>
         </div>
@@ -3880,9 +3887,9 @@ function renderHouseAssumptionsCard() {
       <div class="cm-table-scroll" style="margin-top:10px;">
         <table class="hub-datatable hub-datatable--dense" style="width:100%;font-size:12px;">
           <thead>
-            <tr><th style="text-align:left;">Scope</th><th style="text-align:left;">Metric</th>
+            <tr><th class="u-left">Scope</th><th class="u-left">Metric</th>
             <th class="hub-num">Y1 %</th><th class="hub-num">Y2 %</th><th class="hub-num">Y3 %</th><th class="hub-num">Y4 %</th><th class="hub-num">Y5 %</th>
-            <th style="text-align:left;">Source / Notes</th></tr>
+            <th class="u-left">Source / Notes</th></tr>
           </thead>
           <tbody>${rows}</tbody>
         </table>
@@ -3992,7 +3999,7 @@ function renderVolumes() {
       <div class="cm-vol-mix-card mb-3">
         <div class="cm-vol-mix-card__head">
           <div class="cm-vol-mix-card__total">
-            <span class="hub-field__label" style="margin:0;">Total annual volume</span>
+            <span class="hub-field__label u-m0">Total annual volume</span>
             <span class="cm-vol-mix-card__total-val">${fmtN(grandUnits)} units</span>
           </div>
           <div class="cm-vol-mix-card__modes" role="tablist" aria-label="Mix mode">
@@ -4048,7 +4055,7 @@ function renderVolumes() {
         ${isByMix ? `
           <div class="cm-vol-mix-allocs">
             <div class="cm-vol-mix-allocs__total">
-              <label class="hub-field__label" style="margin:0;">Total volume</label>
+              <label class="hub-field__label u-m0">Total volume</label>
               <input class="hub-input" type="number" value="${Number(mix.totalVolume) || grandUnits}" min="0" step="1000"
                      data-cm-action="vol-mix-total-edit" style="max-width:160px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;" />
               <select class="hub-input" data-cm-action="vol-mix-uom-edit" style="max-width:90px;">
@@ -4154,8 +4161,8 @@ function renderVolumes() {
     <!-- Primary Volume — the nucleus card (active channel) -->
     <div class="hub-card cm-vol-nucleus mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:12px;flex-wrap:wrap;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <div class="text-subtitle" style="margin:0;">Primary Volume${isMultiChannel ? ` — <span style="color:var(--ies-blue);">${escapeHtml(ch.name)}</span>` : ''}</div>
+        <div class="u-row">
+          <div class="text-subtitle u-m0">Primary Volume${isMultiChannel ? ` — <span style="color:var(--ies-blue);">${escapeHtml(ch.name)}</span>` : ''}</div>
           <span class="cm-vol-pill cm-vol-pill--info">nucleus</span>
         </div>
         <span class="hub-field__hint" style="flex:1;min-width:240px;text-align:right;">All other UOMs derive from this value &times; the conversion factors below.</span>
@@ -4257,13 +4264,13 @@ function renderVolumes() {
     <!-- Derived Volumes table — read-only traceability surface -->
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:12px;flex-wrap:wrap;">
-        <div class="text-subtitle" style="margin:0;">Derived Volumes${isMultiChannel ? ` — <span style="color:var(--ies-blue);">${escapeHtml(ch.name)}</span>` : ''}</div>
+        <div class="text-subtitle u-m0">Derived Volumes${isMultiChannel ? ` — <span style="color:var(--ies-blue);">${escapeHtml(ch.name)}</span>` : ''}</div>
         <span class="hub-field__hint">Read-only — every calc consumer reads from here. Override per-row when RFP figures don’t reconcile.</span>
       </div>
       <table class="cm-vol-derived-table">
         <thead>
           <tr>
-            <th style="text-align:left;">Figure</th>
+            <th class="u-left">Figure</th>
             <th style="text-align:right;width:140px;">Value</th>
             <th style="width:160px;text-align:right;">Override</th>
           </tr>
@@ -4284,7 +4291,7 @@ function renderVolumes() {
                   : fmtFull(r.d.value)
                 }
               </td>
-              <td style="text-align:right;">
+              <td class="u-right">
                 ${isEditing ? `
                   <div style="display:inline-flex;gap:4px;">
                     <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="vol-override-save" data-key="${r.key}" title="Pin this value">Save</button>
@@ -4306,7 +4313,7 @@ function renderVolumes() {
     <!-- Source / integration footer -->
     <div class="cm-vol-source-bar">
       <span><span class="cm-vol-pill cm-vol-pill--mute">Source</span> ${sourceBadge}</span>
-      <span style="color:var(--ies-gray-500);">Pull from <button type="button" data-action="cm-launch-wsc" class="cm-link-arrow">WSC →</button> or <button type="button" data-action="cm-launch-netopt" class="cm-link-arrow">NetOpt →</button></span>
+      <span class="u-muted">Pull from <button type="button" data-action="cm-launch-wsc" class="cm-link-arrow">WSC →</button> or <button type="button" data-action="cm-launch-netopt" class="cm-link-arrow">NetOpt →</button></span>
     </div>
 
     <style>
@@ -4390,8 +4397,8 @@ function renderVolumes() {
       .cm-season-cell input { text-align: center; font-variant-numeric: tabular-nums; padding: 4px 2px; }
       .cm-season-cell--peak input { background: rgba(217,119,6,0.10); border-color: var(--ies-orange, #ff3a00); font-weight: 700; }
       .cm-season-summary { display: flex; align-items: center; gap: 18px; margin-top: 10px; font-size: 12px; color: var(--ies-gray-600); }
-      .cm-season-summary__sum--bad { color: #dc2626; font-weight: 700; }
-      .cm-season-summary__sum--good { color: #16a34a; font-weight: 700; }
+      .cm-season-summary__sum--bad { color: var(--c-danger); font-weight: 700; }
+      .cm-season-summary__sum--good { color: var(--c-success); font-weight: 700; }
     </style>
   `;
 }
@@ -4416,7 +4423,7 @@ function renderSeasonalityProfileCard(activeIdx = 0) {
   return `
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;gap:12px;flex-wrap:wrap;">
-        <div class="text-subtitle" style="margin:0;">Seasonality Profile</div>
+        <div class="text-subtitle u-m0">Seasonality Profile</div>
         <span class="hub-field__hint" style="flex:1;min-width:200px;">Monthly volume shares drive the MLV peak-vs-baseline derivation, sync-to-equipment flex, and Phase 2d rental auto-gen. Sums must equal 100%.</span>
       </div>
       <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;">
@@ -4505,7 +4512,7 @@ function renderFacility() {
             </div>`;
           }
           if (cur > 0 && dev <= 0.05) {
-            return `<div class="hub-field__hint" style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">✓ Within 5% of suggested ${sug.toLocaleString()} sqft (${(model.facility?.daysOnHand || 30)}-day DOH)</div>`;
+            return `<div class="hub-field__hint u-cap u-muted u-mt-1">✓ Within 5% of suggested ${sug.toLocaleString()} sqft (${(model.facility?.daysOnHand || 30)}-day DOH)</div>`;
           }
           // CM-FAC-DIVERGE-WARN (2026-04-30 PM s7) — surface an amber
           // chip when suggested differs from current by >100% (i.e., 2x
@@ -4644,7 +4651,7 @@ function renderFacilityOverridePanel() {
   return `
     <details class="hub-card mt-4" ${hasAny ? 'open' : ''} style="border:1px solid var(--ies-gray-200);">
       <summary style="cursor:pointer;font-weight:600;padding:4px 0;display:flex;align-items:center;justify-content:space-between;">
-        <span>Override Market Rates ${hasAny ? '<span style="font-size:11px;color:#92400e;background:#fef3c7;padding:2px 6px;border-radius:3px;margin-left:6px;">Active</span>' : '<span style="font-size:11px;color:var(--ies-gray-500);font-weight:400;margin-left:6px;">— optional, per-deal adjustments</span>'}</span>
+        <span>Override Market Rates ${hasAny ? '<span style="font-size:11px;color:var(--c-warn-ink);background:var(--c-warn-bg);padding:2px 6px;border-radius:3px;margin-left:6px;">Active</span>' : '<span style="font-size:11px;color:var(--ies-gray-500);font-weight:400;margin-left:6px;">— optional, per-deal adjustments</span>'}</span>
       </summary>
       <div style="padding-top:10px;">
         <div class="cm-narrow-form" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
@@ -4665,7 +4672,7 @@ function renderFacilityOverridePanel() {
           </div>
         </div>
         <div style="margin-top:10px;display:flex;justify-content:flex-end;">
-          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="clear-facility-overrides" ${hasAny ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}>Clear all overrides</button>
+          <button class="hub-btn hub-btn-secondary hub-btn-sm${hasAny ? '' : ' u-disabled'}" data-action="clear-facility-overrides" ${hasAny ? '' : 'disabled'}>Clear all overrides</button>
         </div>
       </div>
     </details>
@@ -4715,7 +4722,7 @@ function renderFacilityCostCard() {
           </tr>` : ''}
           ${bd.tiAmort > 0 ? `
             <tr title="TI (Tenant Improvement) items from Equipment — dock levelers, office build-out, CCTV, etc. — amortize through rent over the contract term per Asset Defaults Guidance. TI Phase A: only the provider-funded share (total TI − landlord allowance) amortizes; the landlord-funded share is the landlord's capital, recovered through base rent.">
-              <td>TI Amortization <span style="font-size:11px;color:var(--ies-gray-400);">(provider share, contract term)</span></td>
+              <td>TI Amortization <span class="u-cap u-faint">(provider share, contract term)</span></td>
               <td class="cm-num">${((bd.tiAmort / ((model.facility?.totalSqft || 1))) || 0).toFixed(2)}</td>
               <td class="cm-num">${calc.formatCurrency(bd.tiAmort)}</td>
             </tr>
@@ -4723,14 +4730,14 @@ function renderFacilityCostCard() {
           <tr class="cm-total-row"><td>Total</td><td></td><td class="cm-num">${calc.formatCurrency(bd.total)}</td></tr>
           ${(bd.tiRentCredit || 0) > 0 ? `
             <tr title="Mode B (TI Phase B): the slice of quoted rent attributable to landlord TI recovery. Informational — gross rent above is the P&L cost; net shows market-equivalent rent for benchmarking against comps.">
-              <td style="color:var(--ies-gray-500);">− TI Rent Credit <span style="font-size:11px;color:var(--ies-gray-400);">(Mode B, informational)</span></td>
-              <td class="cm-num" style="color:var(--ies-gray-500);">${((bd.tiRentCredit / ((model.facility?.totalSqft || 1))) || 0).toFixed(2)}</td>
-              <td class="cm-num" style="color:var(--ies-gray-500);">−${calc.formatCurrency(bd.tiRentCredit)}</td>
+              <td class="u-muted">− TI Rent Credit <span class="u-cap u-faint">(Mode B, informational)</span></td>
+              <td class="cm-num u-muted">${((bd.tiRentCredit / ((model.facility?.totalSqft || 1))) || 0).toFixed(2)}</td>
+              <td class="cm-num u-muted">−${calc.formatCurrency(bd.tiRentCredit)}</td>
             </tr>
             <tr title="Gross facility cost minus Mode B TI rent credit — the market-equivalent rent.">
-              <td style="font-weight:600;">Net (market-equivalent)</td>
+              <td class="u-semibold">Net (market-equivalent)</td>
               <td class="cm-num"></td>
-              <td class="cm-num" style="font-weight:600;">${calc.formatCurrency(bd.netTotal)}</td>
+              <td class="cm-num u-semibold">${calc.formatCurrency(bd.netTotal)}</td>
             </tr>
           ` : ''}
         </tbody>
@@ -4898,7 +4905,7 @@ function renderShifts() {
          Productive Hours tile. -->
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin:0 0 12px;gap:12px;">
-        <div class="text-subtitle" style="margin:0;">Wage Factors</div>
+        <div class="text-subtitle u-m0">Wage Factors</div>
         <span class="hub-field__hint">US FT reference: 2,080 paid hrs / FTE. PTO &amp; holiday hours subtract to give Productive.</span>
       </div>
       <!-- IA 2026-04-22: Shifts/Day + Workweek Pattern moved to Shift Planner
@@ -4933,12 +4940,12 @@ function renderShifts() {
       </div>
       <!-- Row 3: tiles with inline math -->
       <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px;">
-        <div class="cm-opshours-card" style="margin:0;" title="US FT standard — 2,080 paid hrs/yr per FTE. Constant across all facility patterns (8×5×52, 4×10, 24/7-with-rotation all sum to 2,080).">
+        <div class="cm-opshours-card u-m0" title="US FT standard — 2,080 paid hrs/yr per FTE. Constant across all facility patterns (8×5×52, 4×10, 24/7-with-rotation all sum to 2,080).">
           <div class="cm-opshours-card__label">Annual Paid Hours / FTE</div>
           <div class="cm-opshours-card__value">${paidHrs.toLocaleString()}</div>
           <div class="cm-opshours-card__formula">US FT standard</div>
         </div>
-        <div class="cm-opshours-card" style="margin:0;" title="2,080 − PTO hrs (${ptoHrs}) − Holiday hrs (${holidayHrs}) = ${productiveHrs}.">
+        <div class="cm-opshours-card u-m0" title="2,080 − PTO hrs (${ptoHrs}) − Holiday hrs (${holidayHrs}) = ${productiveHrs}.">
           <div class="cm-opshours-card__label">Productive Hours / FTE</div>
           <div class="cm-opshours-card__value" style="color:var(--ies-blue);">${productiveHrs.toLocaleString()}</div>
           <div class="cm-opshours-card__formula">= 2,080 − ${ptoHrs} PTO − ${holidayHrs} Holiday</div>
@@ -4957,7 +4964,7 @@ function renderShifts() {
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
         <div>
-          <div class="text-subtitle" style="margin:0;">Benefit Load %</div>
+          <div class="text-subtitle u-m0">Benefit Load %</div>
           <div class="hub-field__hint">Employer-side loaded costs on top of base wage. Buckets sum to the Total below. Per-position overrides live in the Position Catalog.</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;padding:6px 12px;background:var(--ies-gray-50);border:1px solid var(--ies-gray-200);border-radius:6px;">
@@ -4996,7 +5003,7 @@ function renderShifts() {
          that feed cost math downstream but don't affect paid/productive hours. -->
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
-        <div class="text-subtitle" style="margin:0;">Labor Economics</div>
+        <div class="text-subtitle u-m0">Labor Economics</div>
         <span class="hub-field__hint">Rate + productivity factors. Per-position overrides live in the catalog below.</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;">
@@ -5023,7 +5030,7 @@ function renderShifts() {
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
         <div>
-          <div class="text-subtitle" style="margin:0;">Position Catalog</div>
+          <div class="text-subtitle u-m0">Position Catalog</div>
           <div class="hub-field__hint">Role-based catalog (${STANDARD_POSITIONS.length} standard roles from heuristics doc). Labor activities select from here. <strong>${directCount}</strong> direct · <strong>${indirectCount}</strong> indirect · <strong>${positions.length}</strong> total.</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -5420,7 +5427,7 @@ function renderLaborV1() {
       <tbody>
         ${(model.indirectLaborLines || []).map((l, i) => `
           <tr>
-            <td style="white-space:nowrap;">
+            <td class="u-nowrap">
               <input value="${l.role_name || ''}" style="width:140px;" data-array="indirectLaborLines" data-idx="${i}" data-field="role_name" />
               ${renderHeuristicChip(l, { category: 'indirect-labor' })}
             </td>
@@ -5479,7 +5486,7 @@ function renderLaborV2() {
     <div style="margin-top:24px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
         <div>
-          <h3 class="hub-section-heading" style="margin:0;">Direct Labor</h3>
+          <h3 class="hub-section-heading u-m0">Direct Labor</h3>
           <div class="hub-field__hint">Volume sourced from Volumes tab · MOST template drives UPH</div>
         </div>
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-pfd-haircut" title="Recompute annual_hours using effective UPH (base_uph × Direct Utilization × productivity_pct) per Labor Build-Up Logic doc §2.1. Corrects the ~15% under-staffing the doc identifies.">Apply PF&amp;D Haircut to Hours</button>
@@ -5495,13 +5502,13 @@ function renderLaborV2() {
     <div style="margin-top:28px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
         <div>
-          <h3 class="hub-section-heading" style="margin:0;">Indirect / Management Labor</h3>
-          <div class="hub-field__hint">Burden % set in Labor Costing Factors above${(model.indirectLaborLines || []).length > 0 ? ` · <span style="color:var(--ies-gray-500);">${(model.indirectLaborLines || []).length} rows auto-generated — click Regenerate to replace</span>` : ''}</div>
+          <h3 class="hub-section-heading u-m0">Indirect / Management Labor</h3>
+          <div class="hub-field__hint">Burden % set in Labor Costing Factors above${(model.indirectLaborLines || []).length > 0 ? ` · <span class="u-muted">${(model.indirectLaborLines || []).length} rows auto-generated — click Regenerate to replace</span>` : ''}</div>
         </div>
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">${(model.indirectLaborLines || []).length > 0 ? '↻ Regenerate' : '↺ Auto-Generate'}</button>
       </div>
 
-      <div class="hub-card" style="padding:0;overflow:hidden;">
+      <div class="hub-card cm-card-flush">
         <table class="hub-datatable hub-datatable--dense">
           <thead>
             <tr>
@@ -5533,7 +5540,7 @@ function renderLaborV2() {
               const bd = calc.indirectLineAnnualBreakdown(l, opHrs, lc);
               return `
               <tr>
-                <td style="white-space:nowrap;">
+                <td class="u-nowrap">
                   <input class="hub-input" style="width:calc(100% - 90px);display:inline-block;" value="${escapeAttr(l.role_name || '')}" data-array="indirectLaborLines" data-idx="${i}" data-field="role_name" />
                   ${renderHeuristicChip(l, { category: 'indirect-labor' })}
                 </td>
@@ -5551,7 +5558,7 @@ function renderLaborV2() {
                 <td><input class="hub-input hub-num" type="number" min="0" step="1" value="${l.peak_only_hc || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="peak_only_hc" data-type="number" /></td>
                 <td><input class="hub-input hub-num" type="number" min="0" max="12" step="1" value="${l.peak_months || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="peak_months" data-type="number" /></td>
                 <td><input class="hub-input hub-num" type="number" min="0" max="100" step="1" value="${l.peak_markup_pct || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="peak_markup_pct" data-type="number" /></td>
-                <td class="hub-num" style="font-weight:600;" title="${bd.seasonal > 0 ? `Baseline ${calc.formatCurrency(bd.baseline)} + Seasonal ${calc.formatCurrency(bd.seasonal)}` : 'Baseline only'}">
+                <td class="hub-num u-semibold" title="${bd.seasonal > 0 ? `Baseline ${calc.formatCurrency(bd.baseline)} + Seasonal ${calc.formatCurrency(bd.seasonal)}` : 'Baseline only'}">
                   ${calc.formatCurrency(bd.total)}${bd.seasonal > 0 ? `<span style="display:block;font-size:10px;color:var(--ies-orange, #ff3a00);font-weight:600;">+${calc.formatCurrency(bd.seasonal, {compact:true})} peak</span>` : ''}
                 </td>
                 <td><button class="cm-delete-btn" data-action="delete-indirect" data-idx="${i}" aria-label="Delete">×</button></td>
@@ -5584,7 +5591,7 @@ function renderLaborV2() {
             </tfoot>` : ''}
         </table>
       </div>
-      <div style="margin-top:8px;"><button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="add-indirect">+ Add Indirect Role</button></div>
+      <div class="u-mt-2"><button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="add-indirect">+ Add Indirect Role</button></div>
     </div>
 
     ${renderMonthlyLaborViewCard()}
@@ -5736,7 +5743,7 @@ function renderMonthlyLaborViewCard() {
         <td><strong>${escapeHtml(labelFn ? labelFn(type) : type)}</strong></td>
         <td class="hub-num">${s.peakFte.toFixed(1)} <span style="color:var(--ies-gray-400);font-size:11px;">(${escapeHtml(s.peakMonthLabel)})</span></td>
         <td class="hub-num">${s.minFte.toFixed(1)} <span style="color:var(--ies-gray-400);font-size:11px;">(${escapeHtml(s.minMonthLabel)})</span></td>
-        <td class="hub-num" style="font-weight:700;">${s.peakCount}</td>
+        <td class="hub-num u-bold">${s.peakCount}</td>
         <td class="hub-num">${s.baselineCount}</td>
         <td class="hub-num">${s.seasonalCount > 0 ? `<span style="color:var(--ies-orange, #ff3a00);font-weight:600;">+${s.seasonalCount}</span>` : '—'}</td>
       </tr>
@@ -5778,7 +5785,7 @@ function renderMonthlyLaborViewCard() {
     <div class="hub-card cm-mlv-card" style="margin-top:28px;padding:20px;">
       <div class="cm-mlv-header">
         <div class="cm-mlv-header__title">
-          <h3 class="hub-section-heading" style="margin:0;">Monthly Labor View</h3>
+          <h3 class="hub-section-heading u-m0">Monthly Labor View</h3>
           <div class="hub-field__hint">
             Seasonality of direct labor — how peak staffing swings above the year-round baseline.
             Use this to size peak MHE rentals and temp indirect staffing. Fleet counts derive from <strong>${shiftsPerDay}</strong>-shift ops.
@@ -5851,7 +5858,7 @@ function renderMonthlyLaborViewCard() {
       <!-- MHE implications table -->
       <div style="margin-top:20px;">
         <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:6px;">MHE Fleet — implied by line-level assignments ÷ ${shiftsPerDay} shift${shiftsPerDay > 1 ? 's' : ''}</div>
-        <div class="hub-card" style="padding:0;overflow:hidden;">
+        <div class="hub-card cm-card-flush">
           <table class="hub-datatable hub-datatable--dense">
             <thead>
               <tr>
@@ -5871,9 +5878,9 @@ function renderMonthlyLaborViewCard() {
       </div>
 
       <!-- IT implications table -->
-      <div style="margin-top:16px;">
+      <div class="u-mt-4">
         <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:6px;">IT / Device Fleet</div>
-        <div class="hub-card" style="padding:0;overflow:hidden;">
+        <div class="hub-card cm-card-flush">
           <table class="hub-datatable hub-datatable--dense">
             <thead>
               <tr>
@@ -5894,7 +5901,7 @@ function renderMonthlyLaborViewCard() {
 
       <!-- Indirect implications -->
       ${indirect ? `
-      <div style="margin-top:16px;">
+      <div class="u-mt-4">
         <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:6px;">Indirect Staffing — scaled with direct peak vs avg</div>
         <div class="hub-card" style="padding:14px 16px;background:var(--ies-gray-50);">
           <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:12px;margin-bottom:10px;">
@@ -5917,7 +5924,7 @@ function renderMonthlyLaborViewCard() {
           ${indirect.byRole && indirect.byRole.some(r => r.seasonalHc > 0) ? `
             <details style="margin-top:6px;">
               <summary style="cursor:pointer;font-size:12px;color:var(--ies-gray-600);">Breakdown by role</summary>
-              <table class="hub-datatable hub-datatable--dense" style="margin-top:8px;">
+              <table class="hub-datatable hub-datatable--dense u-mt-2">
                 <thead><tr><th>Role</th><th class="hub-num">Peak HC</th><th class="hub-num">Avg HC</th><th class="hub-num">Δ Seasonal</th></tr></thead>
                 <tbody>
                   ${indirect.byRole.map(r => `
@@ -5960,7 +5967,7 @@ function renderLaborFactorsBanner(lc, shifts) {
   const util        = s.directUtilization  ?? 85;
   const chip = (label, value, suffix = '%') => `
     <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:999px;font-size:12px;line-height:1.2;">
-      <span style="color:var(--ies-gray-500);">${label}</span>
+      <span class="u-muted">${label}</span>
       <span style="font-weight:600;color:var(--ies-gray-800);">${value}${suffix}</span>
     </span>`;
   return `
@@ -5986,7 +5993,7 @@ function renderLaborFactorsBanner(lc, shifts) {
 
 function renderLaborKpiStripV2(lineCount, totalFtes, totalDirect, totalIndirect) {
   return `
-    <div class="hub-kpi-strip" style="margin-top:12px;">
+    <div class="hub-kpi-strip u-mt-3">
       <div class="hub-kpi-tile">
         <div class="hub-kpi-tile__label">Direct Lines</div>
         <div class="hub-kpi-tile__value">${lineCount}</div>
@@ -6020,7 +6027,7 @@ function renderLaborMasterPane(lines, opHrs, lc) {
       </div>
       <div class="hub-master-detail__master-body">
         ${lines.length === 0
-          ? `<div class="hub-master-detail__empty"><div style="font-size:28px;margin-bottom:8px;">👥</div>No direct labor lines yet.<br/><span style="color:var(--ies-gray-500);">Click <strong>+ Add</strong> to create one.</span></div>`
+          ? `<div class="hub-master-detail__empty"><div style="font-size:28px;margin-bottom:8px;">👥</div>No direct labor lines yet.<br/><span class="u-muted">Click <strong>+ Add</strong> to create one.</span></div>`
           : lines.map((l, i) => renderLaborMasterItem(l, i, opHrs, lc, totalDirectCost)).join('')}
       </div>
     </div>
@@ -6148,7 +6155,7 @@ function renderLaborDetailPane(lines, opHrs, lc) {
       <div class="hub-master-detail__detail-header">
         <h3 class="hub-master-detail__detail-title">${escapeHtml(l.activity_name || `Line ${i + 1}`)}</h3>
         <div style="display:flex;gap:6px;">
-          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="edit-labor-seasonality" data-idx="${i}" title="Edit monthly OT/absence seasonality">📊 Seasonality</button>
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="edit-labor-seasonality" data-idx="${i}" title="Edit monthly OT/absence seasonality">${icon('chart')} Seasonality</button>
           <button class="cm-delete-btn" data-action="delete-labor" data-idx="${i}" title="Delete this line">Delete</button>
         </div>
       </div>
@@ -6389,7 +6396,7 @@ function renderEquipment() {
 • Office — Build-out (120 sqft per indirect HC) + Break Room (15 sqft per total HC)
 • Security — 1 camera system per 30K sqft (for ≥50K sqft facilities) + Access Control
 • Conveyor — Belt conveyor linear ft (for ≥500K orders/yr)
-All lines are editable after generation.">${(model.equipmentLines || []).length > 0 ? '↻ Regenerate Equipment' : '⚡ Auto-Generate Equipment'}</button>
+All lines are editable after generation.">${(model.equipmentLines || []).length > 0 ? '↻ Regenerate Equipment' : icon('bolt') + ' Auto-Generate Equipment'}</button>
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="open-equipment-catalog" title="Browse the GXO equipment reference catalog (33 items with specs, pricing, vendors)">📖 Browse Catalog</button>
       <span class="cm-section-toolbar__hint">${(model.equipmentLines || []).length > 0 ? `<b>${(model.equipmentLines || []).length} rows auto-generated</b> — click Regenerate to replace. ` : ''}Covers MHE · IT · Racking · Dock · Charging · Office · Security · Conveyor. Hover for sizing rules.</span>
     </div>
@@ -6533,7 +6540,7 @@ Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th
             </tr>
           `;}).join('')}
           ${lineCount === 0 ? `
-            <tr><td colspan="12" style="text-align:center;color:var(--ies-gray-400);padding:24px;">No equipment lines yet. Click Auto-Generate Equipment or Add Equipment Line to start.</td></tr>
+            <tr><td colspan="12" class="cm-empty">No equipment lines yet. Click Auto-Generate Equipment or Add Equipment Line to start.</td></tr>
           ` : ''}
           ${breakdown.seasonal > 0 ? `
             <tr style="background:rgba(217,119,6,0.06);">
@@ -6548,14 +6555,14 @@ Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th
             </tr>
           ` : ''}
           <tr class="cm-total-row"><td colspan="10">Operating Cost${breakdown.seasonal > 0 ? ' (baseline + seasonal)' : ''}</td><td class="hub-num">${calc.formatCurrency(total)}</td><td></td></tr>
-          <tr><td colspan="10" style="font-weight:600; color: var(--ies-gray-500);">Capital Investment</td><td class="hub-num" style="font-weight:600;">${calc.formatCurrency(capital)}</td><td></td></tr>
+          <tr><td colspan="10" style="font-weight:600; color: var(--ies-gray-500);">Capital Investment</td><td class="hub-num u-semibold">${calc.formatCurrency(capital)}</td><td></td></tr>
           ${(() => {
             // EQ-3: surface IT vs non-IT capital split below the total so
             // buy-to-peak IT capex is distinct from MHE/racking purchases.
             const split = calc.equipmentCapitalByType(lines);
             if (split.total <= 0) return '';
             return `
-              <tr style="font-size:11px;color:var(--ies-gray-500);">
+              <tr class="u-cap u-muted">
                 <td colspan="10" style="text-align:right;padding-right:8px;">↳ IT capex / non-IT capex</td>
                 <td class="hub-num" title="EQ-3: IT equipment (RF terminals, printers, APs) capital split out from MHE/racking/conveyor capital. IT refresh cycles (3-7 yrs) differ from MHE life (10+ yrs), so deal modelers want this separated.">${calc.formatCurrency(split.itCapital, {compact:true})} / ${calc.formatCurrency(split.nonItCapital, {compact:true})}</td>
                 <td></td>
@@ -6597,17 +6604,17 @@ Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th
           <div style="border:2px solid ${roi.cheapest==='own'?'#10b981':'#e5e7eb'};border-radius:8px;padding:12px;background:${roi.cheapest==='own'?'rgba(16,185,129,0.05)':'#fff'};">
             <div style="font-size:11px;font-weight:700;color:#10b981;letter-spacing:0.5px;">OWN YEAR-ROUND</div>
             <div style="font-size:22px;font-weight:700;color:var(--ies-blue);margin-top:4px;">${calc.formatCurrency(roi.ownYearRound, {compact:true})}</div>
-            <div style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">Capital amortized + maintenance over ${contractYrs} yr</div>
+            <div class="u-cap u-muted u-mt-1">Capital amortized + maintenance over ${contractYrs} yr</div>
           </div>
-          <div style="border:2px solid ${roi.cheapest==='rent'?'#d97706':'#e5e7eb'};border-radius:8px;padding:12px;background:${roi.cheapest==='rent'?'rgba(217,119,6,0.05)':'#fff'};">
-            <div style="font-size:11px;font-weight:700;color:#d97706;letter-spacing:0.5px;">RENT YEAR-ROUND</div>
+          <div style="border:2px solid ${roi.cheapest==='rent'?'var(--c-warn-strong)':'#e5e7eb'};border-radius:8px;padding:12px;background:${roi.cheapest==='rent'?'rgba(217,119,6,0.05)':'#fff'};">
+            <div style="font-size:11px;font-weight:700;color:var(--c-warn-strong);letter-spacing:0.5px;">RENT YEAR-ROUND</div>
             <div style="font-size:22px;font-weight:700;color:var(--ies-blue);margin-top:4px;">${calc.formatCurrency(roi.rentYearRound, {compact:true})}</div>
-            <div style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">Monthly rate × 12 × qty × ${contractYrs} yr</div>
+            <div class="u-cap u-muted u-mt-1">Monthly rate × 12 × qty × ${contractYrs} yr</div>
           </div>
           <div style="border:2px solid ${roi.cheapest==='buy_to_peak'?'#0ea5e9':'#e5e7eb'};border-radius:8px;padding:12px;background:${roi.cheapest==='buy_to_peak'?'rgba(14,165,233,0.05)':'#fff'};">
             <div style="font-size:11px;font-weight:700;color:#0ea5e9;letter-spacing:0.5px;">BUY-TO-PEAK ✓</div>
             <div style="font-size:22px;font-weight:700;color:var(--ies-blue);margin-top:4px;">${calc.formatCurrency(roi.buyToPeak, {compact:true})}</div>
-            <div style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">Own steady-state + rent peak overflow</div>
+            <div class="u-cap u-muted u-mt-1">Own steady-state + rent peak overflow</div>
           </div>
         </div>
 
@@ -6617,7 +6624,7 @@ Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th
           <table class="hub-datatable hub-datatable--dense" style="width:100%;font-size:12px;">
             <thead>
               <tr>
-                <th style="text-align:left;">Line</th>
+                <th class="u-left">Line</th>
                 <th class="hub-num">Qty</th>
                 <th class="hub-num" title="Per-unit cost of owning (capital ÷ amort_yrs + maintenance × 12)">Annual Own / Unit</th>
                 <th class="hub-num" title="Monthly rental rate per unit (from $/Mo column or 1.5%/mo of acq cost as fallback)">Rent $/Mo / Unit</th>
@@ -6689,7 +6696,7 @@ function renderCapitalPlanCard(lines) {
     const loadedTip = `Base ${fmtC(bd.baseUnit)} + cont ${fmtC(bd.contingency)} + frt ${fmtC(bd.freight)} + tax ${fmtC(bd.tax)} + allow ${fmtC(bd.allowances)} = ${fmtC(bd.loadedUnit)}/unit × ${bd.qty}`;
     return `
       <tr>
-        <td>${escapeAttr(l.equipment_name || '(unnamed)')}${isTi ? ' <span style="font-size:10px;color:#d97706;font-weight:700;">TI</span>' : ''}</td>
+        <td>${escapeAttr(l.equipment_name || '(unnamed)')}${isTi ? ' <span style="font-size:10px;color:var(--c-warn-strong);font-weight:700;">TI</span>' : ''}</td>
         <td class="hub-num"><input class="hub-input hub-num" type="number" min="0" step="0.5" value="${l.contingency_pct ?? 0}" data-array="equipmentLines" data-idx="${i}" data-field="contingency_pct" data-type="number" /></td>
         <td class="hub-num"><input class="hub-input hub-num" type="number" min="0" step="0.5" value="${l.freight_pct ?? 0}" data-array="equipmentLines" data-idx="${i}" data-field="freight_pct" data-type="number" /></td>
         <td class="hub-num"><input class="hub-input hub-num" type="number" min="0" step="0.5" value="${l.tax_pct ?? 0}" data-array="equipmentLines" data-idx="${i}" data-field="tax_pct" data-type="number" /></td>
@@ -6714,7 +6721,7 @@ function renderCapitalPlanCard(lines) {
   const yearEnds = [];
   for (let y = 1; y <= contractYrs; y++) {
     const m = Math.min(y * 12 - 1, cap.series.length - 1);
-    yearEnds.push(`<div style="text-align:center;"><div style="font-size:10px;color:var(--ies-gray-400);font-weight:700;">EOY ${y}</div><div style="font-size:13px;font-weight:700;color:var(--ies-blue);">${fmtC(cap.series[m].book_value)}</div></div>`);
+    yearEnds.push(`<div class="u-center"><div style="font-size:10px;color:var(--ies-gray-400);font-weight:700;">EOY ${y}</div><div style="font-size:13px;font-weight:700;color:var(--ies-blue);">${fmtC(cap.series[m].book_value)}</div></div>`);
   }
 
   return `
@@ -6725,13 +6732,13 @@ function renderCapitalPlanCard(lines) {
           ${fmtC(cap.totalCapex)} loaded capex · ${fmtC(cap.series[0]?.depreciation || 0)}/mo depreciation · ${fmtC(cap.totalLeaseOpexMo)}/mo operating leases
         </span>
       </summary>
-      <div style="margin-top:12px;">
+      <div class="u-mt-3">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);margin-bottom:6px;">Capital Loading (capital + TI lines)</div>
         <div class="cm-table-scroll">
           <table class="hub-datatable hub-datatable--dense" style="width:100%;font-size:12px;">
             <thead>
               <tr>
-                <th style="text-align:left;">Line</th>
+                <th class="u-left">Line</th>
                 <th class="hub-num" title="Contingency % of base unit cost">Cont %</th>
                 <th class="hub-num" title="Freight % of base unit cost">Frt %</th>
                 <th class="hub-num" title="Sales/use tax % of base unit cost">Tax %</th>
@@ -6749,7 +6756,7 @@ function renderCapitalPlanCard(lines) {
           <div>
             <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);margin-bottom:6px;">Capex by Category (loaded)</div>
             <table class="hub-datatable hub-datatable--dense" style="width:100%;font-size:12px;">
-              <thead><tr><th style="text-align:left;">Category</th><th class="hub-num">Capex</th><th class="hub-num">Share</th></tr></thead>
+              <thead><tr><th class="u-left">Category</th><th class="hub-num">Capex</th><th class="hub-num">Share</th></tr></thead>
               <tbody>${catRows || '<tr><td colspan="3" style="color:var(--ies-gray-400);">No capital purchases — all lines lease/service/TI.</td></tr>'}</tbody>
             </table>
           </div>
@@ -6928,7 +6935,7 @@ function renderOverhead() {
     </div>
 
     <div class="cm-section-toolbar">
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-overhead">${(model.overheadLines || []).length > 0 ? '↻ Regenerate Overhead' : '⚡ Auto-Generate Overhead'}</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-overhead">${(model.overheadLines || []).length > 0 ? '↻ Regenerate Overhead' : icon('bolt') + ' Auto-Generate Overhead'}</button>
       <span class="cm-section-toolbar__hint">${(model.overheadLines || []).length > 0 ? `<b>${(model.overheadLines || []).length} rows auto-generated</b> — click Regenerate to replace. ` : ''}One-click seed from facility sqft + headcount. All rows editable.</span>
     </div>
 
@@ -6961,7 +6968,7 @@ function renderOverhead() {
             </tr>
           `).join('')}
           ${lines.length === 0 ? `
-            <tr><td colspan="6" style="text-align:center;color:var(--ies-gray-400);padding:24px;">No overhead lines yet. Click Auto-Generate or Add Overhead Line.</td></tr>
+            <tr><td colspan="6" class="cm-empty">No overhead lines yet. Click Auto-Generate or Add Overhead Line.</td></tr>
           ` : ''}
           <tr class="cm-total-row"><td colspan="4">Total Overhead</td><td class="hub-num">${calc.formatCurrency(total)}</td><td></td></tr>
         </tbody>
@@ -7003,7 +7010,7 @@ function renderVas() {
             </tr>
           `).join('')}
           ${lines.length === 0 ? `
-            <tr><td colspan="5" style="text-align:center;color:var(--ies-gray-400);padding:24px;">No VAS lines yet. Click Add VAS Line to start.</td></tr>
+            <tr><td colspan="5" class="cm-empty">No VAS lines yet. Click Add VAS Line to start.</td></tr>
           ` : ''}
           <tr class="cm-total-row"><td colspan="3">Total VAS</td><td class="hub-num">${calc.formatCurrency(total)}</td><td></td></tr>
         </tbody>
@@ -7212,7 +7219,7 @@ function renderStartup() {
     </div>
 
     <div class="cm-section-toolbar">
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-startup">${(model.startupLines || []).length > 0 ? '↻ Regenerate Start-Up Costs' : '⚡ Auto-Generate Start-Up Costs'}</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-startup">${(model.startupLines || []).length > 0 ? '↻ Regenerate Start-Up Costs' : icon('bolt') + ' Auto-Generate Start-Up Costs'}</button>
       <span class="cm-section-toolbar__hint">${(model.startupLines || []).length > 0 ? `<b>${(model.startupLines || []).length} rows auto-generated</b> — click Regenerate to replace. ` : ''}Generates typical 3PL implementation line items (PM, IT, training, travel).</span>
     </div>
 
@@ -7252,7 +7259,7 @@ function renderStartup() {
             `;
           }).join('')}
           ${lines.length === 0 ? `
-            <tr><td colspan="5" style="text-align:center;color:var(--ies-gray-400);padding:24px;">No capital line items yet. Click Auto-Generate or Add Capital Item.</td></tr>
+            <tr><td colspan="5" class="cm-empty">No capital line items yet. Click Auto-Generate or Add Capital Item.</td></tr>
           ` : ''}
           <tr class="cm-total-row"><td>Total</td><td class="hub-num">${calc.formatCurrency(totalCapital)}</td><td class="hub-num">${calc.formatCurrency(totalAmort)}</td><td class="hub-num">${calc.formatCurrency(totalAmort / 12)}</td><td></td></tr>
         </tbody>
@@ -7335,7 +7342,7 @@ function renderPricingBuckets() {
         </div>
       </div>
 
-      <div class="hub-card" style="padding:0;overflow:hidden;">
+      <div class="hub-card cm-card-flush">
         <table class="hub-datatable">
           <thead>
             <tr>
@@ -7371,7 +7378,7 @@ function renderPricingBuckets() {
                 <td>
                   <input class="hub-input" value="${escapeAttr(b.description || '')}" data-array="pricingBuckets" data-idx="${i}" data-field="description" placeholder="optional note" />
                 </td>
-                <td style="text-align:center;">
+                <td class="u-center">
                   <button class="cm-delete-btn" data-action="delete-bucket" data-idx="${i}" aria-label="Delete bucket" title="Delete bucket">×</button>
                 </td>
               </tr>
@@ -7380,7 +7387,7 @@ function renderPricingBuckets() {
         </table>
       </div>
 
-      <div style="margin-top:14px;padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius: 10px;font-size:12px;color:#1e3a8a;line-height:1.5;">
+      <div style="margin-top:14px;padding:12px 14px;background:var(--c-info-soft);border:1px solid var(--c-info-border);border-radius: 10px;font-size:12px;color:var(--c-info-deep);line-height:1.5;">
         <strong>What happens next:</strong> when you build Labor, Equipment, Overhead, VAS, or Startup lines, each line picks one of these buckets to route its cost into. Buckets with no assigned lines are allowed — they'll just show $0 in the Pricing section. Missing a bucket? Add it here, then go back and re-assign the line.
       </div>
     `}
@@ -7527,7 +7534,7 @@ function renderPricing() {
         <div class="cm-section-title">Pricing Schedule <span class="cm-contract-type-chip cm-contract-${contractType}">${contractTypeLabel}</span></div>
         <div class="cm-section-desc">${contractTypeDesc}</div>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div class="u-flex">
         <button class="hub-btn" data-cm-action="pricing-compare-scenarios"
                 title="Side-by-side rate-card comparison — pick another scenario on this deal and see Recommended/Override/Effective rates aligned per bucket with Δ% deltas. Same engine as the Summary Compare modal but auto-scoped to pricing."
                 ${(dealScenarios||[]).length < 2 ? 'disabled' : ''}>⇄ Compare Pricing</button>
@@ -7678,7 +7685,7 @@ function renderPricing() {
           return `
             <tr${variancePerBucket.isOverridden ? ' class="cm-row-overridden"' : ''}>
               <td>
-                <div style="font-weight:600;">${b.name}</div>
+                <div class="u-semibold">${b.name}</div>
                 ${b._rateSource === 'override' ? `
                   <div class="cm-row-override-chip">OVERRIDE</div>
                   ${reasonValue ? `<div class="cm-row-override-reason" title="Override reason">${escapeHtml(reasonValue)}</div>` : ''}
@@ -7687,7 +7694,7 @@ function renderPricing() {
               <td><span class="hub-badge hub-badge-${b.type === 'fixed' ? 'info' : 'success'}">${b.type}</span></td>
               <td class="cm-num">${calc.formatCurrency(cost)}</td>
               <td class="cm-num">${hasVol ? (b.type === 'fixed' ? '12 mo' : vol.toLocaleString() + ' ' + (b.uom || '')) : '—'}</td>
-              <td class="cm-num" style="color:var(--ies-gray-600);">${recDisplay}<span class="cm-uom-tick">${uomSuffix}</span></td>
+              <td class="cm-num u-dim">${recDisplay}<span class="cm-uom-tick">${uomSuffix}</span></td>
               <td class="cm-num">
                 <input type="number" step="0.01" min="0"
                   class="hub-input cm-override-input"
@@ -7716,17 +7723,17 @@ function renderPricing() {
                 const pctStr = `${variancePerBucket.deltaPct >= 0 ? '+' : ''}${(variancePerBucket.deltaPct * 100).toFixed(1)}%`;
                 const absStr = `${variancePerBucket.deltaAnnual >= 0 ? '+' : ''}${calc.formatCurrency(variancePerBucket.deltaAnnual, { compact: true })}/yr`;
                 if (_varSep) {
-                  return `<td class="cm-num ${vClass}" style="font-weight:600;">${pctStr}</td>` +
-                         `<td class="cm-num ${vClass}" style="font-weight:600;">${absStr}</td>`;
+                  return `<td class="cm-num ${vClass} u-semibold">${pctStr}</td>` +
+                         `<td class="cm-num ${vClass} u-semibold">${absStr}</td>`;
                 }
                 if (_varMode === 'pct') {
-                  return `<td class="cm-num ${vClass}" style="font-weight:600;" title="${absStr}">${pctStr}</td>`;
+                  return `<td class="cm-num ${vClass} u-semibold" title="${absStr}">${pctStr}</td>`;
                 }
                 if (_varMode === 'abs') {
-                  return `<td class="cm-num ${vClass}" style="font-weight:600;" title="${pctStr}">${absStr}</td>`;
+                  return `<td class="cm-num ${vClass} u-semibold" title="${pctStr}">${absStr}</td>`;
                 }
                 // 'both' (stacked, current default)
-                return `<td class="cm-num ${vClass}" style="font-weight:600;">${pctStr}<div class="cm-variance-abs">${absStr}</div></td>`;
+                return `<td class="cm-num ${vClass} u-semibold">${pctStr}<div class="cm-variance-abs">${absStr}</div></td>`;
               })()}
               <td class="cm-num">
                 ${variancePerBucket.isOverridden
@@ -7741,8 +7748,8 @@ function renderPricing() {
           <td colspan="2">Total</td>
           <td class="cm-num">${calc.formatCurrency(totalCost)}</td>
           <td class="cm-num"></td>
-          <td class="cm-num" style="color:var(--ies-gray-600);">${calc.formatCurrency(impact.totalRecommendedRevenue)}/yr</td>
-          <td class="cm-num" style="font-weight:700;">${calc.formatCurrency(impact.totalEffectiveRevenue)}/yr</td>
+          <td class="cm-num u-dim">${calc.formatCurrency(impact.totalRecommendedRevenue)}/yr</td>
+          <td class="cm-num u-bold">${calc.formatCurrency(impact.totalEffectiveRevenue)}/yr</td>
           ${(() => {
             // CM-VAR-1 total row: aggregate % is delta vs recommended-revenue.
             const tDelta = impact.totalOverrideDelta;
@@ -7752,16 +7759,16 @@ function renderPricing() {
             const tPctStr = tDelta === 0 ? '—' : `${totPct >= 0 ? '+' : ''}${(totPct * 100).toFixed(1)}%`;
             const tAbsStr = tDelta === 0 ? '—' : `${tDelta >= 0 ? '+' : ''}${calc.formatCurrency(tDelta, { compact: true })}/yr`;
             if (_varSep) {
-              return `<td class="cm-num ${tCls}" style="font-weight:700;">${tPctStr}</td>` +
-                     `<td class="cm-num ${tCls}" style="font-weight:700;">${tAbsStr}</td>`;
+              return `<td class="cm-num ${tCls} u-bold">${tPctStr}</td>` +
+                     `<td class="cm-num ${tCls} u-bold">${tAbsStr}</td>`;
             }
             if (_varMode === 'pct') {
-              return `<td class="cm-num ${tCls}" style="font-weight:700;" title="${tAbsStr}">${tPctStr}</td>`;
+              return `<td class="cm-num ${tCls} u-bold" title="${tAbsStr}">${tPctStr}</td>`;
             }
             if (_varMode === 'abs') {
-              return `<td class="cm-num ${tCls}" style="font-weight:700;" title="${tPctStr}">${tAbsStr}</td>`;
+              return `<td class="cm-num ${tCls} u-bold" title="${tPctStr}">${tAbsStr}</td>`;
             }
-            return `<td class="cm-num ${tCls}" style="font-weight:700;">${tDelta === 0 ? '—' : tPctStr + '<div class="cm-variance-abs">' + tAbsStr + '</div>'}</td>`;
+            return `<td class="cm-num ${tCls} u-bold">${tDelta === 0 ? '—' : tPctStr + '<div class="cm-variance-abs">' + tAbsStr + '</div>'}</td>`;
           })()}
           <td></td>
         </tr>
@@ -7784,11 +7791,11 @@ function renderPricing() {
         totRev  += stack.totalRevenue;
         return `
           <tr>
-            <td style="font-weight:600;">${b.name}</td>
+            <td class="u-semibold">${b.name}</td>
             <td class="cm-num">${calc.formatCurrency(stack.cost)}</td>
             <td class="cm-num cm-stack-ga">+${calc.formatCurrency(stack.gaComponent)}</td>
             <td class="cm-num cm-stack-mgmt">+${calc.formatCurrency(stack.mgmtComponent)}</td>
-            <td class="cm-num" style="font-weight:700;">${calc.formatCurrency(stack.totalRevenue)}</td>
+            <td class="cm-num u-bold">${calc.formatCurrency(stack.totalRevenue)}</td>
           </tr>
         `;
       }).join('');
@@ -7815,7 +7822,7 @@ function renderPricing() {
                 <td class="cm-num">${calc.formatCurrency(totalCost)}</td>
                 <td class="cm-num cm-stack-ga">+${calc.formatCurrency(totGa)}</td>
                 <td class="cm-num cm-stack-mgmt">+${calc.formatCurrency(totMgmt)}</td>
-                <td class="cm-num" style="font-weight:700;">${calc.formatCurrency(totRev)}</td>
+                <td class="cm-num u-bold">${calc.formatCurrency(totRev)}</td>
               </tr>
             </tbody>
           </table>
@@ -7918,22 +7925,22 @@ function renderPricing() {
       .cm-contract-type-chip.cm-contract-fixed_variable { background:rgba(0,71,171,0.1); color:var(--ies-blue); }
       .cm-contract-type-chip.cm-contract-open_book { background:rgba(107,76,168,0.12); color:#6d4ca8; }
       .cm-contract-type-chip.cm-contract-unit_rate { background:rgba(32,201,151,0.12); color:#0d9668; }
-      .cm-contract-type-chip.cm-contract-split_month { background:rgba(245,158,11,0.14); color:#b45309; }
+      .cm-contract-type-chip.cm-contract-split_month { background:rgba(245,158,11,0.14); color:var(--c-warn-deep); }
       /* Split-Month controls — visible on the Financial section only when the
          contract_type is split_month. Laid out as a 3-field grid with a
          derived-weighted-DSO line beneath. */
-      .cm-split-month-controls { padding:14px 16px; margin-top:4px; border:1px solid rgba(245,158,11,0.25); border-left:3px solid #b45309; border-radius: 10px; background:rgba(245,158,11,0.03); }
+      .cm-split-month-controls { padding:14px 16px; margin-top:4px; border:1px solid rgba(245,158,11,0.25); border-left:3px solid var(--c-warn-deep); border-radius: 10px; background:rgba(245,158,11,0.03); }
       .cm-split-month-header { display:flex; flex-direction:column; gap:2px; margin-bottom:10px; }
-      .cm-split-month-title { font-size:13px; font-weight:700; color:#b45309; letter-spacing:0.2px; }
+      .cm-split-month-title { font-size:13px; font-weight:700; color:var(--c-warn-deep); letter-spacing:0.2px; }
       .cm-split-month-subtitle { font-size:11px; color:var(--ies-gray-500); font-weight:400; line-height:1.4; }
       .cm-split-month-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
       .cm-split-month-weighted { margin-top:8px; padding:8px 10px; font-size:12px; color:var(--ies-gray-700); background:#fff; border-radius:6px; border:1px dashed rgba(245,158,11,0.3); }
-      .cm-split-month-weighted strong { color:#b45309; font-weight:700; }
+      .cm-split-month-weighted strong { color:var(--c-warn-deep); font-weight:700; }
       /* Planning Ratios audit banner (2026-04-21 PM) — surfaces stale catalog
          rules at the top of the section with two bulk-review actions. */
-      .cm-audit-banner { display:flex; gap:14px; align-items:center; padding:10px 14px; margin-top:10px; background:#fef3c7; border-left:3px solid #d97706; border-radius:6px; }
+      .cm-audit-banner { display:flex; gap:14px; align-items:center; padding:10px 14px; margin-top:10px; background:var(--c-warn-bg); border-left:3px solid var(--c-warn-strong); border-radius:6px; }
       .cm-audit-banner-label { flex:1; font-size:12px; color:#78350f; line-height:1.4; }
-      .cm-audit-banner-label strong { color:#92400e; }
+      .cm-audit-banner-label strong { color:var(--c-warn-ink); }
       .cm-audit-banner-actions { display:flex; gap:6px; flex-shrink:0; }
       .hub-btn-sm { padding:4px 10px; font-size:11px; }
       /* Override Implications Panel */
@@ -8195,7 +8202,7 @@ function renderSummary() {
             ${unassignedCount} cost line${unassignedCount === 1 ? '' : 's'} ${unassignedCount === 1 ? 'is' : 'are'} missing a pricing bucket. New lines auto-assign a bucket now; fix older lines in the Pricing section.
           </div>
         </div>
-        <button class="hub-btn" data-cm-action="go-pricing" style="white-space:nowrap;">Fix in Pricing →</button>
+        <button class="hub-btn u-nowrap" data-cm-action="go-pricing">Fix in Pricing →</button>
       </div>
     </div>
   ` : '';
@@ -8208,7 +8215,7 @@ function renderSummary() {
         <div class="cm-section-title">Summary Dashboard</div>
         <div class="cm-section-desc">Cost breakdown, financial metrics, multi-year P&L, and sensitivity analysis.</div>
       </div>
-      <div style="display:flex;gap:8px;">
+      <div class="u-flex">
         <button class="hub-btn" data-cm-action="summary-compare-scenarios" title="Side-by-side compare 2–4 scenarios on this deal — KPIs, pricing buckets, inputs" ${dealScenarios.length < 2 ? 'disabled' : ''}>
           ⇄ Compare Scenarios
         </button>
@@ -8264,8 +8271,8 @@ function renderSummary() {
     <!-- Design Heuristics — moved up so they're the FIRST thing after KPIs (per v2 pattern) -->
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div class="text-subtitle" style="margin:0;">Design Heuristics & Benchmarks</div>
-        <span style="font-size:11px;color:var(--ies-gray-400);">Pass/warn checks against industry norms</span>
+        <div class="text-subtitle u-m0">Design Heuristics & Benchmarks</div>
+        <span class="u-cap u-faint">Pass/warn checks against industry norms</span>
       </div>
       <div id="cm-heuristics-panel" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
         ${renderHeuristicsPanel(model, summary, calc)}
@@ -8285,7 +8292,7 @@ function renderSummary() {
       <h3 class="hub-section-heading">Cost Breakdown</h3>
       <div class="cm-stacked-bar">
         <div style="width:${pcts.labor}%; background: var(--ies-blue, #0047AB);" title="Labor ${pcts.labor}%"></div>
-        <div style="width:${pcts.facility}%; background: #2563eb;" title="Facility ${pcts.facility}%"></div>
+        <div style="width:${pcts.facility}%; background: var(--c-info);" title="Facility ${pcts.facility}%"></div>
         <div style="width:${pcts.equipment}%; background: #60a5fa;" title="Equipment ${pcts.equipment}%"></div>
         <div style="width:${pcts.overhead}%; background: #94a3b8;" title="Overhead ${pcts.overhead}%"></div>
         <div style="width:${pcts.vas}%; background: #cbd5e1;" title="VAS ${pcts.vas}%"></div>
@@ -8375,35 +8382,35 @@ function renderSummary() {
             </tr>
           </thead>
           <tbody>
-            <tr><td style="font-weight:600;">Orders</td>${projections.map(p => `<td class="hub-num" data-cm-cell="orders" data-cm-year="${p.year}" title="Click for formula details">${Math.round(p.orders).toLocaleString()}</td>`).join('')}</tr>
+            <tr><td class="u-semibold">Orders</td>${projections.map(p => `<td class="hub-num" data-cm-cell="orders" data-cm-year="${p.year}" title="Click for formula details">${Math.round(p.orders).toLocaleString()}</td>`).join('')}</tr>
             <tr class="cm-pnl-row-revenue"><td style="font-weight:700; color:var(--ies-blue);">Revenue</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:var(--ies-blue);" data-cm-cell="revenue" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.revenue, {compact: true})}</td>`).join('')}</tr>
 
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Labor</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="labor" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.labor, {compact: true})}</td>`).join('')}</tr>
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Facility</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="facility" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.facility, {compact: true})}</td>`).join('')}</tr>
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Equipment</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="equipment" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.equipment, {compact: true})}</td>`).join('')}</tr>
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">VAS (Pass-through)</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="vas" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.vas, {compact: true})}</td>`).join('')}</tr>
-            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:600;">Total COGS</td>${projections.map(p => `<td class="hub-num" style="font-weight:600;" data-cm-cell="cogs" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.cogs ?? (p.labor + p.facility + p.equipment + p.vas + (p.overhead || 0)), {compact: true})}</td>`).join('')}</tr>
-            <tr class="cm-pnl-row-total"><td style="font-weight:700;">Gross Profit</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.grossProfit >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};" data-cm-cell="grossProfit" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.grossProfit, {compact: true})}</td>`).join('')}</tr>
+            <tr><td class="cm-sub-row">Labor</td>${projections.map(p => `<td class="hub-num u-dim" data-cm-cell="labor" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.labor, {compact: true})}</td>`).join('')}</tr>
+            <tr><td class="cm-sub-row">Facility</td>${projections.map(p => `<td class="hub-num u-dim" data-cm-cell="facility" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.facility, {compact: true})}</td>`).join('')}</tr>
+            <tr><td class="cm-sub-row">Equipment</td>${projections.map(p => `<td class="hub-num u-dim" data-cm-cell="equipment" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.equipment, {compact: true})}</td>`).join('')}</tr>
+            <tr><td class="cm-sub-row">VAS (Pass-through)</td>${projections.map(p => `<td class="hub-num u-dim" data-cm-cell="vas" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.vas, {compact: true})}</td>`).join('')}</tr>
+            <tr class="cm-rule-dashed"><td class="u-semibold">Total COGS</td>${projections.map(p => `<td class="hub-num u-semibold" data-cm-cell="cogs" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.cogs ?? (p.labor + p.facility + p.equipment + p.vas + (p.overhead || 0)), {compact: true})}</td>`).join('')}</tr>
+            <tr class="cm-pnl-row-total"><td class="u-bold">Gross Profit</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.grossProfit >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};" data-cm-cell="grossProfit" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.grossProfit, {compact: true})}</td>`).join('')}</tr>
 
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Overhead (SG&A)</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="sga" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.sga ?? p.overhead, {compact: true})}</td>`).join('')}</tr>
-            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">EBITDA</td>${projections.map(p => `<td class="hub-num" style="font-weight:700;" data-cm-cell="ebitda" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.ebitda, {compact: true})}</td>`).join('')}</tr>
+            <tr><td class="cm-sub-row">Overhead (SG&A)</td>${projections.map(p => `<td class="hub-num u-dim" data-cm-cell="sga" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.sga ?? p.overhead, {compact: true})}</td>`).join('')}</tr>
+            <tr class="cm-rule-dashed"><td class="u-bold">EBITDA</td>${projections.map(p => `<td class="hub-num u-bold" data-cm-cell="ebitda" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.ebitda, {compact: true})}</td>`).join('')}</tr>
             <tr><td style="padding-left:16px; color:var(--ies-gray-500); font-size:12px; font-style:italic;">EBITDA Margin %</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-500); font-size:12px;" title="EBITDA / Revenue">${p.revenue > 0 ? calc.formatPct((p.ebitda / p.revenue) * 100) : '—'}</td>`).join('')}</tr>
 
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Depreciation &amp; Amort.</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="depreciation" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.depreciation ?? p.startup, {compact: true})}</td>`).join('')}</tr>
-            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">EBIT</td>${projections.map(p => `<td class="hub-num" style="font-weight:700;" data-cm-cell="ebit" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.ebit, {compact: true})}</td>`).join('')}</tr>
+            <tr><td class="cm-sub-row">Depreciation &amp; Amort.</td>${projections.map(p => `<td class="hub-num u-dim" data-cm-cell="depreciation" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.depreciation ?? p.startup, {compact: true})}</td>`).join('')}</tr>
+            <tr class="cm-rule-dashed"><td class="u-bold">EBIT</td>${projections.map(p => `<td class="hub-num u-bold" data-cm-cell="ebit" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.ebit, {compact: true})}</td>`).join('')}</tr>
             <tr><td style="padding-left:16px; color:var(--ies-gray-500); font-size:12px; font-style:italic;">EBIT Margin %</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-500); font-size:12px;" title="EBIT / Revenue">${p.revenue > 0 ? calc.formatPct((p.ebit / p.revenue) * 100) : '—'}</td>`).join('')}</tr>
 
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Taxes</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="taxes" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.taxes || 0, {compact: true})}</td>`).join('')}</tr>
-            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">Net Income</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.netIncome >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};" data-cm-cell="netIncome" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.netIncome, {compact: true})}</td>`).join('')}</tr>
+            <tr><td class="cm-sub-row">Taxes</td>${projections.map(p => `<td class="hub-num u-dim" data-cm-cell="taxes" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.taxes || 0, {compact: true})}</td>`).join('')}</tr>
+            <tr class="cm-rule-dashed"><td class="u-bold">Net Income</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.netIncome >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};" data-cm-cell="netIncome" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.netIncome, {compact: true})}</td>`).join('')}</tr>
 
-            <tr class="cm-pnl-row-capex"><td style="padding-left:16px; color:var(--ies-gray-600);">CapEx</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="capex" data-cm-year="${p.year}" title="Click for formula details">${p.capex > 0 ? '(' + calc.formatCurrency(p.capex, {compact: true}) + ')' : '—'}</td>`).join('')}</tr>
-            <tr><td style="padding-left:16px; color:var(--ies-gray-600);">Δ Working Capital</td>${projections.map(p => `<td class="hub-num" style="color:var(--ies-gray-600);" data-cm-cell="workingCapitalChange" data-cm-year="${p.year}" title="Click for formula details">${p.workingCapitalChange ? ((p.workingCapitalChange > 0 ? '(' : '') + calc.formatCurrency(Math.abs(p.workingCapitalChange), {compact: true}) + (p.workingCapitalChange > 0 ? ')' : '')) : '—'}</td>`).join('')}</tr>
-            <tr style="border-top: 1px dashed var(--ies-gray-200);"><td style="font-weight:700;">Free Cash Flow</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.freeCashFlow >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};" data-cm-cell="freeCashFlow" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.freeCashFlow, {compact: true})}</td>`).join('')}</tr>
+            <tr class="cm-pnl-row-capex"><td class="cm-sub-row">CapEx</td>${projections.map(p => `<td class="hub-num u-dim" data-cm-cell="capex" data-cm-year="${p.year}" title="Click for formula details">${p.capex > 0 ? '(' + calc.formatCurrency(p.capex, {compact: true}) + ')' : '—'}</td>`).join('')}</tr>
+            <tr><td class="cm-sub-row">Δ Working Capital</td>${projections.map(p => `<td class="hub-num u-dim" data-cm-cell="workingCapitalChange" data-cm-year="${p.year}" title="Click for formula details">${p.workingCapitalChange ? ((p.workingCapitalChange > 0 ? '(' : '') + calc.formatCurrency(Math.abs(p.workingCapitalChange), {compact: true}) + (p.workingCapitalChange > 0 ? ')' : '')) : '—'}</td>`).join('')}</tr>
+            <tr class="cm-rule-dashed"><td class="u-bold">Free Cash Flow</td>${projections.map(p => `<td class="hub-num" style="font-weight:700; color:${p.freeCashFlow >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'};" data-cm-cell="freeCashFlow" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.freeCashFlow, {compact: true})}</td>`).join('')}</tr>
             <tr><td style="color:var(--ies-gray-500); font-size:12px;">Cumulative FCF</td>${projections.map(p => `<td class="hub-num" style="color:${(p.cumFcf||0) >= 0 ? 'var(--ies-green)' : 'var(--ies-red)'}; font-size:12px;" data-cm-cell="cumFcf" data-cm-year="${p.year}" title="Click for formula details">${calc.formatCurrency(p.cumFcf || 0, {compact: true})}</td>`).join('')}</tr>
           </tbody>
         </table>
       </div>
-      <div class="hub-field__hint mt-2" style="font-size:11px; color:var(--ies-gray-500);">
+      <div class="hub-field__hint mt-2 u-cap u-muted">
         Stack: <strong>Revenue − COGS = GP − SG&amp;A = EBITDA − D&amp;A = EBIT − Tax = Net Income.</strong>
         CapEx + ΔWorking Capital bridge NI to Free Cash Flow. Cum FCF turns positive at payback.
       </div>
@@ -8425,7 +8432,7 @@ function renderSummary() {
           <tbody>
             ${sensi.map(driver => `
               <tr>
-                <td style="font-weight:600;">${driver.label}</td>
+                <td class="u-semibold">${driver.label}</td>
                 ${driver.adjustments.map(a => {
                   // ΔGP: positive = good (green) for the 3PL. Previously
                   // we showed ΔTotalCost which read backwards on Volume.
@@ -9713,8 +9720,8 @@ async function openCompareModal(opts = {}) {
     <div style="background:white;border-radius:10px;padding:24px;width:1180px;max-width:95vw;max-height:92vh;overflow:auto;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
         <div>
-          <h3 style="margin:0;">Compare Scenarios</h3>
-          <p class="cm-subtle" style="margin-top:4px;">Select 2–4 scenarios. The deal’s baseline anchors the comparison; other columns show Δ% vs. baseline.</p>
+          <h3 class="u-m0">Compare Scenarios</h3>
+          <p class="cm-subtle u-mt-1">Select 2–4 scenarios. The deal’s baseline anchors the comparison; other columns show Δ% vs. baseline.</p>
         </div>
         <button class="hub-btn" data-close>×</button>
       </div>
@@ -9723,7 +9730,7 @@ async function openCompareModal(opts = {}) {
           <label style="display:flex;align-items:center;gap:8px;padding:4px 0;">
             <input type="checkbox" data-compare-id="${sc.id}" data-project-id="${sc.project_id}" ${sc.is_baseline ? 'checked' : ''} />
             <span style="flex:1;font-size:13px;">${sc.scenario_label}${sc.is_baseline ? ' ⭐' : ''}</span>
-            <span class="hub-status-chip" style="background:${STATUS_COLORS[sc.status] || '#6b7280'};color:white;font-size:10px;">${sc.status}</span>
+            <span class="hub-status-chip" style="background:${STATUS_COLORS[sc.status] || 'var(--c-muted)'};color:white;font-size:10px;">${sc.status}</span>
           </label>
         `).join('')}
       </div>
@@ -9731,7 +9738,7 @@ async function openCompareModal(opts = {}) {
         <button class="hub-btn" data-close>Cancel</button>
         <button class="hub-btn hub-btn-primary" data-run-compare>Compare →</button>
       </div>
-      <div id="cm-compare-result" style="margin-top:16px;"></div>
+      <div id="cm-compare-result" class="u-mt-4"></div>
     </div>
   `;
   overlay.dataset.hubOverlay = '1'; // P3-4: swept by the router on navigation (orphaned-overlay class)
@@ -9903,11 +9910,11 @@ async function openCompareModal(opts = {}) {
     const colWidthPct = Math.floor(70 / colCount);
 
     const colHeaders = bundles.map((b, i) => `
-      <th style="text-align:right;padding:8px;${i === 0 ? 'background:#fef3c7;' : ''}width:${colWidthPct}%;">
+      <th style="text-align:right;padding:8px;${i === 0 ? 'background:var(--c-warn-bg);' : ''}width:${colWidthPct}%;">
         <div style="font-weight:600;font-size:13px;">${b.label}${b.is_baseline ? ' ⭐' : ''}</div>
         <div style="font-size:10px;color:var(--ies-gray-500);font-weight:400;margin-top:2px;">
-          <span class="hub-status-chip" style="background:${STATUS_COLORS[b.status] || '#6b7280'};color:white;font-size:9px;padding:1px 4px;">${b.status}</span>
-          ${i === 0 ? '<span style="margin-left:6px;color:#92400e;">baseline</span>' : ''}
+          <span class="hub-status-chip" style="background:${STATUS_COLORS[b.status] || 'var(--c-muted)'};color:white;font-size:9px;padding:1px 4px;">${b.status}</span>
+          ${i === 0 ? '<span style="margin-left:6px;color:var(--c-warn-ink);">baseline</span>' : ''}
         </div>
       </th>
     `).join('');
@@ -9919,7 +9926,7 @@ async function openCompareModal(opts = {}) {
         <tr>
           <td style="padding:6px 10px;">${label}</td>
           ${bundles.map((b, i) => `
-            <td class="cm-num" style="padding:6px 10px;${i === 0 ? 'background:#fef3c7;' : ''}">
+            <td class="cm-num" style="padding:6px 10px;${i === 0 ? 'background:var(--c-warn-bg);' : ''}">
               ${fmt(b.summary[key])}${i > 0 ? deltaCell(b.summary[key], base, opts) : ''}
             </td>
           `).join('')}
@@ -9936,7 +9943,7 @@ async function openCompareModal(opts = {}) {
           ${bundles.map((b, i) => {
             const v = getter(b);
             return `
-              <td class="cm-num" style="padding:6px 10px;${i === 0 ? 'background:#fef3c7;' : ''}">
+              <td class="cm-num" style="padding:6px 10px;${i === 0 ? 'background:var(--c-warn-bg);' : ''}">
                 ${fmt(v)}${i > 0 ? deltaCell(v, base, opts) : ''}
               </td>
             `;
@@ -9956,7 +9963,7 @@ async function openCompareModal(opts = {}) {
           ${bundles.map((b, i) => {
             const v = bucketRateForBundle(b, meta.label);
             return `
-              <td class="cm-num" style="padding:6px 10px;${i === 0 ? 'background:#fef3c7;' : ''}">
+              <td class="cm-num" style="padding:6px 10px;${i === 0 ? 'background:var(--c-warn-bg);' : ''}">
                 ${fmtRate(v)}${i > 0 ? deltaCell(v, base, { lowerIsBetter: false }) : ''}
               </td>
             `;
@@ -9984,7 +9991,7 @@ async function openCompareModal(opts = {}) {
     if (allKpisZero) advisoryParts.push('No monthly projections found for any picked scenario — open each one and click <strong>Save</strong> (or run the calc) to generate revenue/opex/EBITDA before comparing.');
     if (allInputsIdentical && bundles.length >= 2) advisoryParts.push('Picked scenarios have <strong>identical inputs</strong> on volumes / pricing / labor / facility / margin. If you edited a scenario expecting a difference, confirm the edit landed in the right row and that you clicked Save.');
     const advisoryBanner = advisoryParts.length ? `
-      <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#78350f;">
+      <div style="background:var(--c-warn-bg);border:1px solid var(--c-warn);border-radius:6px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#78350f;">
         <strong>⚠ Compare advisory:</strong>
         <ul style="margin:6px 0 0 18px;padding:0;">${advisoryParts.map(p => `<li style="margin:2px 0;">${p}</li>`).join('')}</ul>
       </div>
@@ -10027,7 +10034,7 @@ async function openCompareModal(opts = {}) {
           ${inputRow('Target Margin',         b => b.inputs.margin / 100, { fmt: fmtPct })}
         </tbody>
       </table>
-      <p class="cm-subtle" style="margin-top:8px;">Approved scenarios reflect frozen snapshots; draft/review scenarios reflect their current saved inputs. Open any scenario to drill in.</p>
+      <p class="cm-subtle u-mt-2">Approved scenarios reflect frozen snapshots; draft/review scenarios reflect their current saved inputs. Open any scenario to drill in.</p>
     `;
 
     overlay.querySelector('[data-copy-table]')?.addEventListener('click', () => {
@@ -10089,15 +10096,15 @@ async function openLaborSeasonalityModal(idx) {
     <div style="background:white;border-radius: 10px;padding:24px;min-width:780px;max-width:95vw;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div>
-          <h3 style="margin:0;">Monthly OT / Absence Seasonality</h3>
-          <p class="cm-subtle" style="margin-top:4px;">${line.activity_name || line.role_name || `Line #${idx+1}`} — values are percent (e.g. 5 means 5%)</p>
+          <h3 class="u-m0">Monthly OT / Absence Seasonality</h3>
+          <p class="cm-subtle u-mt-1">${line.activity_name || line.role_name || `Line #${idx+1}`} — values are percent (e.g. 5 means 5%)</p>
         </div>
         <button class="hub-btn" data-close>×</button>
       </div>
-      <div style="margin-top:12px;">
+      <div class="u-mt-3">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
           <strong>Overtime % per month</strong>
-          <button class="hub-btn" style="font-size:11px;" data-clear-ot>Clear (use project flat)</button>
+          <button class="hub-btn u-cap" data-clear-ot>Clear (use project flat)</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;">
           ${months.map((m, mi) => `
@@ -10111,10 +10118,10 @@ async function openLaborSeasonalityModal(idx) {
           `).join('')}
         </div>
       </div>
-      <div style="margin-top:16px;">
+      <div class="u-mt-4">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
           <strong>Absence % per month</strong>
-          <button class="hub-btn" style="font-size:11px;" data-clear-abs>Clear (use project flat)</button>
+          <button class="hub-btn u-cap" data-clear-abs>Clear (use project flat)</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;">
           ${months.map((m, mi) => `
@@ -10129,7 +10136,7 @@ async function openLaborSeasonalityModal(idx) {
       </div>
       <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:16px;border-top:1px solid #eee;padding-top:12px;">
         <button class="hub-btn" data-use-market>Use Market Defaults</button>
-        <div style="display:flex;gap:8px;">
+        <div class="u-flex">
           <button class="hub-btn" data-close>Cancel</button>
           <button class="hub-btn hub-btn-primary" data-save>Save Seasonality</button>
         </div>
@@ -10689,7 +10696,7 @@ function renderWhatIfStudio() {
     <div class="cm-wide-layout">
       <div class="cm-section-header">
         <div>
-          <h2 style="margin:0;">What-If Studio
+          <h2 class="u-m0">What-If Studio
             ${activeCount > 0
               ? `<span class="hub-chip hub-chip--info" style="margin-left:8px;">${activeCount} live override${activeCount === 1 ? '' : 's'}</span>`
               : '<span class="hub-chip" style="margin-left:8px;">baseline</span>'}
@@ -10904,12 +10911,12 @@ function renderLinkedDesigns() {
       return `
         <tr style="${rowStyle}">
           <td>${ribbon}</td>
-          <td style="font-weight:600;">${_esc(label)}</td>
+          <td class="u-semibold">${_esc(label)}</td>
           <td><span style="font-size:10px;padding:2px 8px;border-radius:8px;background:${statusBg};color:${statusFg};font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">${status}</span></td>
           <td class="cm-num">${marginDisp}</td>
           <td class="cm-num">${sqftDisp || '—'}</td>
           <td style="color:var(--ies-gray-500);font-size:11px;">${updated}</td>
-          <td style="text-align:right;">${action}</td>
+          <td class="u-right">${action}</td>
         </tr>
       `;
     }).join('');
@@ -10917,8 +10924,8 @@ function renderLinkedDesigns() {
       <div class="hub-card mb-4" style="border-left:3px solid var(--ies-blue);">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <div>
-            <div class="text-subtitle" style="margin:0;">Scenarios in this Family</div>
-            <div style="font-size:11px;color:var(--ies-gray-500);">Baseline + child scenarios on the same deal. Switch between them to compare assumptions side-by-side.</div>
+            <div class="text-subtitle u-m0">Scenarios in this Family</div>
+            <div class="u-cap u-muted">Baseline + child scenarios on the same deal. Switch between them to compare assumptions side-by-side.</div>
           </div>
           <span class="hub-badge hub-badge-info">${fam.length} scenarios</span>
         </div>
@@ -10949,22 +10956,22 @@ function renderLinkedDesigns() {
     const pct = (n) => Number.isFinite(Number(n)) ? Number(n).toFixed(1) + '%' : '—';
     const d = _cog.deltaVsCurrent;
     const deltaTxt = d && Number.isFinite(Number(d.costDelta))
-      ? `<span style="font-weight:700;color:${Number(d.costDelta) <= 0 ? '#16a34a' : '#dc2626'};">${Number(d.costDelta) <= 0 ? '−' : '+'}${money(Math.abs(Number(d.costDelta)))} vs current network</span>`
+      ? `<span style="font-weight:700;color:${Number(d.costDelta) <= 0 ? 'var(--c-success)' : 'var(--c-danger)'};">${Number(d.costDelta) <= 0 ? '−' : '+'}${money(Math.abs(Number(d.costDelta)))} vs current network</span>`
       : '';
     return `
-      <div class="hub-card mb-4" style="border-left:3px solid #20c997;">
+      <div class="hub-card mb-4" style="border-left:3px solid var(--ies-teal);">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
           <div>
-            <div class="text-subtitle" style="margin:0;">Network facts — from COG${_cog.scenarioName ? ` · ${_esc(_cog.scenarioName)}` : ''}</div>
-            <div style="font-size:11px;color:var(--ies-gray-500);">Pushed by Center of Gravity on save${_cog.updatedAt ? ` · ${new Date(_cog.updatedAt).toLocaleString()}` : ''}. Transport is NOT in this model's P&L — benchmark only.</div>
+            <div class="text-subtitle u-m0">Network facts — from COG${_cog.scenarioName ? ` · ${_esc(_cog.scenarioName)}` : ''}</div>
+            <div class="u-cap u-muted">Pushed by Center of Gravity on save${_cog.updatedAt ? ` · ${new Date(_cog.updatedAt).toLocaleString()}` : ''}. Transport is NOT in this model's P&L — benchmark only.</div>
           </div>
           <a href="#designtools/center-of-gravity" class="hub-btn hub-btn-sm hub-btn-secondary">Open COG →</a>
         </div>
         <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px;">
-          <div><span style="color:var(--ies-gray-500);">Transport</span> <strong>${money(_cog.totalCost)}/yr</strong></div>
-          <div><span style="color:var(--ies-gray-500);">DCs</span> <strong>${Number(_cog.nCenters) || '—'}</strong></div>
-          <div><span style="color:var(--ies-gray-500);">Coverage</span> <strong>${pct(_cog.serviceCoveragePct)}</strong></div>
-          <div><span style="color:var(--ies-gray-500);">CO₂</span> <strong>${Number.isFinite(Number(_cog.co2Tons)) ? Math.round(Number(_cog.co2Tons)).toLocaleString('en-US') + ' t/yr' : '—'}</strong></div>
+          <div><span class="u-muted">Transport</span> <strong>${money(_cog.totalCost)}/yr</strong></div>
+          <div><span class="u-muted">DCs</span> <strong>${Number(_cog.nCenters) || '—'}</strong></div>
+          <div><span class="u-muted">Coverage</span> <strong>${pct(_cog.serviceCoveragePct)}</strong></div>
+          <div><span class="u-muted">CO₂</span> <strong>${Number.isFinite(Number(_cog.co2Tons)) ? Math.round(Number(_cog.co2Tons)).toLocaleString('en-US') + ' t/yr' : '—'}</strong></div>
           ${deltaTxt ? `<div>${deltaTxt}</div>` : ''}
         </div>
       </div>
@@ -10977,7 +10984,7 @@ function renderLinkedDesigns() {
         <div class="cm-section-title">Linked Designs</div>
         <div class="cm-section-desc">Sister scenarios on this deal (above) and design-tool scenarios pointing back at this Cost Model (below). Click any row to switch context.</div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;">
+      <div class="u-row">
         <span class="hub-badge hub-badge-info">${totalLinked} linked</span>
         <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="linked-refresh" title="Re-query linked scenarios">Refresh</button>
       </div>
@@ -11005,9 +11012,9 @@ function renderLinkedDesigns() {
             <tbody>
               ${rows.map(r => `
                 <tr>
-                  <td style="font-weight:600;">${_esc(r.name)}</td>
-                  <td style="color:var(--ies-gray-500);">${r.updated ? new Date(r.updated).toLocaleString() : '—'}</td>
-                  <td style="text-align:right;"><a class="hub-btn hub-btn-sm hub-btn-secondary" href="#${g.route}?scenario=${encodeURIComponent(r.id)}" title="Open in ${g.label}" style="font-size:11px;padding:3px 8px;">Open →</a></td>
+                  <td class="u-semibold">${_esc(r.name)}</td>
+                  <td class="u-muted">${r.updated ? new Date(r.updated).toLocaleString() : '—'}</td>
+                  <td class="u-right"><a class="hub-btn hub-btn-sm hub-btn-secondary" href="#${g.route}?scenario=${encodeURIComponent(r.id)}" title="Open in ${g.label}" style="font-size:11px;padding:3px 8px;">Open →</a></td>
                 </tr>
               `).join('')}
             </tbody>
@@ -11443,7 +11450,7 @@ function _launchToTool(target) {
       // state. Invisible to the cache-bust guard because the './tools/...'
       // path resolves module-relative in the scanner but page-relative at
       // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260705-u3c',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260705-u3d',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {
@@ -12189,7 +12196,7 @@ async function openMostTemplateDetail(templateId) {
         <td style="padding:6px 10px;font-weight:500;">${mostElName(el) || '—'}</td>
         <td style="padding:6px 10px;font-family:monospace;font-size:11px;color:var(--ies-gray-500);">${el.most_sequence || '—'}</td>
         <td style="padding:6px 10px;text-align:right;font-weight:600;">${mostElTmu(el) || 0}</td>
-        <td style="padding:6px 10px;text-align:center;">${el.is_variable ? `<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-size:11px;">${el.variable_driver || 'Yes'}</span>` : '<span style="color:var(--ies-gray-300);">—</span>'}</td>
+        <td style="padding:6px 10px;text-align:center;">${el.is_variable ? `<span style="background:var(--c-warn-bg);color:var(--c-warn-ink);padding:1px 6px;border-radius:4px;font-size:11px;">${el.variable_driver || 'Yes'}</span>` : '<span style="color:var(--ies-gray-300);">—</span>'}</td>
       </tr>
     `).join('');
     body.innerHTML = `
@@ -12215,7 +12222,7 @@ async function openMostTemplateDetail(templateId) {
     `;
   } catch (err) {
     console.warn('[CM] fetchMostElements failed:', err);
-    body.innerHTML = `<div style="padding:24px;text-align:center;color:#b91c1c;font-size:13px;">Could not load elements: ${err?.message || err}</div>`;
+    body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--c-danger-strong);font-size:13px;">Could not load elements: ${err?.message || err}</div>`;
   }
 }
 
@@ -12354,7 +12361,7 @@ async function openEquipmentCatalog() {
         <tr data-eq-id="${i.id}" style="cursor:pointer;border-bottom:1px solid var(--ies-gray-100);">
           <td style="padding:8px 10px;">
             <div style="font-weight:600;font-size:13px;">${i.name}</div>
-            ${i.subcategory ? `<div style="font-size:11px;color:var(--ies-gray-400);">${i.subcategory}</div>` : ''}
+            ${i.subcategory ? `<div class="u-cap u-faint">${i.subcategory}</div>` : ''}
           </td>
           <td style="padding:8px 10px;"><span style="font-size:11px;padding:2px 8px;border-radius:12px;background:var(--ies-gray-100);color:var(--ies-gray-600);">${i.category || '—'}</span></td>
           <td style="padding:8px 10px;text-align:right;font-weight:600;">${i.monthly_lease_cost ? '$' + Number(i.monthly_lease_cost).toLocaleString() : '—'}</td>
@@ -12375,7 +12382,7 @@ async function openEquipmentCatalog() {
           </div>
           <button id="eq-close" class="hub-btn hub-btn-sm hub-btn-secondary" style="margin-left:auto;">✕ Close</button>
         </div>
-        <div style="display:flex;gap:8px;">
+        <div class="u-flex">
           <input id="eq-search" class="hub-input" placeholder="Search name, subcategory, notes…" style="flex:1;font-size:13px;" />
           <select id="eq-cat" class="hub-select" style="width:160px;font-size:13px;">
             <option value="">All categories</option>
@@ -12384,7 +12391,7 @@ async function openEquipmentCatalog() {
         </div>
       </div>
       <div style="flex:1;overflow-y:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <table class="u-table">
           <thead style="position:sticky;top:0;background:var(--ies-gray-50);z-index:1;">
             <tr style="border-bottom:2px solid var(--ies-gray-200);">
               <th style="padding:10px;text-align:left;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Equipment</th>
@@ -13124,12 +13131,12 @@ function renderLanding() {
           </div>
           ${_dcCtx ? `
           <div style="margin-top:10px;display:inline-flex;align-items:center;gap:8px;font-size:12px;background:#fff7f5;border:1px solid #ffd9cf;border-radius:16px;padding:4px 12px;">
-            <span style="color:var(--ies-gray-500);">Working in deal:</span>
+            <span class="u-muted">Working in deal:</span>
             <span style="font-weight:700;color:var(--ies-navy);">${escapeHtml(_dcLabel)}</span>
             <button data-dc-clear title="Clear deal binding — new models will start unassigned" style="border:none;background:none;cursor:pointer;color:var(--ies-gray-400);font-weight:700;font-size:12px;line-height:1;">✕</button>
           </div>` : ''}
         </div>
-        <button class="hub-btn hub-btn-primary" id="cm-create-new" style="font-weight:700;">+ Create New Model</button>
+        <button class="hub-btn hub-btn-primary u-bold" id="cm-create-new">+ Create New Model</button>
       </div>
 
       ${count === 0 ? `
@@ -13190,7 +13197,7 @@ function renderLanding() {
             <div class="cm-family-chip" data-cm-card="${m.id}" data-cm-name="${safeName}"
                  title="Open ${labelRaw}"
                  style="padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:8px;background:#fff;cursor:pointer;display:flex;flex-direction:column;gap:4px;transition:all 0.12s;">
-              <div style="display:flex;align-items:center;gap:6px;">
+              <div class="u-row-tight">
                 <span style="font-size:11px;font-weight:700;color:var(--ies-navy);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${labelRaw}</span>
                 <span style="font-size:9px;padding:1px 6px;border-radius:8px;background:${statusBg};color:${statusFg};font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">${status}</span>
               </div>
@@ -13248,7 +13255,7 @@ function renderLanding() {
                     ${marginDisp ? `<div><span style=\"color:var(--ies-gray-400);\">Margin</span> <strong style=\"color:var(--ies-navy);\">${marginDisp}</strong></div>` : ''}
                   </div>
                 ` : ''}
-                <div style="font-size:11px;color:var(--ies-gray-400);">Updated ${updatedStr}</div>
+                <div class="u-cap u-faint">Updated ${updatedStr}</div>
               </div>
               <!-- Scenario chip strip -->
               <div style="border-top:1px dashed var(--ies-gray-200);padding-top:10px;">
@@ -13303,7 +13310,7 @@ function renderLanding() {
                   ${marginDisp ? `<div><span style=\"color:var(--ies-gray-400);\">Margin</span> <strong style=\"color:var(--ies-navy);\">${marginDisp}</strong></div>` : ''}
                 </div>
               ` : ''}
-              <div style="font-size:11px;color:var(--ies-gray-400);">Updated ${updatedStr}</div>
+              <div class="u-cap u-faint">Updated ${updatedStr}</div>
             </div>
           `;
         };
@@ -13378,7 +13385,7 @@ function renderLanding() {
       .cm-landing-card[draggable="true"]:active { cursor: grabbing; }
       .cm-landing-card.cm-landing-card--dragging { opacity: 0.4; }
       details[data-cm-deal-group] > summary.cm-landing-group--dragover {
-        background: #eff6ff !important;
+        background: var(--c-info-soft) !important;
         border-color: var(--ies-blue) !important;
         box-shadow: 0 0 0 2px rgba(0,71,171,0.18) inset;
       }
@@ -13862,12 +13869,12 @@ async function openChannelArchetypePicker(targetChannelKey = null) {
     <div style="background:white;border-radius:10px;padding:24px;width:780px;max-width:95vw;max-height:92vh;overflow:auto;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
         <div>
-          <h3 style="margin:0;">${headerTitle}</h3>
+          <h3 class="u-m0">${headerTitle}</h3>
           <p class="cm-subtle" style="margin-top:4px;font-size:13px;color:var(--ies-gray-600);">${headerSub}</p>
         </div>
         <button class="hub-btn hub-btn-secondary" data-close>×</button>
       </div>
-      <div id="cm-channel-picker-body" style="margin-top:16px;">
+      <div id="cm-channel-picker-body" class="u-mt-4">
         <div style="text-align:center;padding:32px;color:var(--ies-gray-500);">Loading archetypes…</div>
       </div>
     </div>
@@ -14072,7 +14079,7 @@ function openChannelManageModal() {
           <button class="hub-btn hub-btn-secondary hub-btn-sm" ${i === 0 ? 'disabled' : ''} data-action="vol-channel-reorder-up" data-key="${c.key}" title="Move up">▲</button>
           <button class="hub-btn hub-btn-secondary hub-btn-sm" ${i === channels.length - 1 ? 'disabled' : ''} data-action="vol-channel-reorder-down" data-key="${c.key}" title="Move down">▼</button>
           <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="vol-channel-rearchetype" data-key="${c.key}" title="Change archetype — replaces UOM / structural / seasonality / color; volume preserved">↻ Archetype</button>
-          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="vol-channel-toggle-hidden" data-key="${c.key}" title="${c.hidden ? 'Show channel' : 'Hide channel from page'}">${c.hidden ? '👁‍🗨' : '👁'}</button>
+          <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="vol-channel-toggle-hidden" data-key="${c.key}" title="${c.hidden ? 'Show channel' : 'Hide channel from page'}">${c.hidden ? icon('eye-off') : icon('eye')}</button>
           <button class="hub-btn hub-btn-danger hub-btn-sm" ${channels.length <= 1 ? 'disabled' : ''} data-action="vol-channel-delete" data-key="${c.key}" title="Delete channel">×</button>
         </div>
       </div>
@@ -14082,7 +14089,7 @@ function openChannelManageModal() {
     <div style="background:white;border-radius:10px;padding:24px;width:760px;max-width:95vw;max-height:92vh;overflow:auto;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
         <div>
-          <h3 style="margin:0;">Manage channels</h3>
+          <h3 class="u-m0">Manage channels</h3>
           <p class="cm-subtle" style="margin-top:4px;font-size:13px;color:var(--ies-gray-600);">Rename, reorder, hide, or delete channels. Deleting drops all channel data — there's no undo.</p>
         </div>
         <button class="hub-btn hub-btn-secondary" data-close>×</button>
@@ -14243,7 +14250,7 @@ function renderImplRampPanel(arrayKey, values, label, color) {
   // Reference line at 100% (steady-state). Y-percentage from chart top.
   const ssYPct = (1 - 100 / maxVal) * 100;
   return `
-    <div class="cm-impl-ramp" style="margin-top:8px;">
+    <div class="cm-impl-ramp u-mt-2">
       <!-- chart. 2026-04-27 AM7: bar value labels moved to absolute
            positioning ABOVE each bar's top edge so the column's vertical
            layout = bar height only. Previously the in-column value label
@@ -15156,7 +15163,7 @@ function _openOfpDetail(container, line, kind, idx) {
       </div>
     </div>
     <div class="ofp-detail-panel__footer">
-      <span class="cm-subtle" style="font-size:11px;">v0.2 — edits write through to the Labor page model. FTE + Cost recompute on commit.</span>
+      <span class="cm-subtle u-cap">v0.2 — edits write through to the Labor page model. FTE + Cost recompute on commit.</span>
       <button class="hub-btn hub-btn-sm" data-ofp-action="edit-on-labor">Open in Labor page →</button>
     </div>
   `;
@@ -15936,7 +15943,7 @@ function renderTimeline() {
       ${frozenBanner}
       <div class="cm-section">
         <h2 class="cm-section-title">Cashflow &amp; P&amp;L <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;margin-left:8px;">Legacy mode</span></h2>
-        <div class="hub-card" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:16px;">
+        <div class="hub-card" style="background:var(--c-warn-bg);border:1px solid #fcd34d;color:var(--c-warn-ink);padding:16px;">
           <strong>Monthly engine is disabled.</strong> Re-enable it in the browser console to view the cashflow projection:
           <code style="display:block;margin-top:8px;background:#fff;padding:8px;border-radius:4px;font-family:monospace;">window.COST_MODEL_MONTHLY_ENGINE = true;</code>
         </div>
@@ -16069,7 +16076,7 @@ function renderTimeline() {
             <tbody>
               ${rows.slice(0, 24).map(r => `
                 <tr class="${r.is_pre_go_live ? 'cm-timeline-pre-go-live' : ''}">
-                  <td style="font-weight:600;">${r.label}${r.is_pre_go_live ? ' <span class="cm-timeline-pre-go-live-tag">pre-live</span>' : ''}</td>
+                  <td class="u-semibold">${r.label}${r.is_pre_go_live ? ' <span class="cm-timeline-pre-go-live-tag">pre-live</span>' : ''}</td>
                   <td class="hub-num">$${fmt(r.revenue)}</td>
                   <td class="hub-num">$${fmt(r.opex)}</td>
                   <td class="hub-num">$${fmt(r.ebitda)}</td>
@@ -16276,7 +16283,7 @@ function renderAssumptions() {
                     : `<input class="hub-input" type="number" step="any" data-heuristic-input="${h.key}" value="${heuristicOverrides[h.key] !== undefined && heuristicOverrides[h.key] !== null ? heuristicOverrides[h.key] : ''}" placeholder="${fmtDefault(h)}" style="width:120px;text-align:right;" />`
                   }
                 </td>
-                <td style="text-align:center;">
+                <td class="u-center">
                   ${isOverride(h) ? `<button class="hub-btn hub-btn-sm" data-cm-action="reset-heuristic" data-heuristic-key="${h.key}" title="Reset to default">↺</button>` : ''}
                 </td>
               </tr>
@@ -16408,17 +16415,17 @@ function renderPlanningRatios() {
                       <td class="cm-num">${formatRatioValue({ value: r.value_type === 'array' || r.value_type === 'lookup' || r.value_type === 'tiered' ? r.value_jsonb : r.numeric_value, def: r })}</td>
                       <td class="cm-num">
                         ${structured
-                          ? `<span style="font-size:11px;color:var(--ies-gray-400);">(structured)</span>`
+                          ? `<span class="u-cap u-faint">(structured)</span>`
                           : `<input class="hub-input" type="number" step="any" data-pr-input="${escapeHtml(r.ratio_code)}" value="${ov && ov.value !== undefined && ov.value !== null ? escapeHtml(String(ov.value)) : ''}" placeholder="${r.numeric_value != null ? r.numeric_value : ''}" style="width:130px;text-align:right;" />`}
                       </td>
                       <td class="cm-cell-source">
                         <div>${escapeHtml(r.source || '')}</div>
                         ${r.source_detail ? `<div class="cm-cell-source__detail">${escapeHtml(r.source_detail)}</div>` : ''}
                         ${stale
-                          ? `<div style="margin-top:4px;"><span class="hub-status-chip cm-chip-stale cm-chip-xs" title="Source pre-2022 — recommend audit before trusting">needs refresh</span></div>`
-                          : (staleInCatalog && reviewedAt ? `<div style="margin-top:4px;"><span class="hub-status-chip cm-chip-success cm-chip-xs" title="Pre-2022 catalog source, but marked reviewed on this project on ${escapeHtml(reviewedAt.slice(0,10))}">✓ audited</span></div>` : '')}
+                          ? `<div class="u-mt-1"><span class="hub-status-chip cm-chip-stale cm-chip-xs" title="Source pre-2022 — recommend audit before trusting">needs refresh</span></div>`
+                          : (staleInCatalog && reviewedAt ? `<div class="u-mt-1"><span class="hub-status-chip cm-chip-success cm-chip-xs" title="Pre-2022 catalog source, but marked reviewed on this project on ${escapeHtml(reviewedAt.slice(0,10))}">✓ audited</span></div>` : '')}
                       </td>
-                      <td style="text-align:center;">
+                      <td class="u-center">
                         <div class="cm-row-actions">
                           ${isOver && !reviewedAt ? `<button class="hub-btn hub-btn-sm" data-cm-action="reset-planning-ratio" data-pr-code="${escapeHtml(r.ratio_code)}" title="Reset to default">↺</button>` : ''}
                           ${stale ? `<button class="hub-btn hub-btn-sm" data-cm-action="mark-ratio-reviewed" data-pr-code="${escapeHtml(r.ratio_code)}" title="Confirm you've audited this pre-2022 value for this deal." style="background:#d1fae5;color:#065f46;border-color:#a7f3d0;">✓ Mark reviewed</button>` : ''}
@@ -16533,18 +16540,18 @@ function renderScenarios() {
     </div>
 
     ${s ? `
-      <div class="cm-card" style="margin-top:12px;">
+      <div class="cm-card u-mt-3">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
           <div style="flex:1;">
-            <label style="font-size:11px;color:var(--ies-gray-500);">SCENARIO LABEL</label>
+            <label class="u-cap u-muted">SCENARIO LABEL</label>
             <input class="hub-input" data-scenario-field="label" value="${s.scenario_label || 'Baseline'}" style="font-size:16px;font-weight:600;margin-top:2px;" ${s.status === 'approved' ? 'disabled' : ''} />
             <div style="margin-top:6px;">
-              <label style="font-size:11px;color:var(--ies-gray-500);">DESCRIPTION</label>
+              <label class="u-cap u-muted">DESCRIPTION</label>
               <textarea class="hub-input" data-scenario-field="description" rows="2" style="margin-top:2px;width:100%;" ${s.status === 'approved' ? 'disabled' : ''}>${s.scenario_description || ''}</textarea>
             </div>
             ${s.is_baseline ? '<div style="margin-top:6px;font-size:11px;color:var(--ies-green);">⭐ Baseline scenario</div>' : ''}
-            ${s.parent_scenario_id ? `<div style="font-size:11px;color:var(--ies-gray-500);">Child of scenario #${s.parent_scenario_id}</div>` : ''}
-            ${s.approved_at ? `<div style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">Approved ${new Date(s.approved_at).toLocaleString()} · by ${s.approved_by || 'system'}</div>` : ''}
+            ${s.parent_scenario_id ? `<div class="u-cap u-muted">Child of scenario #${s.parent_scenario_id}</div>` : ''}
+            ${s.approved_at ? `<div class="u-cap u-muted u-mt-1">Approved ${new Date(s.approved_at).toLocaleString()} · by ${s.approved_by || 'system'}</div>` : ''}
           </div>
           <div style="display:flex;flex-direction:column;gap:6px;min-width:180px;">
             ${s.status === 'draft' ? `
@@ -16567,8 +16574,8 @@ function renderScenarios() {
         </div>
       </div>
     ` : `
-      <div class="cm-card" style="margin-top:12px;background:#fef3c7;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="cm-card" style="margin-top:12px;background:var(--c-warn-bg);">
+        <div class="u-between">
           <div>
             <strong>No scenarios yet.</strong> ${model.id ? 'Click <em>Initialize scenario</em> to create a baseline scenario you can branch from.' : 'Save the cost model first — scenarios attach to a saved model.'}
           </div>
@@ -16578,9 +16585,9 @@ function renderScenarios() {
     `}
 
     ${dealScenarios.length > 0 ? `
-      <div class="cm-card" style="margin-top:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <h3 style="margin:0;">Sibling scenarios on this deal (${dealScenarios.length})</h3>
+      <div class="cm-card u-mt-4">
+        <div class="u-between">
+          <h3 class="u-m0">Sibling scenarios on this deal (${dealScenarios.length})</h3>
           <div style="display:flex;gap:8px;align-items:center;">
             <button class="hub-btn" data-cm-action="scenario-add-sibling" title="Clone the current scenario as a new sibling — independent project + scenario you can edit (e.g., Peak-Volume, Automation-Heavy, Labor-Stress)">+ Add sibling</button>
             <button class="hub-btn hub-btn-primary" data-cm-action="scenarios-compare-picker" ${dealScenarios.length < 2 ? 'disabled title="Need at least 2 scenarios"' : ''} title="Side-by-side compare 2–4 scenarios — KPIs, pricing, inputs">⇄ Compare scenarios →</button>
@@ -16589,7 +16596,7 @@ function renderScenarios() {
         <table class="cm-table" style="margin-top:12px;width:100%;">
           <thead>
             <tr>
-              <th style="text-align:left;">Label</th>
+              <th class="u-left">Label</th>
               <th style="text-align:left;width:100px;">Status</th>
               <th style="text-align:left;width:120px;">Approved</th>
               <th style="text-align:right;width:90px;">Project #</th>
@@ -16599,9 +16606,9 @@ function renderScenarios() {
           <tbody>
             ${dealScenarios.map(sc => `
               <tr>
-                <td style="padding:6px 8px;">${sc.scenario_label}${sc.is_baseline ? ' ⭐' : ''}${s && sc.id === s.id ? ' <em style="color:var(--ies-gray-500);">(current)</em>' : ''}</td>
-                <td><span class="hub-status-chip" style="background:${STATUS_COLORS[sc.status] || '#6b7280'};color:white;">${sc.status}</span></td>
-                <td style="font-size:11px;color:var(--ies-gray-500);">${sc.approved_at ? new Date(sc.approved_at).toLocaleDateString() : '—'}</td>
+                <td style="padding:6px 8px;">${sc.scenario_label}${sc.is_baseline ? ' ⭐' : ''}${s && sc.id === s.id ? ' <em class="u-muted">(current)</em>' : ''}</td>
+                <td><span class="hub-status-chip" style="background:${STATUS_COLORS[sc.status] || 'var(--c-muted)'};color:white;">${sc.status}</span></td>
+                <td class="u-cap u-muted">${sc.approved_at ? new Date(sc.approved_at).toLocaleDateString() : '—'}</td>
                 <td class="cm-num">${sc.project_id || '—'}</td>
                 <td>${s && sc.id !== s.id ? `<button class="hub-btn" style="padding:2px 8px;font-size:11px;" data-cm-action="scenario-open" data-scenario-id="${sc.id}" data-project-id="${sc.project_id}">Open</button>` : ''}</td>
               </tr>
@@ -16612,7 +16619,7 @@ function renderScenarios() {
     ` : ''}
 
     ${currentRevisions.length > 0 ? `
-      <div class="cm-card" style="margin-top:16px;">
+      <div class="cm-card u-mt-4">
         <h3 style="margin-top:0;">Revision log (${currentRevisions.length})</h3>
         <table class="cm-table" style="width:100%;">
           <thead>
@@ -16620,15 +16627,15 @@ function renderScenarios() {
               <th style="text-align:left;width:60px;">Rev</th>
               <th style="text-align:left;width:160px;">When</th>
               <th style="text-align:left;width:160px;">Who</th>
-              <th style="text-align:left;">Summary</th>
+              <th class="u-left">Summary</th>
             </tr>
           </thead>
           <tbody>
             ${currentRevisions.slice(0, 20).map(r => `
               <tr>
                 <td><strong>#${r.revision_number}</strong></td>
-                <td style="font-size:11px;">${new Date(r.changed_at).toLocaleString()}</td>
-                <td style="font-size:11px;">${r.changed_by || '(anonymous)'}</td>
+                <td class="u-cap">${new Date(r.changed_at).toLocaleString()}</td>
+                <td class="u-cap">${r.changed_by || '(anonymous)'}</td>
                 <td>${r.change_summary || '—'}</td>
               </tr>
             `).join('')}

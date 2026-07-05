@@ -4361,6 +4361,9 @@ textarea.hub-input {
 /* ---- U3-COG (2026-07-05, u3c): utilities promoted during COG migration ---- */
 .u-pointer { cursor: pointer; }
 .u-upper   { text-transform: uppercase; }
+/* U3-CM (2026-07-05, u3d) */
+.u-nowrap   { white-space: nowrap; }
+.u-disabled { opacity: 0.5; cursor: not-allowed; }
 /* COG tool-scoped (COG ui.js has no injected style block; values byte-identical to prior inline styles) */
 .cog-num-input    { padding: 6px 8px; border: 1px solid var(--ies-gray-200); border-radius: 6px; font-size: 13px; font-weight: 600; text-align: right; }
 .cog-num-input-p8 { padding: 8px; border: 1px solid var(--ies-gray-200); border-radius: 6px; font-size: 13px; font-weight: 600; text-align: right; }
