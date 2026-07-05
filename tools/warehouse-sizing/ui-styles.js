@@ -15,6 +15,19 @@
 export function wscExtraStyles() {
   return `
     <style>
+      /* U3 migration classes (2026-07-05) — extracted repeated inline styles.
+         Values byte-identical to the inline originals. */
+      .wsc-kv-plain { display: flex; justify-content: space-between; padding: 2px 0; }
+      .wsc-muted-reg { color: var(--ies-gray-500); font-weight: 400; }
+      .wsc-subsection { margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--ies-gray-100); }
+      .wsc-microlabel { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ies-gray-500); margin-bottom: 6px; }
+      .wsc-microlabel-b { font-weight: 700; margin-bottom: 4px; color: var(--ies-gray-500); text-transform: uppercase; font-size: 10px; }
+      .wsc-label-soft { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--ies-gray-400); }
+      .wsc-section-title { font-size: 13px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--ies-gray-700); }
+      .wsc-rule-top { border-top: 1px solid var(--ies-gray-100); }
+      .wsc-note { margin-top: 8px; padding: 8px 10px; background: var(--ies-gray-50); border-radius: 4px; font-size: 11px; color: var(--ies-gray-700); }
+      .wsc-stat { font-size: 16px; font-weight: 700; }
+      .wsc-card-title { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
       /* WSC-scoped sidebar widen — Phase 4 cosmetic. The chrome's default
          240px sidebar was tight for some Configure inputs (5-digit Pallet
          Positions / Total SKUs, 3-decimal cartonsPerPalletOverride, etc.).

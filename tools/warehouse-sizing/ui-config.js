@@ -48,13 +48,13 @@ export function renderConfigHtml(ctx) {
       <div role="radiogroup" aria-label="Sizing mode" style="display:flex;gap:6px;">
         <button type="button" role="radio" aria-checked="${mode === 'design'}" data-wsc-mode="design"
                 title="Inventory drives building dimensions. The engine sizes the facility from your peak units / mix / dock throughput. The 2D/3D rendering uses the sized footprint exactly. Use this for greenfield design or when you don't yet have a candidate building."
-                style="flex:1;padding:8px 10px;font-size:12px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid ${mode === 'design' ? 'var(--ies-blue,#0047AB)' : 'var(--ies-gray-200)'};background:${mode === 'design' ? 'var(--ies-blue,#0047AB)' : '#fff'};color:${mode === 'design' ? '#fff' : 'var(--ies-gray-700)'};transition:all .12s;">
+                style="flex:1;padding:8px 10px;font-size:12px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid ${mode === 'design' ? 'var(--ies-blue,var(--ies-blue))' : 'var(--ies-gray-200)'};background:${mode === 'design' ? 'var(--ies-blue,var(--ies-blue))' : '#fff'};color:${mode === 'design' ? '#fff' : 'var(--ies-gray-700)'};transition:all .12s;">
           Design
           <div style="font-size:10px;font-weight:500;margin-top:2px;color:${mode === 'design' ? 'rgba(255,255,255,.85)' : 'var(--ies-gray-500)'};">Inventory → building</div>
         </button>
         <button type="button" role="radio" aria-checked="${mode === 'constraint'}" data-wsc-mode="constraint"
                 title="Building W×D is a hard constraint (existing site or candidate). Tool computes the required footprint from inventory and shows the gap vs your entered building. Rendering uses your W×D; empty space surfaces as 'capacity slack'."
-                style="flex:1;padding:8px 10px;font-size:12px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid ${mode === 'constraint' ? 'var(--ies-blue,#0047AB)' : 'var(--ies-gray-200)'};background:${mode === 'constraint' ? 'var(--ies-blue,#0047AB)' : '#fff'};color:${mode === 'constraint' ? '#fff' : 'var(--ies-gray-700)'};transition:all .12s;">
+                style="flex:1;padding:8px 10px;font-size:12px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid ${mode === 'constraint' ? 'var(--ies-blue,var(--ies-blue))' : 'var(--ies-gray-200)'};background:${mode === 'constraint' ? 'var(--ies-blue,var(--ies-blue))' : '#fff'};color:${mode === 'constraint' ? '#fff' : 'var(--ies-gray-700)'};transition:all .12s;">
           Constraint
           <div style="font-size:10px;font-weight:500;margin-top:2px;color:${mode === 'constraint' ? 'rgba(255,255,255,.85)' : 'var(--ies-gray-500)'};">Building → fit check</div>
         </button>
@@ -70,9 +70,9 @@ export function renderConfigHtml(ctx) {
          on the model for back-compat with legacy heuristic paths).
          ────────────────────────────────────────────────────────────────── -->
     <div class="wsc-config-section wsc-step" data-step="1">
-      <div class="wsc-step-header" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-        <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,#0047AB);color:#fff;font-size:11px;font-weight:700;">1</span>
-        <span class="wsc-step-title" style="font-size:13px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ies-gray-700);">Demand &amp; Inventory Profile</span>
+      <div class="wsc-step-header u-row u-mb-2">
+        <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,var(--ies-blue));color:#fff;font-size:11px;font-weight:700;">1</span>
+        <span class="wsc-step-title wsc-section-title">Demand &amp; Inventory Profile</span>
         ${ctx.facility.parent_cost_model_id ? `<button class="hub-btn hub-btn-ghost hub-btn-sm" data-action="wsc-pull-from-cm" title="Re-pull volume defaults from the linked Cost Model." style="font-weight:500;margin-left:auto;">↻ Pull from CM</button>` : ''}
       </div>
       <div class="wsc-config-field" style="margin-bottom:10px;">
@@ -132,49 +132,49 @@ export function renderConfigHtml(ctx) {
         const effectiveShelving = shelvOverrideOn ? totalShelv : derivedShelving;
 
         const palBadge = palOverrideOn
-          ? '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:#dbeafe;color:#1e40af;font-size:10px;font-weight:700;letter-spacing:.02em;margin-left:6px;">OVERRIDE</span>'
+          ? '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:var(--c-info-bg);color:var(--c-info-ink);font-size:10px;font-weight:700;letter-spacing:.02em;margin-left:6px;">OVERRIDE</span>'
           : '<span style="color:var(--ies-gray-500);font-weight:400;font-size:11px;margin-left:6px;">(derived)</span>';
         const shelvBadge = shelvOverrideOn
-          ? '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:#dbeafe;color:#1e40af;font-size:10px;font-weight:700;letter-spacing:.02em;margin-left:6px;">OVERRIDE</span>'
+          ? '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:var(--c-info-bg);color:var(--c-info-ink);font-size:10px;font-weight:700;letter-spacing:.02em;margin-left:6px;">OVERRIDE</span>'
           : '<span style="color:var(--ies-gray-500);font-weight:400;font-size:11px;margin-left:6px;">(derived)</span>';
 
         return `
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin:6px 0 6px 0;">Throughput</div>
           <div class="wsc-config-row">
-            <div class="wsc-config-field"><label title="Annual outbound throughput in units. Drives the on-hand inventory derivation: peak on-hand = (annual / 365) × DOH × peak factor.">Annual Outbound <span style="color:var(--ies-gray-500);font-weight:400;">(units)</span></label><input type="number" value="${annualOut}" data-vol="annualOutboundUnits" /></div>
+            <div class="wsc-config-field"><label title="Annual outbound throughput in units. Drives the on-hand inventory derivation: peak on-hand = (annual / 365) × DOH × peak factor.">Annual Outbound <span class="wsc-muted-reg">(units)</span></label><input type="number" value="${annualOut}" data-vol="annualOutboundUnits" /></div>
             <div class="wsc-config-field"><label title="Days On Hand target — drives the throughput → on-hand inventory conversion. Default 30 days. Tier-A SKUs typically run 7-15 DOH; Tier-C 60-90.">DOH (days)</label><input type="number" value="${doh}" step="1" data-vol="daysOnHand" /></div>
           </div>
           <div class="wsc-config-row">
             <div class="wsc-config-field"><label title="Peak vs avg-day demand multiplier. Default 1.3. Drives both the peak on-hand units and the dock peak throughput.">Peak Factor</label><input type="number" value="${peakMult}" step="0.1" data-vol="peakMultiplier" /></div>
-            <div class="wsc-config-field"><label title="Average inbound pallets/day — drives dock throughput sizing.">Daily Inbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${ctx.volumes.avgDailyInbound || 0}" data-vol="avgDailyInbound" /></div>
+            <div class="wsc-config-field"><label title="Average inbound pallets/day — drives dock throughput sizing.">Daily Inbound <span class="wsc-muted-reg">(pallets/day)</span></label><input type="number" value="${ctx.volumes.avgDailyInbound || 0}" data-vol="avgDailyInbound" /></div>
           </div>
 
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin:14px 0 6px 0;">Storage Counts <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ies-gray-400);">(optional — override derived values when you have a slotting study)</span></div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin:14px 0 6px 0;">Storage Counts <span class="wsc-label-soft">(optional — override derived values when you have a slotting study)</span></div>
           <div class="wsc-config-row">
-            <div class="wsc-config-field"><label title="Total pallet positions on-hand at peak. Leave blank (0) to derive from throughput. When > 0, replaces the derived count and bypasses peakUnits × mix derivation for FP+CP.">Pallet Positions <span style="color:var(--ies-gray-500);font-weight:400;">(0 = derive)</span></label><input type="number" value="${totalPallets}" data-vol="totalPallets" /></div>
-            <div class="wsc-config-field"><label title="Total carton-on-shelving locations on-hand at peak. Leave blank (0) to derive from throughput × shelving mix. When > 0, replaces the derived count.">Shelving Locations <span style="color:var(--ies-gray-500);font-weight:400;">(0 = derive)</span></label><input type="number" value="${totalShelv}" data-vol="totalShelvingLocations" /></div>
+            <div class="wsc-config-field"><label title="Total pallet positions on-hand at peak. Leave blank (0) to derive from throughput. When > 0, replaces the derived count and bypasses peakUnits × mix derivation for FP+CP.">Pallet Positions <span class="wsc-muted-reg">(0 = derive)</span></label><input type="number" value="${totalPallets}" data-vol="totalPallets" /></div>
+            <div class="wsc-config-field"><label title="Total carton-on-shelving locations on-hand at peak. Leave blank (0) to derive from throughput × shelving mix. When > 0, replaces the derived count.">Shelving Locations <span class="wsc-muted-reg">(0 = derive)</span></label><input type="number" value="${totalShelv}" data-vol="totalShelvingLocations" /></div>
           </div>
 
           <div style="margin-top:10px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-700);">
-            <div style="font-weight:700;margin-bottom:4px;color:var(--ies-gray-500);text-transform:uppercase;font-size:10px;">Engine will size</div>
-            <div>Peak units on-hand: <strong>${peakOnHandUnits.toLocaleString()}</strong> <span style="color:var(--ies-gray-500);">(annual ÷ 365 × DOH × peak)</span></div>
-            <div>Pallet positions: <strong>${effectivePallets.toLocaleString()}</strong>${palBadge}<span style="color:var(--ies-gray-500);"> ${palOverrideOn ? `(your count, derived = ${derivedPallets.toLocaleString()})` : `(at ${unitsPerPallet} units/pallet)`}</span></div>
-            <div>Shelving locations: <strong>${effectiveShelving.toLocaleString()}</strong>${shelvBadge}<span style="color:var(--ies-gray-500);"> ${shelvOverrideOn ? `(your count, derived = ${derivedShelving.toLocaleString()})` : `(from peak units × shelving mix)`}</span></div>
+            <div class="wsc-microlabel-b">Engine will size</div>
+            <div>Peak units on-hand: <strong>${peakOnHandUnits.toLocaleString()}</strong> <span class="u-muted">(annual ÷ 365 × DOH × peak)</span></div>
+            <div>Pallet positions: <strong>${effectivePallets.toLocaleString()}</strong>${palBadge}<span class="u-muted"> ${palOverrideOn ? `(your count, derived = ${derivedPallets.toLocaleString()})` : `(at ${unitsPerPallet} units/pallet)`}</span></div>
+            <div>Shelving locations: <strong>${effectiveShelving.toLocaleString()}</strong>${shelvBadge}<span class="u-muted"> ${shelvOverrideOn ? `(your count, derived = ${derivedShelving.toLocaleString()})` : `(from peak units × shelving mix)`}</span></div>
           </div>
         `;
       })()}
 
       <!-- ABC velocity tiers -->
-      <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">ABC velocity tiers <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ies-gray-400);">(% of SKUs by velocity — Pareto default 20/30/50)</span></div>
+      <div class="wsc-subsection">
+        <div class="wsc-microlabel">ABC velocity tiers <span class="wsc-label-soft">(% of SKUs by velocity — Pareto default 20/30/50)</span></div>
         ${(() => {
           const a = +ctx.facility.velocityTierAPct || 0;
           const b = +ctx.facility.velocityTierBPct || 0;
           const c = +ctx.facility.velocityTierCPct || 0;
           const total = Math.round((a + b + c) * 10) / 10;
           const ok = total === 100;
-          const pillBg = ok ? '#dcfce7' : '#fef3c7';
-          const pillCol = ok ? '#166534' : '#92400e';
+          const pillBg = ok ? 'var(--c-success-bg)' : 'var(--c-warn-bg)';
+          const pillCol = ok ? 'var(--c-success-ink)' : 'var(--c-warn-ink)';
           const pillTxt = ok ? `${total}% ✓` : `${total}% ⚠ ≠100`;
           return `
             <div class="wsc-config-row">
@@ -201,21 +201,21 @@ export function renderConfigHtml(ctx) {
         const cs = +ctx.zones.storageAllocation?.cartonOnShelving || 0;
         const total = Math.round((fp + cp + cs) * 10) / 10;
         const ok = total === 100;
-        const pillBg = ok ? '#dcfce7' : '#fef3c7';
-        const pillCol = ok ? '#166534' : '#92400e';
+        const pillBg = ok ? 'var(--c-success-bg)' : 'var(--c-warn-bg)';
+        const pillCol = ok ? 'var(--c-success-ink)' : 'var(--c-warn-ink)';
         const pillTxt = ok ? `${total}% ✓` : `${total}% ⚠ ≠100`;
         return `
-          <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
+          <div class="wsc-subsection">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
-              <span>Storage type mix <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ies-gray-400);">(% of on-hand inventory by storage pattern)</span></span>
+              <span>Storage type mix <span class="wsc-label-soft">(% of on-hand inventory by storage pattern)</span></span>
               <span style="display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:${pillBg};color:${pillCol};font-size:11px;font-weight:700;letter-spacing:.02em;">Total: ${pillTxt}</span>
             </div>
             <div class="wsc-config-row">
-              <div class="wsc-config-field"><label title="Reserve / Full Pallet — units stored as full pallet loads in selective rack. Highest density, bulk movement; typical for slower-moving / case-pick reserve.">Reserve <span style="color:var(--ies-gray-500);font-weight:400;">(Full Pallet) %</span></label><input type="number" min="0" max="100" value="${fp}" data-alloc="fullPallet" /></div>
-              <div class="wsc-config-field"><label title="Case Pick / Carton-on-Pallet — pallets staged in pick face for case-quantity pull. Mid-density; typical for B-velocity SKUs needing case-level access.">Case Pick <span style="color:var(--ies-gray-500);font-weight:400;">(Carton-on-Pallet) %</span></label><input type="number" min="0" max="100" value="${cp}" data-alloc="cartonOnPallet" /></div>
+              <div class="wsc-config-field"><label title="Reserve / Full Pallet — units stored as full pallet loads in selective rack. Highest density, bulk movement; typical for slower-moving / case-pick reserve.">Reserve <span class="wsc-muted-reg">(Full Pallet) %</span></label><input type="number" min="0" max="100" value="${fp}" data-alloc="fullPallet" /></div>
+              <div class="wsc-config-field"><label title="Case Pick / Carton-on-Pallet — pallets staged in pick face for case-quantity pull. Mid-density; typical for B-velocity SKUs needing case-level access.">Case Pick <span class="wsc-muted-reg">(Carton-on-Pallet) %</span></label><input type="number" min="0" max="100" value="${cp}" data-alloc="cartonOnPallet" /></div>
             </div>
             <div class="wsc-config-row">
-              <div class="wsc-config-field"><label title="Each Pick / Carton Shelving — cartons in shelf locations for unit-level picking. Lowest density, highest pick velocity; typical for A-velocity SKUs and split-case forward.">Each Pick <span style="color:var(--ies-gray-500);font-weight:400;">(Carton Shelving) %</span></label><input type="number" min="0" max="100" value="${cs}" data-alloc="cartonOnShelving" /></div>
+              <div class="wsc-config-field"><label title="Each Pick / Carton Shelving — cartons in shelf locations for unit-level picking. Lowest density, highest pick velocity; typical for A-velocity SKUs and split-case forward.">Each Pick <span class="wsc-muted-reg">(Carton Shelving) %</span></label><input type="number" min="0" max="100" value="${cs}" data-alloc="cartonOnShelving" /></div>
               <div class="wsc-config-field"></div>
             </div>
           </div>
@@ -224,8 +224,8 @@ export function renderConfigHtml(ctx) {
 
       <!-- SKU breadth by zone — Phase C: lifted from old Step 4 into Step 1
            (drives min-locations + sku-bound mode for shelving sizing). -->
-      <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">SKU breadth by zone <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ies-gray-400);">(0 = derive heuristic)</span></div>
+      <div class="wsc-subsection">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">SKU breadth by zone <span class="wsc-label-soft">(0 = derive heuristic)</span></div>
         <div class="wsc-config-row">
           <div class="wsc-config-field"><label title="Number of distinct SKUs in the full-pallet zone. Sets a floor on minimum locations (one face per SKU). 0 = derive from positions × 0.1.">FP SKUs</label><input type="number" value="${ctx.facility.fullPalletSkus ?? 0}" data-fac="fullPalletSkus" /></div>
           <div class="wsc-config-field"><label title="SKUs in the carton-on-pallet zone.">CP SKUs</label><input type="number" value="${ctx.facility.cartonPalletSkus ?? 0}" data-fac="cartonPalletSkus" /></div>
@@ -239,8 +239,8 @@ export function renderConfigHtml(ctx) {
           if (!sh) return '';
           const modeColor = sh.mode === 'sku-bound' ? 'var(--ies-orange, #ff3a00)' : 'var(--ies-gray-700)';
           return `
-            <div style="margin-top:8px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-700);">
-              <div style="font-weight:700;margin-bottom:4px;color:var(--ies-gray-500);text-transform:uppercase;font-size:10px;">Shelving locations</div>
+            <div class="wsc-note">
+              <div class="wsc-microlabel-b">Shelving locations</div>
               <div>Demand-side: <strong>${sh.demandLocations.toLocaleString()}</strong> · SKU-side: <strong>${sh.skuMinLocations.toLocaleString()}</strong></div>
               <div>Required (× honeycomb × surge): <strong>${sh.locationsRequired.toLocaleString()}</strong> in <strong>${sh.baysRequired.toLocaleString()}</strong> bays</div>
               <div>Mode: <strong style="color:${modeColor};">${sh.mode}</strong></div>
@@ -266,7 +266,7 @@ export function renderConfigHtml(ctx) {
           return `
             <div class="wsc-channel-alloc-row" data-channel-key="${escapeAttr(c.channelKey)}" style="display:flex;flex-direction:column;gap:4px;padding:8px 0;border-top:1px solid var(--ies-gray-100);">
               <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;">
-                <span>${escapeHtml(c.name || c.channelKey)} ${isOverridden ? '<span style="color:var(--ies-blue);font-weight:700;" title="Channel override active">●</span>' : '<span style="color:var(--ies-gray-400);" title="Inheriting facility-level allocation">○</span>'}</span>
+                <span>${escapeHtml(c.name || c.channelKey)} ${isOverridden ? '<span style="color:var(--ies-blue);font-weight:700;" title="Channel override active">●</span>' : '<span class="u-faint" title="Inheriting facility-level allocation">○</span>'}</span>
                 <span style="color:${totalOk ? 'var(--ies-gray-500)' : 'var(--ies-orange)'};">${total}%${totalOk ? '' : ' ⚠'}</span>
               </div>
               <div style="display:grid;grid-template-columns:repeat(3,1fr) auto;gap:4px;">
@@ -291,7 +291,7 @@ export function renderConfigHtml(ctx) {
            with the volume profile; both feed downstream metrics. -->
       <div class="wsc-config-row" style="margin-top:10px;">
         <div class="wsc-config-field"><label title="Operating days per year — used downstream by DIOH metric.">Operating Days/Yr</label><input type="number" value="${ctx.zones.operatingDaysPerYear || 250}" data-inv="operatingDaysPerYear" /></div>
-        <div class="wsc-config-field"><label title="Average outbound pallets/day — drives dock throughput sizing.">Daily Outbound <span style="color:var(--ies-gray-500);font-weight:400;">(pallets/day)</span></label><input type="number" value="${ctx.volumes.avgDailyOutbound}" data-vol="avgDailyOutbound" /></div>
+        <div class="wsc-config-field"><label title="Average outbound pallets/day — drives dock throughput sizing.">Daily Outbound <span class="wsc-muted-reg">(pallets/day)</span></label><input type="number" value="${ctx.volumes.avgDailyOutbound}" data-vol="avgDailyOutbound" /></div>
       </div>
     </div>
 
@@ -304,13 +304,13 @@ export function renderConfigHtml(ctx) {
          (data fields preserved on ctx.zones.productDimensions for back-compat).
          ────────────────────────────────────────────────────────────────── -->
     <div class="wsc-config-section wsc-step" data-step="2">
-      <div class="wsc-step-header" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-        <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,#0047AB);color:#fff;font-size:11px;font-weight:700;">2</span>
-        <span class="wsc-step-title" style="font-size:13px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ies-gray-700);">Unit Load &amp; Carton</span>
+      <div class="wsc-step-header u-row u-mb-2">
+        <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,var(--ies-blue));color:#fff;font-size:11px;font-weight:700;">2</span>
+        <span class="wsc-step-title wsc-section-title">Unit Load &amp; Carton</span>
       </div>
 
       <!-- Pallet -->
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Pallet</div>
+      <div class="wsc-microlabel">Pallet</div>
       <div class="wsc-config-row">
         <div class="wsc-config-field">
           <label title="Pallet type drives default L×W. GMA / CHEP = 48×40. Euro = 1200×800mm. Custom uses the L/W fields below.">Pallet Type</label>
@@ -338,8 +338,8 @@ export function renderConfigHtml(ctx) {
         const u = sized?.unitLoad;
         if (!u) return '';
         return `
-          <div style="margin-top:8px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-700);">
-            <div style="font-weight:700;margin-bottom:4px;color:var(--ies-gray-500);text-transform:uppercase;font-size:10px;">Computed unit load</div>
+          <div class="wsc-note">
+            <div class="wsc-microlabel-b">Computed unit load</div>
             <div>Bay width (2 pallets per crossbeam): <strong>${u.bayWidthFt.toFixed(2)} ft</strong> (${u.bayWidthIn}")</div>
             <div>Rack depth (single / back-to-back): <strong>${u.rackDepthSingleFt.toFixed(2)} ft / ${u.rackDepthBackToBackFt.toFixed(2)} ft</strong></div>
             <div>Level pitch: <strong>${u.palletLevelHeightFt.toFixed(2)} ft</strong> · Levels at 30 ft clear: <strong>${u.palletLevelsAt30FtClear}</strong></div>
@@ -363,8 +363,8 @@ export function renderConfigHtml(ctx) {
           </select>
         </div>
       </div>
-      <div class="wsc-config-field" style="margin-bottom:8px;">
-        <label title="Override ti×hi-derived cartons-per-pallet. Use 0 to let the engine compute from carton + pallet dims (typical). Set > 0 if you have a slotting study with a specific case-pack.">Cartons/Pallet Override <span style="color:var(--ies-gray-500);font-weight:400;">(0 = derive)</span></label>
+      <div class="wsc-config-field u-mb-2">
+        <label title="Override ti×hi-derived cartons-per-pallet. Use 0 to let the engine compute from carton + pallet dims (typical). Set > 0 if you have a slotting study with a specific case-pack.">Cartons/Pallet Override <span class="wsc-muted-reg">(0 = derive)</span></label>
         <input type="number" value="${ctx.facility.cartonsPerPalletOverride ?? 0}" data-fac="cartonsPerPalletOverride" />
       </div>
       ${(() => {
@@ -372,8 +372,8 @@ export function renderConfigHtml(ctx) {
         if (!c) return '';
         const tag = c.cartonsPerPalletOverride ? ' (override)' : ' (ti×hi derived)';
         return `
-          <div style="margin-top:8px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-700);">
-            <div style="font-weight:700;margin-bottom:4px;color:var(--ies-gray-500);text-transform:uppercase;font-size:10px;">Computed carton profile</div>
+          <div class="wsc-note">
+            <div class="wsc-microlabel-b">Computed carton profile</div>
             <div>ti × hi: <strong>${c.ti} × ${c.hi}</strong> — Cartons/Pallet: <strong>${c.cartonsPerPallet}</strong>${tag}</div>
             <div>Cartons/Shelf: <strong>${c.cartonsPerShelf}</strong> (${c.cartonsPerShelfAcross} across × ${c.cartonsPerShelfDeep} deep, ${c.orientation})</div>
             <div>Shelf level pitch: <strong>${c.shelfLevelHeightFt.toFixed(2)} ft</strong> · Levels in 84": <strong>${c.shelfLevelsAt84In}</strong></div>
@@ -408,9 +408,9 @@ export function renderConfigHtml(ctx) {
          the A-velocity tier from Step 1).
          ────────────────────────────────────────────────────────────────── -->
     <div class="wsc-config-section wsc-step" data-step="3">
-      <div class="wsc-step-header" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-        <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,#0047AB);color:#fff;font-size:11px;font-weight:700;">3</span>
-        <span class="wsc-step-title" style="font-size:13px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ies-gray-700);">Operating Strategy</span>
+      <div class="wsc-step-header u-row u-mb-2">
+        <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,var(--ies-blue));color:#fff;font-size:11px;font-weight:700;">3</span>
+        <span class="wsc-step-title wsc-section-title">Operating Strategy</span>
       </div>
 
       <div class="wsc-config-row">
@@ -426,34 +426,34 @@ export function renderConfigHtml(ctx) {
       </div>
 
       <!-- Bottom-beam toggles per zone — drive 3D rendering (rack levels w/ vs w/o ground beam) -->
-      <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Bottom-beam <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ies-gray-400);">(off = pallet on slab)</span></div>
+      <div class="wsc-subsection">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Bottom-beam <span class="wsc-label-soft">(off = pallet on slab)</span></div>
         <div class="wsc-config-field" style="margin-bottom:6px;">
           <label style="display:flex;align-items:center;gap:6px;font-weight:500;">
-            <input type="checkbox" data-fac-bool="bottomBeamFp" ${ctx.facility.bottomBeamFp ? 'checked' : ''} style="margin:0;" />
+            <input type="checkbox" data-fac-bool="bottomBeamFp" ${ctx.facility.bottomBeamFp ? 'checked' : ''} class="u-m0" />
             <span>Full-Pallet zone (default off)</span>
           </label>
         </div>
         <div class="wsc-config-field" style="margin-bottom:6px;">
           <label style="display:flex;align-items:center;gap:6px;font-weight:500;">
-            <input type="checkbox" data-fac-bool="bottomBeamCp" ${ctx.facility.bottomBeamCp ? 'checked' : ''} style="margin:0;" />
+            <input type="checkbox" data-fac-bool="bottomBeamCp" ${ctx.facility.bottomBeamCp ? 'checked' : ''} class="u-m0" />
             <span>Carton-Pallet zone (default on for wire-deck case-pick)</span>
           </label>
         </div>
         <div class="wsc-config-field">
           <label style="display:flex;align-items:center;gap:6px;font-weight:500;">
-            <input type="checkbox" data-fac-bool="bottomBeamShelving" ${ctx.facility.bottomBeamShelving ? 'checked' : ''} style="margin:0;" />
+            <input type="checkbox" data-fac-bool="bottomBeamShelving" ${ctx.facility.bottomBeamShelving ? 'checked' : ''} class="u-m0" />
             <span>Shelving zone (default off — has own deck)</span>
           </label>
         </div>
       </div>
 
       <!-- Forward Pick — pairs with A-velocity tier from Step 1 -->
-      <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Forward Pick <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ies-gray-400);">(velocity-driven slotting)</span></div>
+      <div class="wsc-subsection">
+        <div class="wsc-microlabel">Forward Pick <span class="wsc-label-soft">(velocity-driven slotting)</span></div>
         <div class="wsc-config-field" style="margin-bottom:6px;">
           <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:12px;">
-            <input type="checkbox" ${ctx.zones.forwardPick?.enabled ? 'checked' : ''} data-fwd="enabled" style="margin:0;" />
+            <input type="checkbox" ${ctx.zones.forwardPick?.enabled ? 'checked' : ''} data-fwd="enabled" class="u-m0" />
             <span>Enable Forward Pick area</span>
           </label>
         </div>
@@ -473,8 +473,8 @@ export function renderConfigHtml(ctx) {
             <div class="wsc-config-field"><label title="DOH held in the forward-pick area before replenishment from reserve. Lower = more frequent reps; higher = bigger forward area.">Days Inventory (DOH)</label><input type="number" value="${ctx.zones.forwardPick?.daysInventory || 3}" step="0.5" data-fwd="daysInventory" /></div>
             <div class="wsc-config-field"><label title="Outbound units/day flowing through the forward-pick area. Used by some downstream metrics; doesn't drive area sizing directly (active-face count does).">Outbound (units/day)</label><input type="number" value="${ctx.zones.forwardPick?.outboundUnitsPerDay || 5000}" data-fwd="outboundUnitsPerDay" /></div>
           </div>
-          <div style="margin-top:8px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-700);">
-            <div style="font-weight:700;margin-bottom:4px;color:var(--ies-gray-500);text-transform:uppercase;font-size:10px;">Active-face derivation</div>
+          <div class="wsc-note">
+            <div class="wsc-microlabel-b">Active-face derivation</div>
             ${(() => {
               const skus = +ctx.zones.forwardPick?.skuCount || 0;
               const aPct = +ctx.facility.velocityTierAPct || 20;
@@ -493,13 +493,13 @@ export function renderConfigHtml(ctx) {
          Returns, Chargeback, Charging, Repack/VAS, Other) + custom ctx.zones.
          ────────────────────────────────────────────────────────────────── -->
     <div class="wsc-config-section wsc-step" data-step="4">
-      <div class="wsc-step-header" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-        <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,#0047AB);color:#fff;font-size:11px;font-weight:700;">4</span>
-        <span class="wsc-step-title" style="font-size:13px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ies-gray-700);">Dock &amp; Support</span>
+      <div class="wsc-step-header u-row u-mb-2">
+        <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,var(--ies-blue));color:#fff;font-size:11px;font-weight:700;">4</span>
+        <span class="wsc-step-title wsc-section-title">Dock &amp; Support</span>
       </div>
 
       <!-- Dock throughput parameters (peak-throughput-driven derivation) -->
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Dock throughput parameters</div>
+      <div class="wsc-microlabel">Dock throughput parameters</div>
       <div class="wsc-config-row">
         <div class="wsc-config-field"><label title="Pallets per truck — 26 with stack, 30 floor-loaded.">Pallets/Truck</label><input type="number" value="${ctx.facility.palletsPerTruck ?? 26}" data-fac="palletsPerTruck" /></div>
         <div class="wsc-config-field"><label title="Hours each truck occupies a door (live unload + stage).">Dwell Hrs/Truck</label><input type="number" value="${ctx.facility.dwellHoursPerTruck ?? 1.5}" step="0.25" data-fac="dwellHoursPerTruck" /></div>
@@ -510,9 +510,9 @@ export function renderConfigHtml(ctx) {
       </div>
 
       <!-- Dock layout + explicit door overrides -->
-      <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Dock layout &amp; overrides</div>
-        <div class="wsc-config-field" style="margin-bottom:8px;">
+      <div class="wsc-subsection">
+        <div class="wsc-microlabel">Dock layout &amp; overrides</div>
+        <div class="wsc-config-field u-mb-2">
           <label title="Single-sided = inbound + outbound on the same dock face. Two-sided = inbound on one wall, outbound on the opposite wall — uses 2× as much wall but separates flows.">Dock Layout</label>
           <select data-dock="sided">
             <option value="single"${ctx.zones.dockConfig?.sided === 'single' ? ' selected' : ''}>Single-Sided</option>
@@ -520,39 +520,39 @@ export function renderConfigHtml(ctx) {
           </select>
         </div>
         <div class="wsc-config-row">
-          <div class="wsc-config-field"><label title="If > 0, engine uses this explicit count instead of deriving from peak throughput.">Inbound Doors <span style="color:var(--ies-gray-500);font-weight:400;">(explicit)</span></label><input type="number" value="${ctx.zones.dockConfig?.inboundDoors ?? 0}" data-dock="inboundDoors" /></div>
-          <div class="wsc-config-field"><label title="If > 0, engine uses this explicit count instead of deriving from peak throughput.">Outbound Doors <span style="color:var(--ies-gray-500);font-weight:400;">(explicit)</span></label><input type="number" value="${ctx.zones.dockConfig?.outboundDoors ?? 0}" data-dock="outboundDoors" /></div>
+          <div class="wsc-config-field"><label title="If > 0, engine uses this explicit count instead of deriving from peak throughput.">Inbound Doors <span class="wsc-muted-reg">(explicit)</span></label><input type="number" value="${ctx.zones.dockConfig?.inboundDoors ?? 0}" data-dock="inboundDoors" /></div>
+          <div class="wsc-config-field"><label title="If > 0, engine uses this explicit count instead of deriving from peak throughput.">Outbound Doors <span class="wsc-muted-reg">(explicit)</span></label><input type="number" value="${ctx.zones.dockConfig?.outboundDoors ?? 0}" data-dock="outboundDoors" /></div>
         </div>
         <div class="wsc-config-row">
           <div class="wsc-config-field"><label title="Pallets per door per hour throughput rate. Drives the legacy door-utilization metric.">Pallets/Hr/Door</label><input type="number" value="${ctx.zones.dockConfig?.palletsPerDockHour ?? 0}" step="1" data-dock="palletsPerDockHour" /></div>
-          <div class="wsc-config-field"><label title="Legacy operating hours/day for door-utilization metric.">Operating Hrs <span style="color:var(--ies-gray-500);font-weight:400;">(legacy)</span></label><input type="number" value="${ctx.zones.dockConfig?.dockOperatingHours ?? 0}" step="0.5" data-dock="dockOperatingHours" /></div>
+          <div class="wsc-config-field"><label title="Legacy operating hours/day for door-utilization metric.">Operating Hrs <span class="wsc-muted-reg">(legacy)</span></label><input type="number" value="${ctx.zones.dockConfig?.dockOperatingHours ?? 0}" step="0.5" data-dock="dockOperatingHours" /></div>
         </div>
       </div>
 
       <!-- Optional ctx.zones (VAS / Returns / Chargeback) -->
-      <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Optional Zones</div>
-        <div class="wsc-config-field" style="margin-bottom:8px;">
+      <div class="wsc-subsection">
+        <div class="wsc-microlabel">Optional Zones</div>
+        <div class="wsc-config-field u-mb-2">
           <label style="display:flex; align-items:center; gap:6px;">
-            <input type="checkbox" ${ctx.zones.optionalZones?.vas?.enabled ? 'checked' : ''} data-opt="vas-enabled" style="margin:0;" />
+            <input type="checkbox" ${ctx.zones.optionalZones?.vas?.enabled ? 'checked' : ''} data-opt="vas-enabled" class="u-m0" />
             <span>VAS</span>
           </label>
         </div>
         <div class="wsc-config-row single-col" id="wsc-opt-vas-row" style="display:${ctx.zones.optionalZones?.vas?.enabled ? 'grid' : 'none'};">
           <div class="wsc-config-field"><label>VAS SF</label><input type="number" value="${ctx.zones.optionalZones?.vas?.sqft || 0}" data-opt="vas-sqft" /></div>
         </div>
-        <div class="wsc-config-field" style="margin-bottom:8px;">
+        <div class="wsc-config-field u-mb-2">
           <label style="display:flex; align-items:center; gap:6px;">
-            <input type="checkbox" ${ctx.zones.optionalZones?.returns?.enabled ? 'checked' : ''} data-opt="returns-enabled" style="margin:0;" />
+            <input type="checkbox" ${ctx.zones.optionalZones?.returns?.enabled ? 'checked' : ''} data-opt="returns-enabled" class="u-m0" />
             <span>Returns</span>
           </label>
         </div>
         <div class="wsc-config-row single-col" id="wsc-opt-returns-row" style="display:${ctx.zones.optionalZones?.returns?.enabled ? 'grid' : 'none'};">
           <div class="wsc-config-field"><label>Returns SF</label><input type="number" value="${ctx.zones.optionalZones?.returns?.sqft || 0}" data-opt="returns-sqft" /></div>
         </div>
-        <div class="wsc-config-field" style="margin-bottom:8px;">
+        <div class="wsc-config-field u-mb-2">
           <label style="display:flex; align-items:center; gap:6px;">
-            <input type="checkbox" ${ctx.zones.optionalZones?.chargeback?.enabled ? 'checked' : ''} data-opt="chargeback-enabled" style="margin:0;" />
+            <input type="checkbox" ${ctx.zones.optionalZones?.chargeback?.enabled ? 'checked' : ''} data-opt="chargeback-enabled" class="u-m0" />
             <span>Chargeback</span>
           </label>
         </div>
@@ -570,8 +570,8 @@ export function renderConfigHtml(ctx) {
       </div>
 
       <!-- Custom ctx.zones -->
-      <div style="margin-top:14px;padding-top:8px;border-top:1px solid var(--ies-gray-100);">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin-bottom:6px;">Custom Zones</div>
+      <div class="wsc-subsection">
+        <div class="wsc-microlabel">Custom Zones</div>
         <div id="wsc-custom-zones-list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
           ${(ctx.zones.customZones || []).map((z, i) => `
             <div style="display:flex; gap:4px; align-items:center;">
@@ -581,7 +581,7 @@ export function renderConfigHtml(ctx) {
             </div>
           `).join('')}
         </div>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-add-custom-zone" style="width:100%;">+ Add Custom Zone</button>
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="wsc-add-custom-zone" class="u-full">+ Add Custom Zone</button>
       </div>
     </div>
 
@@ -593,22 +593,22 @@ export function renderConfigHtml(ctx) {
          label that mixed sized output with user dims under one label is gone.
          ────────────────────────────────────────────────────────────────── -->
     <div class="wsc-config-section wsc-step" data-step="5">
-      <div class="wsc-step-header" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <div class="wsc-step-header u-row u-mb-2">
         <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-gray-500);color:#fff;font-size:11px;font-weight:700;">5</span>
-        <span class="wsc-step-title" style="font-size:13px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ies-gray-700);">${mode === 'constraint' ? 'Capacity Check' : 'Sized Facility'}</span>
+        <span class="wsc-step-title wsc-section-title">${mode === 'constraint' ? 'Capacity Check' : 'Sized Facility'}</span>
       </div>
       ${(() => {
         if (!sized) return `<div style="font-size:11px;color:var(--ies-gray-500);">Sizing unavailable — fill in Steps 1-4.</div>`;
         const r = sized.requirementsDriven || {};
         const requiredBlock = `
           <div style="padding:10px 12px;background:var(--ies-gray-50);border-radius:6px;font-size:12px;color:var(--ies-gray-700);margin-bottom:8px;">
-            <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Storage</span><strong>${r.storageSf?.toLocaleString() || 0} sf</strong></div>
-            <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Dock (peak-throughput driven)</span><strong>${r.dockSf?.toLocaleString() || 0} sf</strong></div>
-            <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Office</span><strong>${r.officeSf?.toLocaleString() || 0} sf</strong></div>
-            <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Staging</span><strong>${r.stagingSf?.toLocaleString() || 0} sf</strong></div>
-            ${r.additionalSf > 0 ? `<div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Additional</span><strong>${r.additionalSf.toLocaleString()} sf</strong></div>` : ''}
+            <div class="wsc-kv-plain"><span>Storage</span><strong>${r.storageSf?.toLocaleString() || 0} sf</strong></div>
+            <div class="wsc-kv-plain"><span>Dock (peak-throughput driven)</span><strong>${r.dockSf?.toLocaleString() || 0} sf</strong></div>
+            <div class="wsc-kv-plain"><span>Office</span><strong>${r.officeSf?.toLocaleString() || 0} sf</strong></div>
+            <div class="wsc-kv-plain"><span>Staging</span><strong>${r.stagingSf?.toLocaleString() || 0} sf</strong></div>
+            ${r.additionalSf > 0 ? `<div class="wsc-kv-plain"><span>Additional</span><strong>${r.additionalSf.toLocaleString()} sf</strong></div>` : ''}
             <div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--ies-gray-500);"><span>+ Circulation buffer (10%)</span><strong>${r.circulationSf?.toLocaleString() || 0} sf</strong></div>
-            <div style="display:flex;justify-content:space-between;padding:6px 0 2px;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:var(--ies-blue,#0047AB);"><span>${mode === 'constraint' ? 'Required' : 'Sized Total'}</span><strong>${r.totalSfRequired?.toLocaleString() || 0} sf</strong></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0 2px;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:var(--ies-blue,var(--ies-blue));"><span>${mode === 'constraint' ? 'Required' : 'Sized Total'}</span><strong>${r.totalSfRequired?.toLocaleString() || 0} sf</strong></div>
             ${mode === 'design' ? `<div style="display:flex;justify-content:space-between;padding:2px 0;color:var(--ies-gray-500);font-size:11px;"><span>Suggested footprint (1.5:1)</span><strong>${r.suggestedLongFt || 0} × ${r.suggestedShortFt || 0} ft</strong></div>` : ''}
           </div>
         `;
@@ -619,7 +619,7 @@ export function renderConfigHtml(ctx) {
         const required = r.totalSfRequired || 0;
         const deltaSf = haveBuilt ? builtSf - required : 0;
         const deltaPct = (haveBuilt && required > 0) ? Math.round((deltaSf / required) * 1000) / 10 : 0;
-        const gapColor = !haveBuilt ? 'var(--ies-gray-500)' : Math.abs(deltaPct) <= 5 ? 'var(--ies-green,#10b981)' : deltaSf > 0 ? 'var(--ies-blue,#0047AB)' : 'var(--ies-orange, #ff3a00)';
+        const gapColor = !haveBuilt ? 'var(--ies-gray-500)' : Math.abs(deltaPct) <= 5 ? 'var(--ies-green,#10b981)' : deltaSf > 0 ? 'var(--ies-blue,var(--ies-blue))' : 'var(--ies-orange, #ff3a00)';
         const gapLabel = !haveBuilt ? 'Enter building dims to compute gap' : Math.abs(deltaPct) <= 5 ? `Within ±5% — fits` : deltaSf > 0 ? `+${deltaPct}% slack` : `${deltaPct}% short`;
         return `
           ${requiredBlock}
@@ -629,7 +629,7 @@ export function renderConfigHtml(ctx) {
               <div class="wsc-config-field"><label>Width (ft)</label><input type="number" value="${ctx.facility.buildingWidth || 0}" data-fac="buildingWidth" /></div>
               <div class="wsc-config-field"><label>Depth (ft)</label><input type="number" value="${ctx.facility.buildingDepth || 0}" data-fac="buildingDepth" /></div>
             </div>
-            <div style="display:flex;justify-content:space-between;padding:2px 0;"><span>Footprint area</span><strong>${haveBuilt ? builtSf.toLocaleString() + ' sf' : '—'}</strong></div>
+            <div class="wsc-kv-plain"><span>Footprint area</span><strong>${haveBuilt ? builtSf.toLocaleString() + ' sf' : '—'}</strong></div>
             <div style="display:flex;justify-content:space-between;padding:6px 0 2px;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:${gapColor};"><span>Gap</span><strong>${haveBuilt ? (deltaSf >= 0 ? '+' : '') + deltaSf.toLocaleString() + ' sf · ' : ''}${gapLabel}</strong></div>
           </div>
           <div style="border-top:1px dashed var(--ies-gray-300);padding-top:8px;margin-top:4px;">
@@ -690,7 +690,7 @@ export function renderQuickConfigHtml(ctx) {
         <input type="number" min="0" value="${+ctx.volumes.totalPallets || 0}" data-vol="totalPallets" />
       </div>
       <div class="wsc-config-field" style="margin-bottom:10px;">
-        <label title="Carton-on-shelving locations at peak. Leave 0 if everything lives in rack.">Shelving Locations <span style="color:var(--ies-gray-500);font-weight:400;">(0 = none)</span></label>
+        <label title="Carton-on-shelving locations at peak. Leave 0 if everything lives in rack.">Shelving Locations <span class="wsc-muted-reg">(0 = none)</span></label>
         <input type="number" min="0" value="${+ctx.volumes.totalShelvingLocations || 0}" data-vol="totalShelvingLocations" />
       </div>
       <div class="wsc-config-field" style="margin-bottom:10px;">
@@ -702,7 +702,7 @@ export function renderQuickConfigHtml(ctx) {
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
           ${WSC_QUICK_MIX_PRESETS.map(p => `
             <button type="button" data-wsc-mix-preset="${p.key}"
-                    style="text-align:left;padding:8px 10px;border-radius:6px;cursor:pointer;border:1px solid ${activeKey === p.key ? 'var(--ies-blue,#0047AB)' : 'var(--ies-gray-200)'};background:${activeKey === p.key ? 'rgba(0,71,171,0.06)' : '#fff'};">
+                    style="text-align:left;padding:8px 10px;border-radius:6px;cursor:pointer;border:1px solid ${activeKey === p.key ? 'var(--ies-blue,var(--ies-blue))' : 'var(--ies-gray-200)'};background:${activeKey === p.key ? 'rgba(0,71,171,0.06)' : '#fff'};">
               <div style="font-size:12px;font-weight:700;color:var(--ies-gray-700);">${p.label} <span style="font-weight:500;color:var(--ies-gray-500);">· ${p.mix.fullPallet}/${p.mix.cartonOnPallet}/${p.mix.cartonOnShelving}</span></div>
               <div style="font-size:11px;color:var(--ies-gray-500);">${p.hint}</div>
             </button>`).join('')}

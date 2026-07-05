@@ -36,7 +36,7 @@
 import { refreshToolChrome, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260705-u1a';
 import { bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260705-u1a';
-import { drawPlan, hitCorner, planHoverUpdate, cycleGridMode, toggleLayer, getMeasureMode, toggleMeasureMode, exitMeasureMode, addMeasurePoint, clearMeasurements, setMeasureCursor } from './ui-plan.js?v=20260703-ux0';
+import { drawPlan, hitCorner, planHoverUpdate, cycleGridMode, toggleLayer, getMeasureMode, toggleMeasureMode, exitMeasureMode, addMeasurePoint, clearMeasurements, setMeasureCursor } from './ui-plan.js?v=20260705-u3a';
 import { pushToCm } from './ui-cm-bridge.js?v=20260702-p1b';
 
 /**

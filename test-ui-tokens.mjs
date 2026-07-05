@@ -29,6 +29,8 @@ const css = readFileSync('./css/hub.css', 'utf8');
     '--c-info', '--c-info-bg', '--c-info-ink',
     '--c-muted', '--c-ink-deep', '--c-purple', '--c-ink',
     '--c-success-soft', '--c-danger-soft', '--c-warn-soft', '--c-info-soft',
+    '--c-info-border', '--c-danger-border', '--c-info-strong', '--c-info-deep',
+    '--c-warn-deep', '--c-muted-light', '--c-purple-bright',
     '--accent-primary', '--accent-info',
   ];
   for (const r of required) t(`semantic token ${r} defined`, defs.includes(r));

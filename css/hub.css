@@ -105,6 +105,13 @@
   --c-danger-soft:    #fef2f2;
   --c-warn-soft:      #fffbeb;
   --c-info-soft:      #eff6ff;
+  --c-info-border:    #bfdbfe; /* -200 borders on -soft tints */
+  --c-danger-border:  #fecaca;
+  --c-info-strong:    #1d4ed8;
+  --c-info-deep:      #1e3a8a;
+  --c-warn-deep:      #b45309;
+  --c-muted-light:    #9ca3af;
+  --c-purple-bright:  #8b5cf6;
 
   /* Accent semantics (Brock 2026-07-05): orange = brand + primary action,
      blue = informational / links / selected-state. */
@@ -4325,6 +4332,7 @@ textarea.hub-input {
 .u-bold    { font-weight: 700; }
 .u-cap     { font-size: var(--fs-caption); }   /* 11px */
 .u-12      { font-size: 12px; }                /* off-scale; fold into --fs at U4 */
+.u-13      { font-size: 13px; }                /* = --fs-body; utility for composed migrations */
 .u-muted   { color: var(--ies-gray-500); }
 .u-faint   { color: var(--ies-gray-400); }
 .u-dim     { color: var(--ies-gray-600); }

@@ -83,31 +83,31 @@ export function renderDashboard(ctx) {
       // Design mode — single column. Engine answer = footprint.
       if (_mode === 'design') {
         return `
-          <div class="hub-card mb-6" style="border-left:4px solid var(--ies-blue,#0047AB);padding:16px 20px;">
+          <div class="hub-card mb-6" style="border-left:4px solid var(--ies-blue,var(--ies-blue));padding:16px 20px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
               <div>
                 <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ies-gray-700);">Sized Facility</div>
                 <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">Design mode — engine sizes the building from inventory + dock throughput. Switch to Constraint mode in the Configure panel to evaluate an existing W×D.</div>
               </div>
-              <div style="text-align:right;">
+              <div class="u-right">
                 <div style="font-size:11px;color:var(--ies-gray-400);text-transform:uppercase;font-weight:700;">Sized total</div>
-                <div style="font-size:18px;font-weight:800;color:var(--ies-blue,#0047AB);">${r.totalSfRequired.toLocaleString()} sf</div>
+                <div style="font-size:18px;font-weight:800;color:var(--ies-blue,var(--ies-blue));">${r.totalSfRequired.toLocaleString()} sf</div>
               </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
               <div>
                 <div style="font-size:11px;color:var(--ies-gray-500);text-transform:uppercase;font-weight:700;margin-bottom:6px;">Critical-path SF</div>
-                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Storage</span><strong>${r.storageSf.toLocaleString()} sf</strong></div>
-                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Dock <span style="color:var(--ies-gray-400);">(peak-throughput driven)</span></span><strong>${r.dockSf.toLocaleString()} sf</strong></div>
-                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Office</span><strong>${r.officeSf.toLocaleString()} sf</strong></div>
-                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Staging</span><strong>${r.stagingSf.toLocaleString()} sf</strong></div>
-                ${r.additionalSf > 0 ? `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Additional</span><strong>${r.additionalSf.toLocaleString()} sf</strong></div>` : ''}
+                <div class="hub-kv"><span>Storage</span><strong>${r.storageSf.toLocaleString()} sf</strong></div>
+                <div class="hub-kv"><span>Dock <span class="u-faint">(peak-throughput driven)</span></span><strong>${r.dockSf.toLocaleString()} sf</strong></div>
+                <div class="hub-kv"><span>Office</span><strong>${r.officeSf.toLocaleString()} sf</strong></div>
+                <div class="hub-kv"><span>Staging</span><strong>${r.stagingSf.toLocaleString()} sf</strong></div>
+                ${r.additionalSf > 0 ? `<div class="hub-kv"><span>Additional</span><strong>${r.additionalSf.toLocaleString()} sf</strong></div>` : ''}
                 <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;color:var(--ies-gray-500);"><span>+ Circulation buffer (10%)</span><strong>${r.circulationSf.toLocaleString()} sf</strong></div>
-                <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:var(--ies-blue,#0047AB);"><span>Total</span><strong>${r.totalSfRequired.toLocaleString()} sf</strong></div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:var(--ies-blue,var(--ies-blue));"><span>Total</span><strong>${r.totalSfRequired.toLocaleString()} sf</strong></div>
               </div>
               <div>
                 <div style="font-size:11px;color:var(--ies-gray-500);text-transform:uppercase;font-weight:700;margin-bottom:6px;">Footprint</div>
-                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Long edge × Short edge</span><strong>${r.suggestedLongFt} × ${r.suggestedShortFt} ft</strong></div>
+                <div class="hub-kv"><span>Long edge × Short edge</span><strong>${r.suggestedLongFt} × ${r.suggestedShortFt} ft</strong></div>
                 <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;color:var(--ies-gray-500);"><span>Aspect ratio</span><strong>1.5 : 1</strong></div>
                 <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;color:var(--ies-gray-500);"><span>Convention</span><strong>Dock on long edge</strong></div>
                 <div style="margin-top:10px;padding:8px 10px;background:var(--ies-gray-50);border-radius:4px;font-size:11px;color:var(--ies-gray-600);line-height:1.5;">
@@ -125,7 +125,7 @@ export function renderDashboard(ctx) {
       const deltaSf = haveBuilt ? builtSf - r.totalSfRequired : 0;
       const deltaPct = (haveBuilt && r.totalSfRequired > 0) ? Math.round((deltaSf / r.totalSfRequired) * 1000) / 10 : 0;
       const status = !haveBuilt ? 'unbuilt' : Math.abs(deltaPct) <= 5 ? 'on-target' : deltaPct > 5 ? 'slack' : 'short';
-      const statusColor = status === 'on-target' ? 'var(--ies-green,#10b981)' : status === 'slack' ? 'var(--ies-blue,#0047AB)' : status === 'short' ? 'var(--ies-orange, #ff3a00)' : 'var(--ies-gray-500)';
+      const statusColor = status === 'on-target' ? 'var(--ies-green,#10b981)' : status === 'slack' ? 'var(--ies-blue,var(--ies-blue))' : status === 'short' ? 'var(--ies-orange, #ff3a00)' : 'var(--ies-gray-500)';
       const statusLabel = status === 'on-target' ? '✓ On target (within 5%)' : status === 'slack' ? `+${deltaPct}% capacity slack` : status === 'short' ? `${deltaPct}% short` : 'Enter building dims';
       const canApply = r.suggestedLongFt > 0 && r.suggestedShortFt > 0;
       return `
@@ -135,7 +135,7 @@ export function renderDashboard(ctx) {
               <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ies-gray-700);">Capacity Check</div>
               <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">Constraint mode — your building is fixed. Tool shows whether your inventory fits, and by how much.</div>
             </div>
-            <div style="text-align:right;">
+            <div class="u-right">
               <div style="font-size:11px;color:var(--ies-gray-400);text-transform:uppercase;font-weight:700;">Status</div>
               <div style="font-size:14px;font-weight:700;color:${statusColor};">${statusLabel}</div>
             </div>
@@ -143,20 +143,20 @@ export function renderDashboard(ctx) {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
             <div>
               <div style="font-size:11px;color:var(--ies-gray-500);text-transform:uppercase;font-weight:700;margin-bottom:6px;">Required (computed)</div>
-              <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Storage</span><strong>${r.storageSf.toLocaleString()} sf</strong></div>
-              <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Dock <span style="color:var(--ies-gray-400);">(peak-throughput driven)</span></span><strong>${r.dockSf.toLocaleString()} sf</strong></div>
-              <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Office</span><strong>${r.officeSf.toLocaleString()} sf</strong></div>
-              <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Staging</span><strong>${r.stagingSf.toLocaleString()} sf</strong></div>
-              ${r.additionalSf > 0 ? `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Additional</span><strong>${r.additionalSf.toLocaleString()} sf</strong></div>` : ''}
+              <div class="hub-kv"><span>Storage</span><strong>${r.storageSf.toLocaleString()} sf</strong></div>
+              <div class="hub-kv"><span>Dock <span class="u-faint">(peak-throughput driven)</span></span><strong>${r.dockSf.toLocaleString()} sf</strong></div>
+              <div class="hub-kv"><span>Office</span><strong>${r.officeSf.toLocaleString()} sf</strong></div>
+              <div class="hub-kv"><span>Staging</span><strong>${r.stagingSf.toLocaleString()} sf</strong></div>
+              ${r.additionalSf > 0 ? `<div class="hub-kv"><span>Additional</span><strong>${r.additionalSf.toLocaleString()} sf</strong></div>` : ''}
               <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px;color:var(--ies-gray-500);"><span>+ Circulation buffer (10%)</span><strong>${r.circulationSf.toLocaleString()} sf</strong></div>
-              <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:var(--ies-blue,#0047AB);"><span>Total Required</span><strong>${r.totalSfRequired.toLocaleString()} sf</strong></div>
+              <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:var(--ies-blue,var(--ies-blue));"><span>Total Required</span><strong>${r.totalSfRequired.toLocaleString()} sf</strong></div>
               <div style="font-size:11px;color:var(--ies-gray-500);margin-top:4px;">Suggested footprint: <strong>${r.suggestedLongFt} × ${r.suggestedShortFt} ft</strong> (1.5:1)</div>
             </div>
             <div>
               <div style="font-size:11px;color:var(--ies-gray-500);text-transform:uppercase;font-weight:700;margin-bottom:6px;">Existing building</div>
               ${haveBuilt ? `
-                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Width × Depth</span><strong>${ctx.facility.buildingWidth} × ${ctx.facility.buildingDepth} ft</strong></div>
-                <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:12px;"><span>Footprint area</span><strong>${builtSf.toLocaleString()} sf</strong></div>
+                <div class="hub-kv"><span>Width × Depth</span><strong>${ctx.facility.buildingWidth} × ${ctx.facility.buildingDepth} ft</strong></div>
+                <div class="hub-kv"><span>Footprint area</span><strong>${builtSf.toLocaleString()} sf</strong></div>
                 <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--ies-gray-200);margin-top:6px;font-weight:700;color:${statusColor};"><span>Gap</span><strong>${deltaSf >= 0 ? '+' : ''}${deltaSf.toLocaleString()} sf (${deltaPct >= 0 ? '+' : ''}${deltaPct}%)</strong></div>
               ` : `
                 <div style="font-size:11px;color:var(--ies-gray-500);font-style:italic;padding:8px 0;">No building dims set. Enter Width / Depth in Step 5, or click Apply suggested dims to use the engineered footprint as a starting point.</div>
@@ -176,10 +176,10 @@ export function renderDashboard(ctx) {
     <div class="hub-card mb-6" style="border-left:4px solid var(--ies-blue);padding:20px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <div>
-          <div class="text-section" style="margin:0;">${calc.formatSqft(sized.totalSqft)} Facility — ${calc.labelForStoreType(sized.storageDetail.storeType)}</div>
+          <div class="text-section u-m0">${calc.formatSqft(sized.totalSqft)} Facility — ${calc.labelForStoreType(sized.storageDetail.storeType)}</div>
           <div style="font-size:12px;color:var(--ies-gray-500);margin-top:4px;">${escapeHtml(sized.storageDetail.layoutDescription)}</div>
         </div>
-        <div style="text-align:right;">
+        <div class="u-right">
           <div style="font-size:11px;color:var(--ies-gray-400);text-transform:uppercase;font-weight:700;">SF / Position</div>
           <div style="font-size:20px;font-weight:800;">${sized.sfPerPosition.toFixed(1)}</div>
         </div>
@@ -217,8 +217,8 @@ export function renderDashboard(ctx) {
           ${(() => {
             const sh = sized.locations?.shelving || {};
             const modeChip = sh.mode === 'override'
-              ? '<span style="font-size:10px;background:#dbeafe;color:#1e3a8a;padding:1px 5px;border-radius:3px;margin-left:4px;">OVERRIDE</span>'
-              : `<span style="font-size:10px;background:#f0fdf4;color:#166534;padding:1px 5px;border-radius:3px;margin-left:4px;">${(sh.mode || 'tie').toUpperCase()}</span>`;
+              ? '<span style="font-size:10px;background:var(--c-info-bg);color:var(--c-info-deep);padding:1px 5px;border-radius:3px;margin-left:4px;">OVERRIDE</span>'
+              : `<span style="font-size:10px;background:var(--c-success-soft);color:var(--c-success-ink);padding:1px 5px;border-radius:3px;margin-left:4px;">${(sh.mode || 'tie').toUpperCase()}</span>`;
             return `
             <tr><td>Demand-side locations <span style="color:var(--ies-gray-400);font-size:11px;">(cartons ÷ per-shelf)</span></td><td class="cm-num">${(sh.demandLocations || 0).toLocaleString()}</td></tr>
             <tr><td>SKU minimum <span style="color:var(--ies-gray-400);font-size:11px;">(≥ 1 location per SKU)</span></td><td class="cm-num">${(sh.skuMinLocations || 0).toLocaleString()}</td></tr>
@@ -232,9 +232,9 @@ export function renderDashboard(ctx) {
                 <td style="padding-left:8px;">${escapeHtml(c.name)}${renderCmDrillbackChip({ cmId: ctx.facility.parent_cost_model_id, channelKey: c.channelKey, channelName: c.name })}</td>
                 <td class="cm-num">
                   <span title="Full pallet positions">${c.fullPalletPositions.toLocaleString()} fp</span>
-                  <span style="color:var(--ies-gray-400);"> · </span>
+                  <span class="u-faint"> · </span>
                   <span title="Carton-on-pallet positions">${c.cartonOnPalletPositions.toLocaleString()} cp</span>
-                  <span style="color:var(--ies-gray-400);"> · </span>
+                  <span class="u-faint"> · </span>
                   <span title="Carton-on-shelving locations">${c.cartonOnShelvingLocations.toLocaleString()} cs</span>
                 </td>
               </tr>
@@ -250,7 +250,7 @@ export function renderDashboard(ctx) {
       </table>
 
       ${sized.utilization.warning === 'high_util' ? `
-        <div style="margin-top:12px;padding:10px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;color:#92400e;font-size:12px;">
+        <div style="margin-top:12px;padding:10px;background:var(--c-warn-bg);border:1px solid #fcd34d;border-radius:6px;color:var(--c-warn-ink);font-size:12px;">
           ⚠ <strong>High Utilization (${sized.utilization.utilizationPct}%)</strong> — limited operational flexibility for receiving surges and seasonal peaks. Consider increasing facility size or reducing peak inventory assumptions.
         </div>
       ` : sized.utilization.warning === 'low_util' ? `
@@ -260,7 +260,7 @@ export function renderDashboard(ctx) {
       ` : ''}
 
       ${!sized.dock.dockWallOk ? `
-        <div style="margin-top:8px;padding:10px;background:#fee2e2;border:1px solid #fca5a5;border-radius:6px;color:#991b1b;font-size:12px;">
+        <div style="margin-top:8px;padding:10px;background:var(--c-danger-bg);border:1px solid #fca5a5;border-radius:6px;color:var(--c-danger-ink);font-size:12px;">
           ⚠ <strong>Dock Wall Constraint:</strong> required ${sized.dock.dockWallRequiredFt} ft for ${sized.dock.totalDoors} doors at 12' on-center spacing exceeds available wall length (${sized.dock.dockWallAvailableFt} ft). Consider a second dock face or fewer doors.
         </div>
       ` : ''}
@@ -291,12 +291,12 @@ export function renderDashboard(ctx) {
       <!-- Capacity Reconciliation — bridge the two ways the tool counts positions (WSC-A4) -->
       <div class="hub-card">
         <div class="text-subtitle mb-4">Capacity Reconciliation</div>
-        <table class="cm-grid-table" style="font-size:13px;">
+        <table class="cm-grid-table u-13">
           <tbody>
             <tr><td title="What the building geometrically holds, given building width × depth × clear height × storage type × aisle width. Bounded by physics, not demand.">Geom Capacity (max)</td>
                 <td class="cm-num" style="color:var(--ies-blue);font-weight:700;">${storage.totalPalletPositions.toLocaleString()}</td></tr>
             <tr><td title="What the customer's inventory NEEDS, derived from peak units × storage mix ÷ units-per-pallet, plus honeycomb buffer.">Designed (need)</td>
-                <td class="cm-num" style="font-weight:700;">${sized.utilization.designed.toLocaleString()}</td></tr>
+                <td class="cm-num u-bold">${sized.utilization.designed.toLocaleString()}</td></tr>
             <tr><td title="Designed positions / Geometric capacity. Low = building is over-sized for inventory; >100% = building cannot physically hold the engineered position count.">Geom Util</td>
                 <td class="cm-num" style="color:${storage.totalPalletPositions > 0 && (sized.utilization.designed / storage.totalPalletPositions) > 1 ? 'var(--ies-red)' : 'inherit'};">
                   ${storage.totalPalletPositions > 0 ? Math.round((sized.utilization.designed / storage.totalPalletPositions) * 100) + '%' : '—'}
@@ -313,17 +313,17 @@ export function renderDashboard(ctx) {
         <div class="text-subtitle mb-4">Zone Allocation</div>
         <div style="display:flex; height:24px; border-radius:4px; overflow:hidden; margin-bottom:12px;">
           ${sized.zoneBreakdown.map((z, i) => {
-            const palette = ['#0047AB', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#94a3b8'];
+            const palette = ['var(--ies-blue)', 'var(--c-success-bright)', 'var(--c-warn)', 'var(--c-purple-bright)', '#ec4899', '#06b6d4', '#94a3b8'];
             return `<div style="width:${z.pct}%;background:${palette[i % palette.length]};" title="${escapeHtml(z.label)}"></div>`;
           }).join('')}
         </div>
-        <div style="font-size:13px;">
+        <div class="u-13">
           ${sized.zoneBreakdown.map((z, i) => {
-            const palette = ['#0047AB', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#94a3b8'];
+            const palette = ['var(--ies-blue)', 'var(--c-success-bright)', 'var(--c-warn)', 'var(--c-purple-bright)', '#ec4899', '#06b6d4', '#94a3b8'];
             return `
               <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
                 <span style="color:${palette[i % palette.length]};font-weight:600;">${escapeHtml(z.label)}</span>
-                <span style="font-weight:700;">${calc.formatSqft(z.sqft)} <span style="color:var(--ies-gray-400);font-weight:400;font-size:11px;">${z.pct}%</span></span>
+                <span class="u-bold">${calc.formatSqft(z.sqft)} <span style="color:var(--ies-gray-400);font-weight:400;font-size:11px;">${z.pct}%</span></span>
               </div>
             `;
           }).join('')}
@@ -333,11 +333,11 @@ export function renderDashboard(ctx) {
       <!-- Dock Analysis — tied to sizing engine so numbers match the KPI bar -->
       <div class="hub-card">
         <div class="text-subtitle mb-4">Dock Analysis</div>
-        <table class="cm-grid-table" style="font-size:13px;">
+        <table class="cm-grid-table u-13">
           <tbody>
-            <tr><td>Inbound Doors ${sized.dock.inboundDoorsExplicit ? '<span style="font-size:10px;background:#dbeafe;color:#1e3a8a;padding:1px 5px;border-radius:3px;margin-left:4px;">EXPLICIT</span>' : `<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;margin-left:4px;" title="Throughput-derived. Set explicit count in Dock Configuration to override.">DERIVED</span>`}</td><td class="cm-num" style="color:var(--ies-blue);">${sized.dock.inboundDoors}${!sized.dock.inboundDoorsExplicit ? ` <span style="font-size:11px;color:var(--ies-gray-500);font-weight:400;">(throughput suggests ${sized.dock.inboundDoorsDerived})</span>` : ''}</td></tr>
-            <tr><td>Outbound Doors ${sized.dock.outboundDoorsExplicit ? '<span style="font-size:10px;background:#dbeafe;color:#1e3a8a;padding:1px 5px;border-radius:3px;margin-left:4px;">EXPLICIT</span>' : `<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;margin-left:4px;" title="Throughput-derived. Set explicit count in Dock Configuration to override.">DERIVED</span>`}</td><td class="cm-num" style="color:var(--ies-blue);">${sized.dock.outboundDoors}${!sized.dock.outboundDoorsExplicit ? ` <span style="font-size:11px;color:var(--ies-gray-500);font-weight:400;">(throughput suggests ${sized.dock.outboundDoorsDerived})</span>` : ''}</td></tr>
-            <tr><td>Total Doors${(sized.dock.inboundDoorsExplicit || sized.dock.outboundDoorsExplicit) ? '' : ' (incl. 25% surge)'}</td><td class="cm-num" style="font-weight:700;">${sized.dock.totalDoors}</td></tr>
+            <tr><td>Inbound Doors ${sized.dock.inboundDoorsExplicit ? '<span style="font-size:10px;background:var(--c-info-bg);color:var(--c-info-deep);padding:1px 5px;border-radius:3px;margin-left:4px;">EXPLICIT</span>' : `<span style="font-size:10px;background:var(--c-warn-bg);color:var(--c-warn-ink);padding:1px 5px;border-radius:3px;margin-left:4px;" title="Throughput-derived. Set explicit count in Dock Configuration to override.">DERIVED</span>`}</td><td class="cm-num" style="color:var(--ies-blue);">${sized.dock.inboundDoors}${!sized.dock.inboundDoorsExplicit ? ` <span style="font-size:11px;color:var(--ies-gray-500);font-weight:400;">(throughput suggests ${sized.dock.inboundDoorsDerived})</span>` : ''}</td></tr>
+            <tr><td>Outbound Doors ${sized.dock.outboundDoorsExplicit ? '<span style="font-size:10px;background:var(--c-info-bg);color:var(--c-info-deep);padding:1px 5px;border-radius:3px;margin-left:4px;">EXPLICIT</span>' : `<span style="font-size:10px;background:var(--c-warn-bg);color:var(--c-warn-ink);padding:1px 5px;border-radius:3px;margin-left:4px;" title="Throughput-derived. Set explicit count in Dock Configuration to override.">DERIVED</span>`}</td><td class="cm-num" style="color:var(--ies-blue);">${sized.dock.outboundDoors}${!sized.dock.outboundDoorsExplicit ? ` <span style="font-size:11px;color:var(--ies-gray-500);font-weight:400;">(throughput suggests ${sized.dock.outboundDoorsDerived})</span>` : ''}</td></tr>
+            <tr><td>Total Doors${(sized.dock.inboundDoorsExplicit || sized.dock.outboundDoorsExplicit) ? '' : ' (incl. 25% surge)'}</td><td class="cm-num u-bold">${sized.dock.totalDoors}</td></tr>
             <tr><td>Dock Wall Required</td><td class="cm-num" style="color:${sized.dock.dockWallOk ? 'var(--ies-green)' : 'var(--ies-red)'};">${sized.dock.dockWallRequiredFt} ft${sized.dock.dockWallOk ? '' : ` > ${sized.dock.dockWallAvailableFt} ft avail`}</td></tr>
             <tr><td title="Requirements-driven dock SF — the same number inside the headline Sized Total and the CM writeback. (Legacy v2 chain: ${calc.formatSqft(sized.dockSqft || 0)}.)">Dock SF (requirements-driven)</td><td class="cm-num">${calc.formatSqft(sized.dockRequirement?.dockSfRequired ?? sized.dockSqft ?? 0)}</td></tr>
           </tbody>
@@ -347,15 +347,15 @@ export function renderDashboard(ctx) {
       <!-- Rack & Aisle Geometry (WSC-C1: renamed from "Rack Geometry" — IE-standard term) -->
       <div class="hub-card">
         <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">
-          <div class="text-subtitle" style="margin:0;">Rack &amp; Aisle Geometry</div>
+          <div class="text-subtitle u-m0">Rack &amp; Aisle Geometry</div>
           ${storage.geometryIsHeuristic
-            ? `<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:3px;" title="Building Width × Depth not set — geometry assumes a 1.5:1 rectangle from total SF. Set Width / Depth on the Building card for measured geometry.">HEURISTIC</span>`
-            : `<span style="font-size:10px;background:#dcfce7;color:#166534;padding:2px 6px;border-radius:3px;" title="Geometry computed from the entered building width × depth.">MEASURED</span>`
+            ? `<span style="font-size:10px;background:var(--c-warn-bg);color:var(--c-warn-ink);padding:2px 6px;border-radius:3px;" title="Building Width × Depth not set — geometry assumes a 1.5:1 rectangle from total SF. Set Width / Depth on the Building card for measured geometry.">HEURISTIC</span>`
+            : `<span style="font-size:10px;background:var(--c-success-bg);color:var(--c-success-ink);padding:2px 6px;border-radius:3px;" title="Geometry computed from the entered building width × depth.">MEASURED</span>`
           }
         </div>
-        <table class="cm-grid-table" style="font-size:13px;">
+        <table class="cm-grid-table u-13">
           <tbody>
-            <tr><td>Rack Levels</td><td class="cm-num" style="font-weight:700;" title="Bounded [2, 7]. Formula: floor((clearHt × 12 − sprinkler_clearance) / (load_height + 10\")).">${storage.rackLevels}</td></tr>
+            <tr><td>Rack Levels</td><td class="cm-num u-bold" title="Bounded [2, 7]. Formula: floor((clearHt × 12 − sprinkler_clearance) / (load_height + 10\")).">${storage.rackLevels}</td></tr>
             <tr><td>Level Height</td><td class="cm-num">${calc.formatFt(storage.positionHeight)}</td></tr>
             <tr><td>Top of Steel</td><td class="cm-num">${calc.formatFt(calc.topOfSteelFt(storage.rackLevels))}</td></tr>
             <tr><td>Usable Height</td><td class="cm-num">${calc.formatFt(storage.usableHeight)}</td></tr>
@@ -373,7 +373,7 @@ export function renderDashboard(ctx) {
       <!-- Inventory Metrics -->
       <div class="hub-card">
         <div class="text-subtitle mb-4">Inventory Metrics</div>
-        <table class="cm-grid-table" style="font-size:13px;">
+        <table class="cm-grid-table u-13">
           <tbody>
             <tr><td>Peak Units/Day</td><td class="cm-num">${(ctx.zones.peakUnitsPerDay ?? 0).toLocaleString()}</td></tr>
             <tr><td>Avg Units/Day</td><td class="cm-num">${(ctx.zones.avgUnitsPerDay || 350000).toLocaleString()}</td></tr>
@@ -387,7 +387,7 @@ export function renderDashboard(ctx) {
       <div class="hub-card">
         <div class="text-subtitle mb-4">Forward Pick Area</div>
         ${ctx.zones.forwardPick?.enabled ? `
-          <table class="cm-grid-table" style="font-size:13px;">
+          <table class="cm-grid-table u-13">
             <tbody>
               <tr><td>Pick Type</td><td class="cm-num">${(ctx.zones.forwardPick.type || 'carton_flow').replace('_', ' ')}</td></tr>
               <tr><td>SKU Count</td><td class="cm-num">${(ctx.zones.forwardPick.skuCount || 0).toLocaleString()}</td></tr>
@@ -470,7 +470,7 @@ export function renderUtilBar(label, pct, opts = {}) {
   return `
     <div style="margin-bottom:12px;" ${tip}>
       <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px;">
-        <span style="font-weight:600;">${label}</span>
+        <span class="u-semibold">${label}</span>
         <span style="font-weight:700; color:${color};">${calc.formatPct(pct)}</span>
       </div>
       <div class="wsc-util-bar">

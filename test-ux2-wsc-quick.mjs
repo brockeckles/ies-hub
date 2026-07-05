@@ -96,7 +96,9 @@ t('cache-bust pins agree across consumers', () => {
   };
   const indexPin = pinOf(index, 'index.html');
   assert(pinOf(cmUi, 'CM slideover') === indexPin, 'CM slideover pin diverges from index.html');
-  assert(ui.includes("ui-config.js?v=20260704-wq1") && ui.includes("ui-shell-events.js?v=20260704-wq1"), 'inner pins stale');
+  // Genericized 2026-07-05 (U3): literal pins go stale on every bump. Durable
+  // invariant: inner modules ARE pinned (any dated value).
+  assert(/ui-config\.js\?v=\d{8}-/.test(ui) && /ui-shell-events\.js\?v=\d{8}-/.test(ui), 'inner pins missing');
 });
 
 console.log('');

@@ -20,6 +20,7 @@
  */
 
 import * as calc from './calc.js?v=20260703-ux0';
+import { icon } from '../../shared/icons.js?v=20260705-u0a';
 
 // Phase A.A6 (2026-05-26) — Foot-snap grid overlay state. Module-level
 // because it's a UI preference (not part of the persisted facility model).
@@ -195,22 +196,22 @@ export function renderPlan(pctx) {
   return `
     <div class="hub-card">
       ${capacityStatus ? `
-        <div style="margin-bottom:var(--sp-2);padding:8px 14px;border-radius:6px;font-size:12px;display:flex;align-items:center;gap:12px;background:${capacityStatus.status === 'on-target' ? '#ecfdf5' : capacityStatus.status === 'slack' ? '#eff6ff' : '#fff7ed'};border:1px solid ${capacityStatus.status === 'on-target' ? '#a7f3d0' : capacityStatus.status === 'slack' ? '#bfdbfe' : '#fed7aa'};">
+        <div style="margin-bottom:var(--sp-2);padding:8px 14px;border-radius:6px;font-size:12px;display:flex;align-items:center;gap:12px;background:${capacityStatus.status === 'on-target' ? '#ecfdf5' : capacityStatus.status === 'slack' ? 'var(--c-info-soft)' : '#fff7ed'};border:1px solid ${capacityStatus.status === 'on-target' ? '#a7f3d0' : capacityStatus.status === 'slack' ? 'var(--c-info-border)' : '#fed7aa'};">
           <span style="font-size:14px;line-height:1;">${capacityStatus.status === 'on-target' ? '✓' : capacityStatus.status === 'slack' ? '◭' : '⚠'}</span>
-          <span style="flex:1;line-height:1.5;color:${capacityStatus.status === 'on-target' ? '#065f46' : capacityStatus.status === 'slack' ? '#1e3a8a' : '#9a3412'};">
+          <span style="flex:1;line-height:1.5;color:${capacityStatus.status === 'on-target' ? '#065f46' : capacityStatus.status === 'slack' ? 'var(--c-info-deep)' : '#9a3412'};">
             <strong>${capacityStatus.status === 'on-target' ? 'On target' : capacityStatus.status === 'slack' ? `Capacity slack: +${capacityStatus.pct}%` : `Inventory short: ${capacityStatus.pct}%`}</strong>
             — Required <strong>${capacityStatus.required.toLocaleString()} sf</strong> · Existing <strong>${capacityStatus.built.toLocaleString()} sf</strong> · Gap <strong>${capacityStatus.delta >= 0 ? '+' : ''}${capacityStatus.delta.toLocaleString()} sf</strong>
           </span>
         </div>
       ` : ''}
       ${shrinkSuggestion.recommended ? `
-        <div style="margin-bottom:var(--sp-2); padding:10px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; font-size:12px; display:flex; align-items:center; gap:12px;">
-          <span style="font-size:16px;line-height:1;">📐</span>
+        <div style="margin-bottom:var(--sp-2); padding:10px 14px; background:var(--c-info-soft); border:1px solid var(--c-info-border); border-radius:6px; font-size:12px; display:flex; align-items:center; gap:12px;">
+          <span style="line-height:1;">${icon('ruler', { size: 16 })}</span>
           <span style="flex:1;line-height:1.5;">
-            <strong style="color:#1e3a8a;">Building over-sized by ${shrinkSuggestion.oversizePct}%</strong>
+            <strong style="color:var(--c-info-deep);">Building over-sized by ${shrinkSuggestion.oversizePct}%</strong>
             for the entered inventory. Right-size to
             <strong>${shrinkSuggestion.suggestedWidthFt.toLocaleString()} × ${shrinkSuggestion.suggestedDepthFt.toLocaleString()} ft</strong>
-            <span style="color:var(--ies-gray-500);">(currently ${shrinkSuggestion.currentWidthFt.toLocaleString()} × ${shrinkSuggestion.currentDepthFt.toLocaleString()} ft)</span>?
+            <span class="u-muted">(currently ${shrinkSuggestion.currentWidthFt.toLocaleString()} × ${shrinkSuggestion.currentDepthFt.toLocaleString()} ft)</span>?
           </span>
           <button class="hub-btn-primary" data-wsc-action="apply-shrink-suggestion"
                   data-suggested-width="${shrinkSuggestion.suggestedWidthFt}"
@@ -221,8 +222,8 @@ export function renderPlan(pctx) {
         </div>
       ` : ''}
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom: var(--sp-2);gap:12px;flex-wrap:wrap;">
-        <h3 class="text-subtitle" style="margin:0;">Floorplan (Top-Down)</h3>
-        <div style="display:flex;align-items:center;gap:8px;">
+        <h3 class="text-subtitle u-m0">Floorplan (Top-Down)</h3>
+        <div class="u-row">
           <span class="text-caption text-muted">Scale: 1 px ≈ ${Math.max(1, Math.round(Math.sqrt((pctx.facility.totalSqft || 0) * 1.5) / 800))} ft</span>
           ${overrideKeys.length > 0 ? `
             <button class="hub-btn-link" data-wsc-action="reset-layout" title="Discard manual repositions and revert to auto-layout">
@@ -235,14 +236,14 @@ export function renderPlan(pctx) {
           <!-- Phase B.B14 (2026-05-26) — Layer visibility toggles. -->
           <span style="display:inline-flex;align-items:center;gap:2px;padding:2px;background:var(--ies-gray-100, #f3f4f6);border:1px solid var(--ies-gray-200);border-radius:4px;">
             <span class="text-caption text-muted" style="padding:0 6px;font-size:10px;text-transform:uppercase;letter-spacing:0.04em;">Layers</span>
-            <button data-wsc-layer-toggle="columns" title="Toggle structural column grid bubbles" style="font-size:11px;padding:2px 8px;border:0;background:${_layers.columns ? '#1c1c1c' : 'transparent'};color:${_layers.columns ? '#fff' : 'var(--ies-gray-600)'};border-radius:3px;cursor:pointer;font-weight:600;">Cols</button>
-            <button data-wsc-layer-toggle="hatch" title="Toggle ANSI hatch patterns on non-rack zones" style="font-size:11px;padding:2px 8px;border:0;background:${_layers.hatch ? '#1c1c1c' : 'transparent'};color:${_layers.hatch ? '#fff' : 'var(--ies-gray-600)'};border-radius:3px;cursor:pointer;font-weight:600;">Hatch</button>
-            <button data-wsc-layer-toggle="labels" title="Toggle in-zone text labels" style="font-size:11px;padding:2px 8px;border:0;background:${_layers.labels ? '#1c1c1c' : 'transparent'};color:${_layers.labels ? '#fff' : 'var(--ies-gray-600)'};border-radius:3px;cursor:pointer;font-weight:600;">Labels</button>
-            <button data-wsc-layer-toggle="doors" title="Toggle dock door rendering" style="font-size:11px;padding:2px 8px;border:0;background:${_layers.doors ? '#1c1c1c' : 'transparent'};color:${_layers.doors ? '#fff' : 'var(--ies-gray-600)'};border-radius:3px;cursor:pointer;font-weight:600;">Doors</button>
+            <button data-wsc-layer-toggle="columns" title="Toggle structural column grid bubbles" style="font-size:11px;padding:2px 8px;border:0;background:${_layers.columns ? 'var(--ies-navy)' : 'transparent'};color:${_layers.columns ? '#fff' : 'var(--ies-gray-600)'};border-radius:3px;cursor:pointer;font-weight:600;">Cols</button>
+            <button data-wsc-layer-toggle="hatch" title="Toggle ANSI hatch patterns on non-rack zones" style="font-size:11px;padding:2px 8px;border:0;background:${_layers.hatch ? 'var(--ies-navy)' : 'transparent'};color:${_layers.hatch ? '#fff' : 'var(--ies-gray-600)'};border-radius:3px;cursor:pointer;font-weight:600;">Hatch</button>
+            <button data-wsc-layer-toggle="labels" title="Toggle in-zone text labels" style="font-size:11px;padding:2px 8px;border:0;background:${_layers.labels ? 'var(--ies-navy)' : 'transparent'};color:${_layers.labels ? '#fff' : 'var(--ies-gray-600)'};border-radius:3px;cursor:pointer;font-weight:600;">Labels</button>
+            <button data-wsc-layer-toggle="doors" title="Toggle dock door rendering" style="font-size:11px;padding:2px 8px;border:0;background:${_layers.doors ? 'var(--ies-navy)' : 'transparent'};color:${_layers.doors ? '#fff' : 'var(--ies-gray-600)'};border-radius:3px;cursor:pointer;font-weight:600;">Doors</button>
           </span>
           <!-- Phase B.B17 (2026-05-26) — Measure tool. M keyboard shortcut also toggles. -->
           <button class="${_measureMode ? 'hub-btn-primary' : 'hub-btn-secondary'}" data-wsc-action="toggle-measure" style="font-size:12px;padding:4px 10px;" title="Measure distances on the floorplan. Click two points to lay a dimension line in feet. Press M to toggle, Esc to exit.">
-            ${_measureMode ? '✓ Measuring' : '📏 Measure'}
+            ${_measureMode ? '✓ Measuring' : `${icon('ruler')} Measure`}
           </button>
           ${_measureLines.length > 0 ? `
             <button class="hub-btn-link" data-wsc-action="clear-measurements" style="font-size:12px;padding:4px 8px;" title="Remove all dimension lines from the floorplan">
@@ -250,7 +251,7 @@ export function renderPlan(pctx) {
             </button>
           ` : ''}
           <button class="${editing ? 'hub-btn-primary' : 'hub-btn-secondary'}" data-wsc-action="toggle-edit-layout" style="font-size:12px;padding:4px 10px;" title="Drag Office, Ship Staging, and Forward Pick to manually reposition them">
-            ${editing ? '✓ Done Editing' : '✎ Edit Layout'}
+            ${editing ? '✓ Done Editing' : `${icon('edit')} Edit Layout`}
           </button>
         </div>
       </div>
@@ -264,26 +265,26 @@ export function renderPlan(pctx) {
           <span data-statusbar-selection style="flex:1;text-align:right;color:var(--ies-gray-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Hover a zone…</span>
         </div>
         ${editing ? `
-          <div style="margin-top:8px;padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;color:#1e3a8a;">
+          <div style="margin-top:8px;padding:8px 12px;background:var(--c-info-soft);border:1px solid var(--c-info-border);border-radius:6px;font-size:12px;color:var(--c-info-deep);">
             <strong>Edit mode:</strong> drag Office, Ship Staging, or Forward Pick zones to reposition them. Snaps to 5 ft. Save the model to persist.
           </div>
         ` : ''}
         ${_measureMode ? `
-          <div style="margin-top:8px;padding:8px 12px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:12px;color:#78350f;">
-            <strong>📏 Measure mode:</strong> click two points to lay a dimension line. Distance shown in feet. Press <strong>M</strong> to toggle off, <strong>Esc</strong> to exit.
+          <div style="margin-top:8px;padding:8px 12px;background:var(--c-warn-bg);border:1px solid #fcd34d;border-radius:6px;font-size:12px;color:#78350f;">
+            <strong>${icon('ruler')} Measure mode:</strong> click two points to lay a dimension line. Distance shown in feet. Press <strong>M</strong> to toggle off, <strong>Esc</strong> to exit.
           </div>
         ` : ''}
       </div>
       <div style="margin-top:var(--sp-3); display:flex; flex-wrap:wrap; gap:14px; font-size:11px; color:var(--ies-gray-500);">
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#ea580c;border:1px solid #9a3412;border-radius:2px;"></span>Full Pallet Rack</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#f59e0b;border:1px solid #b45309;border-radius:2px;"></span>Carton on Pallet</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#0d9488;border:1px solid #0f766e;border-radius:2px;"></span>Carton Shelving</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#ede9fe;border:1px solid #7c3aed;border-radius:2px;"></span>Forward Pick</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#ecfdf5;border:1px solid #16a34a;border-radius:2px;"></span>Receive Staging</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#fffbeb;border:1px solid #d97706;border-radius:2px;"></span>Ship Staging</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#f5f3ff;border:1px solid #8b5cf6;border-radius:2px;"></span>Office</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#fecaca;border:1px solid #7f1d1d;border-radius:2px;"></span>Outbound Door</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:#bfdbfe;border:1px solid #1d4ed8;border-radius:2px;"></span>Inbound Door</span>
+        <span class="u-inline-row"><span style="display:inline-block;width:12px;height:12px;background:#ea580c;border:1px solid #9a3412;border-radius:2px;"></span>Full Pallet Rack</span>
+        <span class="u-inline-row"><span style="display:inline-block;width:12px;height:12px;background:var(--c-warn);border:1px solid var(--c-warn-deep);border-radius:2px;"></span>Carton on Pallet</span>
+        <span class="u-inline-row"><span style="display:inline-block;width:12px;height:12px;background:#0d9488;border:1px solid #0f766e;border-radius:2px;"></span>Carton Shelving</span>
+        <span class="u-inline-row"><span style="display:inline-block;width:12px;height:12px;background:#ede9fe;border:1px solid var(--c-purple);border-radius:2px;"></span>Forward Pick</span>
+        <span class="u-inline-row"><span style="display:inline-block;width:12px;height:12px;background:#ecfdf5;border:1px solid var(--c-success);border-radius:2px;"></span>Receive Staging</span>
+        <span class="u-inline-row"><span style="display:inline-block;width:12px;height:12px;background:var(--c-warn-soft);border:1px solid var(--c-warn-strong);border-radius:2px;"></span>Ship Staging</span>
+        <span class="u-inline-row"><span style="display:inline-block;width:12px;height:12px;background:#f5f3ff;border:1px solid var(--c-purple-bright);border-radius:2px;"></span>Office</span>
+        <span class="u-inline-row"><span style="display:inline-block;width:12px;height:12px;background:var(--c-danger-border);border:1px solid #7f1d1d;border-radius:2px;"></span>Outbound Door</span>
+        <span class="u-inline-row"><span style="display:inline-block;width:12px;height:12px;background:var(--c-info-border);border:1px solid var(--c-info-strong);border-radius:2px;"></span>Inbound Door</span>
       </div>
     </div>
   `;
@@ -307,9 +308,9 @@ export function drawPlan(pctx) {
       const ctx = canvas && canvas.getContext('2d');
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#fef2f2';
+        ctx.fillStyle = 'var(--c-danger-soft)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#991b1b';
+        ctx.fillStyle = 'var(--c-danger-ink)';
         ctx.font = '600 14px system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('2D Plan failed to render — see console for details.', canvas.width / 2, canvas.height / 2 - 10);
@@ -339,7 +340,7 @@ function _drawPlanUnsafe(pctx) {
   // populated, without requiring the user to first guess a total SF.
   const totalSqft = pctx.facility.totalSqft || sized.totalSqft || 0;
   if (totalSqft <= 0) {
-    ctx.fillStyle = '#9ca3af';
+    ctx.fillStyle = 'var(--c-muted-light)';
     ctx.font = '13px Montserrat, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('Enter peak units + storage inputs — the tool will size the floorplan.', cw / 2, ch / 2);
@@ -374,7 +375,7 @@ function _drawPlanUnsafe(pctx) {
 
   // ---------- Outer shell ----------
   ctx.fillStyle = '#fafafa';
-  ctx.strokeStyle = '#1f2937';
+  ctx.strokeStyle = 'var(--c-ink)';
   ctx.lineWidth = 2;
   ctx.fillRect(X0, Y0, Wpx, Hpx);
   ctx.strokeRect(X0, Y0, Wpx, Hpx);
@@ -516,7 +517,7 @@ function _drawPlanUnsafe(pctx) {
   // teal = carton shelving (drawn as shorter, denser blocks).
   const TYPES = [
     { count: fullPalletCols,   fill: '#ea580c', stroke: '#9a3412', label: 'Full Pallet'      },
-    { count: cartonPalletCols, fill: '#f59e0b', stroke: '#b45309', label: 'Carton on Pallet' },
+    { count: cartonPalletCols, fill: 'var(--c-warn)', stroke: 'var(--c-warn-deep)', label: 'Carton on Pallet' },
     { count: shelvingCols,     fill: '#0d9488', stroke: '#0f766e', label: 'Carton Shelving'  },
   ];
 
@@ -720,7 +721,7 @@ function _drawPlanUnsafe(pctx) {
       ctx.fillStyle = '#e5e7eb';
       ctx.fillRect(_planRackLeftX, yTop, _planRackRightX - _planRackLeftX, bandH);
       // Dashed top + bottom edges suggesting aisle striping
-      ctx.strokeStyle = '#9ca3af';
+      ctx.strokeStyle = 'var(--c-muted-light)';
       ctx.lineWidth = 0.5;
       ctx.setLineDash([4, 3]);
       ctx.beginPath();
@@ -772,11 +773,11 @@ function _drawPlanUnsafe(pctx) {
   // ---------- Forward Pick Area (front strip of storage, when enabled) ----------
   if (fpEnabled && fpW > 80 && fpStripPx > 12) {
     ctx.fillStyle = '#ede9fe';
-    ctx.strokeStyle = '#7c3aed';
+    ctx.strokeStyle = 'var(--c-purple)';
     ctx.lineWidth = 1;
     ctx.fillRect(fpX, fpY, fpW, fpStripPx);
     ctx.strokeRect(fpX, fpY, fpW, fpStripPx);
-    if (_layers.hatch) drawHatch(ctx, 'ansi31', fpX, fpY, fpW, fpStripPx, '#7c3aed');
+    if (_layers.hatch) drawHatch(ctx, 'ansi31', fpX, fpY, fpW, fpStripPx, 'var(--c-purple)');
     // Carton-flow lane lines
     ctx.strokeStyle = '#a78bfa';
     ctx.lineWidth = 0.5;
@@ -809,11 +810,11 @@ function _drawPlanUnsafe(pctx) {
   // represents back-wall receive staging when the engine sized one.
   if (recvHpx > 0) {
     ctx.fillStyle = '#ecfdf5';
-    ctx.strokeStyle = '#16a34a';
+    ctx.strokeStyle = 'var(--c-success)';
     ctx.lineWidth = 1;
     ctx.fillRect(X0 + 2, Y0 + 2, Wpx - 4, recvHpx - 2);
     ctx.strokeRect(X0 + 2, Y0 + 2, Wpx - 4, recvHpx - 2);
-    ctx.fillStyle = '#166534';
+    ctx.fillStyle = 'var(--c-success-ink)';
     ctx.font = 'bold 11px Montserrat, sans-serif';
     ctx.textAlign = 'center';
     const recvSqft = sized.recvStagingSqft || 0;
@@ -835,13 +836,13 @@ function _drawPlanUnsafe(pctx) {
   const shipY      = _shipPos.y;
   const shipW      = _shipPos.w;
   const shipDrawH  = _shipPos.h;
-  ctx.fillStyle = '#fffbeb';
-  ctx.strokeStyle = '#d97706';
+  ctx.fillStyle = 'var(--c-warn-soft)';
+  ctx.strokeStyle = 'var(--c-warn-strong)';
   ctx.lineWidth = 1;
   ctx.fillRect(shipX, shipY, shipW, shipDrawH);
-  if (_layers.hatch) drawHatch(ctx, 'dots', shipX, shipY, shipW, shipDrawH, '#92400e');
+  if (_layers.hatch) drawHatch(ctx, 'dots', shipX, shipY, shipW, shipDrawH, 'var(--c-warn-ink)');
   ctx.strokeRect(shipX, shipY, shipW, shipDrawH);
-  ctx.fillStyle = '#92400e';
+  ctx.fillStyle = 'var(--c-warn-ink)';
   ctx.font = 'bold 11px Montserrat, sans-serif';
   ctx.textAlign = 'center';
   if (shipW > 100) {
@@ -859,7 +860,7 @@ function _drawPlanUnsafe(pctx) {
 
   // ---------- Office (front-left corner, full block from storage down to dock face) ----------
   ctx.fillStyle = '#f5f3ff';
-  ctx.strokeStyle = '#8b5cf6';
+  ctx.strokeStyle = 'var(--c-purple-bright)';
   ctx.lineWidth = 1;
   // Single tall block from officeY down to the dock face (covers part of storage zone + ship-staging zone)
   const officeBlockH = (Y0 + Hpx) - officeY - 4;
@@ -956,8 +957,8 @@ function _drawPlanUnsafe(pctx) {
 
   if (twoSided) {
     // Two-sided: outbound along the full bottom wall, inbound along the full top wall.
-    drawDoorRow(outboundDoors, Y0 + Hpx - 6, `${outboundDoors} Outbound Doors`, '#fecaca', false, X0, X0 + Wpx);
-    drawDoorRow(inboundDoors,  Y0 - 6,        `${inboundDoors} Inbound Doors`,  '#bfdbfe', true,  X0, X0 + Wpx);
+    drawDoorRow(outboundDoors, Y0 + Hpx - 6, `${outboundDoors} Outbound Doors`, 'var(--c-danger-border)', false, X0, X0 + Wpx);
+    drawDoorRow(inboundDoors,  Y0 - 6,        `${inboundDoors} Inbound Doors`,  'var(--c-info-border)', true,  X0, X0 + Wpx);
   } else if (inboundDoors > 0 && outboundDoors > 0) {
     // Single-sided: bank inbound on the LEFT half and outbound on the RIGHT half
     // of the bottom wall. Mirrors how real ops separate I/O on one dock face.
@@ -968,11 +969,11 @@ function _drawPlanUnsafe(pctx) {
     const mid = X0 + Wpx / 2;
     const gap = Math.max(8 * pxPerFt, 60); // ≥ 8 ft visual gap between banks
     const inboundStart = Math.max(X0, officeRightX);
-    drawDoorRow(inboundDoors,  Y0 + Hpx - 6, `${inboundDoors} Inbound`,  '#bfdbfe', false, inboundStart, mid - gap / 2);
-    drawDoorRow(outboundDoors, Y0 + Hpx - 6, `${outboundDoors} Outbound`, '#fecaca', false, mid + gap / 2, X0 + Wpx);
+    drawDoorRow(inboundDoors,  Y0 + Hpx - 6, `${inboundDoors} Inbound`,  'var(--c-info-border)', false, inboundStart, mid - gap / 2);
+    drawDoorRow(outboundDoors, Y0 + Hpx - 6, `${outboundDoors} Outbound`, 'var(--c-danger-border)', false, mid + gap / 2, X0 + Wpx);
   } else {
     // Edge case: only one type of door — distribute across the full wall.
-    drawDoorRow(totalDoors, Y0 + Hpx - 6, `${totalDoors} Dock Doors`, '#fecaca', false, X0, X0 + Wpx);
+    drawDoorRow(totalDoors, Y0 + Hpx - 6, `${totalDoors} Dock Doors`, 'var(--c-danger-border)', false, X0, X0 + Wpx);
   }
   }  // end if (_layers.doors)
 
@@ -990,7 +991,7 @@ function _drawPlanUnsafe(pctx) {
   // Compass / orientation. Phase F.4 (2026-05-05) — moved the top label
   // INSIDE the building (was Y0-22, overlapped the title block "clear ht
   // 36 ft" line at canvas Y=38). Bottom label stays just below dock face.
-  ctx.fillStyle = '#6b7280';
+  ctx.fillStyle = 'var(--c-muted)';
   ctx.font = '10px Montserrat, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(twoSided ? '▲ INBOUND DOCK' : '▲ BACK', X0 + 6, Y0 + 14);
@@ -1001,7 +1002,7 @@ function _drawPlanUnsafe(pctx) {
   ctx.font = 'bold 13px Montserrat, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(pctx.facility.name || 'Facility', 12, 22);
-  ctx.fillStyle = '#6b7280';
+  ctx.fillStyle = 'var(--c-muted)';
   ctx.font = '11px Montserrat, sans-serif';
   ctx.fillText(
     `${calc.formatSqft(sized.totalSqft)} sized  ·  clear ht ${pctx.facility.clearHeight || 0} ft`,
@@ -1018,9 +1019,9 @@ function _drawPlanUnsafe(pctx) {
     ctx.setLineDash([4, 3]);
     ctx.lineWidth = 1.5;
     for (const [id, r] of Object.entries(pctx._planZoneRects)) {
-      ctx.strokeStyle = id === 'office' ? '#8b5cf6'
-                      : id === 'shipStaging' ? '#d97706'
-                      : '#7c3aed';
+      ctx.strokeStyle = id === 'office' ? 'var(--c-purple-bright)'
+                      : id === 'shipStaging' ? 'var(--c-warn-strong)'
+                      : 'var(--c-purple)';
       ctx.strokeRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4);
     }
     ctx.restore();
@@ -1030,9 +1031,9 @@ function _drawPlanUnsafe(pctx) {
     // resize; clicks inside the body still initiate a move.
     ctx.save();
     for (const [id, r] of Object.entries(pctx._planZoneRects)) {
-      const color = id === 'office' ? '#8b5cf6'
-                  : id === 'shipStaging' ? '#d97706'
-                  : '#7c3aed';
+      const color = id === 'office' ? 'var(--c-purple-bright)'
+                  : id === 'shipStaging' ? 'var(--c-warn-strong)'
+                  : 'var(--c-purple)';
       ctx.fillStyle = color;
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1;
@@ -1124,11 +1125,11 @@ function _drawPlanUnsafe(pctx) {
         ctx.beginPath(); ctx.moveTo(xp, Y0 - 8); ctx.lineTo(xp, Y0); ctx.stroke();
         // Bubble
         ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#1f2937';
+        ctx.strokeStyle = 'var(--c-ink)';
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(xp, yp, bubbleR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         // Label
-        ctx.fillStyle = '#1f2937';
+        ctx.fillStyle = 'var(--c-ink)';
         ctx.fillText(_columnBubbleLetter(letterIdx), xp, yp + 0.5);
         letterIdx++;
         // Don't draw past a reasonable count; AA after Z is fine.
@@ -1143,10 +1144,10 @@ function _drawPlanUnsafe(pctx) {
         ctx.lineWidth = 0.5;
         ctx.beginPath(); ctx.moveTo(X0 - 8, yp); ctx.lineTo(X0, yp); ctx.stroke();
         ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#1f2937';
+        ctx.strokeStyle = 'var(--c-ink)';
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(xp, yp, bubbleR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#1f2937';
+        ctx.fillStyle = 'var(--c-ink)';
         ctx.fillText(String(numIdx + 1), xp, yp + 0.5);
         numIdx++;
         if (numIdx > 100) break;
@@ -1163,7 +1164,7 @@ function _drawPlanUnsafe(pctx) {
   if (hoveredId && pctx._planZoneRects?.[hoveredId]) {
     const r = pctx._planZoneRects[hoveredId];
     ctx.save();
-    ctx.strokeStyle = '#2563eb';
+    ctx.strokeStyle = 'var(--c-info)';
     ctx.lineWidth = 1.5;
     ctx.setLineDash([]);
     ctx.strokeRect(r.x - 1, r.y - 1, r.w + 2, r.h + 2);
@@ -1200,7 +1201,7 @@ function _drawPlanUnsafe(pctx) {
       if (by < 4) by = cur.y + 14;
       // Backing pill
       ctx.fillStyle = 'rgba(31,41,55,0.92)';
-      ctx.strokeStyle = '#1f2937';
+      ctx.strokeStyle = 'var(--c-ink)';
       ctx.lineWidth = 1;
       const rad = 4;
       ctx.beginPath();
@@ -1325,7 +1326,7 @@ function drawDimensionLine(ctx, ax, ay, bx, by, dashed) {
 
   // Light core line
   ctx.lineWidth = 1.5;
-  ctx.strokeStyle = dashed ? '#fbbf24' : '#fef3c7';
+  ctx.strokeStyle = dashed ? '#fbbf24' : 'var(--c-warn-bg)';
   ctx.setLineDash(dashed ? [6, 4] : []);
   ctx.beginPath();
   ctx.moveTo(ax, ay);
@@ -1340,7 +1341,7 @@ function drawDimensionLine(ctx, ax, ay, bx, by, dashed) {
   const px = -dy / len * 6;  // perpendicular vector
   const py = dx / len * 6;
   ctx.lineWidth = 2;
-  ctx.strokeStyle = '#fef3c7';
+  ctx.strokeStyle = 'var(--c-warn-bg)';
   for (const [tx, ty] of [[ax, ay], [bx, by]]) {
     ctx.beginPath();
     ctx.moveTo(tx - px, ty - py);
@@ -1373,7 +1374,7 @@ function drawDimensionLine(ctx, ax, ay, bx, by, dashed) {
   const boxW = textW + padX * 2;
   const boxH = 14 + padY * 2;
   ctx.fillStyle = dashed ? 'rgba(251, 191, 36, 0.95)' : 'rgba(254, 243, 199, 0.95)';
-  ctx.strokeStyle = dashed ? '#b45309' : '#92400e';
+  ctx.strokeStyle = dashed ? 'var(--c-warn-deep)' : 'var(--c-warn-ink)';
   ctx.lineWidth = 1;
   const rad = 4;
   const bx0 = labelX - boxW / 2;
@@ -1431,20 +1432,20 @@ function drawScaleBar(ctx, cw, ch, pxPerFt) {
   ctx.save();
   ctx.fillStyle = 'rgba(255,255,255,0.92)';
   ctx.fillRect(x0 - 6, y0 - 4, totalPx + 12, barH + 22);
-  ctx.strokeStyle = '#9ca3af';
+  ctx.strokeStyle = 'var(--c-muted-light)';
   ctx.lineWidth = 0.5;
   ctx.strokeRect(x0 - 6, y0 - 4, totalPx + 12, barH + 22);
   // Alternating filled/empty segments.
   for (let i = 0; i < 4; i++) {
     const sx = x0 + i * segPx;
-    ctx.fillStyle = (i % 2 === 0) ? '#1f2937' : '#ffffff';
+    ctx.fillStyle = (i % 2 === 0) ? 'var(--c-ink)' : '#ffffff';
     ctx.fillRect(sx, y0, segPx, barH);
-    ctx.strokeStyle = '#1f2937';
+    ctx.strokeStyle = 'var(--c-ink)';
     ctx.lineWidth = 1;
     ctx.strokeRect(sx, y0, segPx, barH);
   }
   // Tick labels — 0, 1×, 2×, 3×, 4×.
-  ctx.fillStyle = '#1f2937';
+  ctx.fillStyle = 'var(--c-ink)';
   ctx.font = '9px Montserrat, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
@@ -1460,7 +1461,7 @@ function drawScaleBar(ctx, cw, ch, pxPerFt) {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'bottom';
   ctx.font = '9px Montserrat, sans-serif';
-  ctx.fillStyle = '#6b7280';
+  ctx.fillStyle = 'var(--c-muted)';
   ctx.fillText(`SCALE  0 — ${totalFt} ft`, x0, y0 - 1);
   ctx.restore();
 }
@@ -1485,7 +1486,7 @@ function drawNorthArrow(ctx, cw, ch) {
   ctx.beginPath();
   ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = '#9ca3af';
+  ctx.strokeStyle = 'var(--c-muted-light)';
   ctx.lineWidth = 0.5;
   ctx.stroke();
   // Arrow triangle (filled black pointing up, white pointing down — classic
@@ -1495,7 +1496,7 @@ function drawNorthArrow(ctx, cw, ch) {
   ctx.lineTo(cx + r * 0.45, cy + r);
   ctx.lineTo(cx, cy + r * 0.4);
   ctx.closePath();
-  ctx.fillStyle = '#1f2937';
+  ctx.fillStyle = 'var(--c-ink)';
   ctx.fill();
   ctx.beginPath();
   ctx.moveTo(cx, cy - r);
@@ -1503,12 +1504,12 @@ function drawNorthArrow(ctx, cw, ch) {
   ctx.lineTo(cx, cy + r * 0.4);
   ctx.closePath();
   ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = '#1f2937';
+  ctx.strokeStyle = 'var(--c-ink)';
   ctx.lineWidth = 1;
   ctx.fill();
   ctx.stroke();
   // "N" label below the arrow.
-  ctx.fillStyle = '#1f2937';
+  ctx.fillStyle = 'var(--c-ink)';
   ctx.font = 'bold 11px Montserrat, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';

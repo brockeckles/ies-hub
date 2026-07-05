@@ -71,7 +71,7 @@ export function render3DView(container, ctx) {
   container.innerHTML = `
     <div class="hub-card" style="padding:16px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">
-        <h3 class="text-subtitle" style="margin:0;">3D Walkthrough</h3>
+        <h3 class="text-subtitle u-m0">3D Walkthrough</h3>
         <span class="text-caption text-muted">
           ${calc.formatSqft(sized.totalSqft)} sized  ·  ${_hdrFac.buildingWidth || '—'} × ${_hdrFac.buildingDepth || '—'} ft  ·  clear ht ${ctx.facility.clearHeight || 0} ft  ·  ${sized.dock.totalDoors} dock doors
         </span>
@@ -987,7 +987,7 @@ function build3DScene(ctx) {
         : 'Carton Shelving';
       // Color match: dark orange / amber / teal
       const labelColor = t.typeKey === 'fullPallet' ? '#9a3412'
-        : t.typeKey === 'cartonPallet' ? '#b45309'
+        : t.typeKey === 'cartonPallet' ? 'var(--c-warn-deep)'
         : '#0f766e';
       const cxWorld = (ex.minX + ex.maxX) / 2;
       const sprite = _make3dZoneLabel(labelText, labelColor);
@@ -1017,13 +1017,13 @@ function build3DScene(ctx) {
       const sOut = _scenePlan.staging.outboundSqft || 0;
       _stgSlab(stagingU, -D / 2 + stagingU / 2, 0x16a34a);
       const inLabel = _make3dZoneLabel(
-        _twoSidedStg ? `Receive · ${fmtSf(sIn)} sf` : `Staging · ${fmtSf(sIn + sOut)} sf`, '#15803d');
+        _twoSidedStg ? `Receive · ${fmtSf(sIn)} sf` : `Staging · ${fmtSf(sIn + sOut)} sf`, 'var(--c-success-strong)');
       inLabel.position.set(-W / 4, 6 * scale, -D / 2 + stagingU / 2);
       inLabel.renderOrder = 999;
       scene.add(inLabel);
       if (_twoSidedStg && sOut > 0) {
         _stgSlab(stagingBackU, D / 2 - stagingBackU / 2, 0x2563eb);
-        const outLabel = _make3dZoneLabel(`Ship · ${fmtSf(sOut)} sf`, '#1d4ed8');
+        const outLabel = _make3dZoneLabel(`Ship · ${fmtSf(sOut)} sf`, 'var(--c-info-strong)');
         outLabel.position.set(-W / 4, 6 * scale, D / 2 - stagingBackU / 2);
         outLabel.renderOrder = 999;
         scene.add(outLabel);
@@ -1057,7 +1057,7 @@ function build3DScene(ctx) {
           scene.add(gMesh);
           gx += gModule;
         }
-        const shortLabel = _make3dZoneLabel(`SHORT ${_ghostShortfall.toLocaleString()} positions`, '#b91c1c');
+        const shortLabel = _make3dZoneLabel(`SHORT ${_ghostShortfall.toLocaleString()} positions`, 'var(--c-danger-strong)');
         shortLabel.position.set(W / 2 + (gx - W / 2) / 2, ghostRun.heightU + 10 * scale, 0);
         shortLabel.renderOrder = 999;
         scene.add(shortLabel);

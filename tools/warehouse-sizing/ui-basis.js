@@ -21,6 +21,7 @@ import {
   autoDetectMapping, SKU_MASTER_ROLES, INVENTORY_ROLES, ORDER_ROLES,
 } from './profile-calc.js?v=20260704-n1a';
 import { wscFactorsDrift } from './factors-calc.js?v=20260704-n2a';
+import { icon } from '../../shared/icons.js?v=20260705-u0a';
 import { selectMedia } from './media-calc.js?v=20260704-n3a';
 import { computeDynamics } from './dynamics-calc.js?v=20260705-mhe1';
 import { synthesizeLayout } from './layout-calc.js?v=20260705-mhe1';
@@ -56,9 +57,9 @@ export function resetBasisState() {
 }
 
 const PROV_CHIP = {
-  derived:   ['#dcfce7', '#15803d', 'DERIVED'],
-  asserted:  ['#dbeafe', '#1d4ed8', 'ASSERTED'],
-  estimated: ['#fef3c7', '#b45309', 'ESTIMATED'],
+  derived:   ['var(--c-success-bg)', 'var(--c-success-strong)', 'DERIVED'],
+  asserted:  ['var(--c-info-bg)', 'var(--c-info-strong)', 'ASSERTED'],
+  estimated: ['var(--c-warn-bg)', 'var(--c-warn-deep)', 'ESTIMATED'],
 };
 function provChip(kind) {
   const [bg, fg, label] = PROV_CHIP[kind] || PROV_CHIP.estimated;
@@ -99,7 +100,7 @@ export function renderBasisView(container, ctx) {
 }
 
 function _renderHeader(profile, readiness) {
-  const barColor = readiness.score >= 85 ? '#15803d' : readiness.score >= 50 ? '#b45309' : '#9ca3af';
+  const barColor = readiness.score >= 85 ? 'var(--c-success-strong)' : readiness.score >= 50 ? 'var(--c-warn-deep)' : 'var(--c-muted-light)';
   return `
     <div class="hub-card" style="padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
       <div style="flex:1;min-width:220px;">
@@ -110,7 +111,7 @@ function _renderHeader(profile, readiness) {
       </div>
       <button class="hub-btn hub-btn-sm hub-btn-secondary" id="wsc-basis-doc"
               title="Assemble the 12-section Basis of Design document — profile provenance, assumptions register, media rationale, dynamics math, compliance checklist, reconciliation — as a print/PDF page.">
-        📄 Design Basis Doc</button>
+        ${icon('doc')} Design Basis Doc</button>
       <div style="min-width:200px;">
         <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:600;margin-bottom:3px;">
           <span>Profile readiness</span><span style="color:${barColor};">${readiness.label} · ${readiness.score}%</span>
@@ -126,7 +127,7 @@ function _renderHeader(profile, readiness) {
 
 function _renderDataCard(profile) {
   return `
-    <div class="hub-card" style="padding:14px 16px;${profile?.mode === 'data' ? 'border-left:3px solid #15803d;' : ''}">
+    <div class="hub-card" style="padding:14px 16px;${profile?.mode === 'data' ? 'border-left:3px solid var(--c-success-strong);' : ''}">
       <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
         Customer Data ${profile?.mode === 'data' ? '· active' : ''}
       </div>
@@ -136,7 +137,7 @@ function _renderDataCard(profile) {
           <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--ies-gray-100);">
             <div style="flex:1;">
               <div style="font-size:12px;font-weight:600;">${s.label}
-                ${src ? `<span style="color:#15803d;font-weight:700;"> ✓</span>` : ''}
+                ${src ? `<span style="color:var(--c-success-strong);font-weight:700;"> ✓</span>` : ''}
               </div>
               <div style="font-size:10.5px;color:var(--ies-gray-500);">
                 ${src ? `${esc(src.fileName)} · ${fmt(src.rows)} rows${src.skipped ? ` · ${src.skipped} skipped` : ''}` : s.hint}
@@ -159,7 +160,7 @@ function _renderSparseCard(profile) {
   const v = (profile?.mode === 'sparse') ? profile : null;
   const val = (x) => x == null ? '' : x;
   return `
-    <div class="hub-card" style="padding:14px 16px;${v ? 'border-left:3px solid #1d4ed8;' : ''}">
+    <div class="hub-card" style="padding:14px 16px;${v ? 'border-left:3px solid var(--c-info-strong);' : ''}">
       <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
         Sparse / RFP Summary ${v ? '· active' : ''}
       </div>
@@ -206,20 +207,20 @@ function _renderProfileSummary(p) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;align-items:start;">
 
       <div class="hub-card" style="padding:14px 16px;">
-        <div style="font-size:12px;font-weight:700;margin-bottom:8px;">Velocity Profile ${provChip(prov.velocityBands)}</div>
+        <div class="wsc-card-title">Velocity Profile ${provChip(prov.velocityBands)}</div>
         ${bands ? `
           <table style="width:100%;border-collapse:collapse;font-size:12px;">
             <thead><tr style="color:var(--ies-gray-500);font-size:10px;text-transform:uppercase;letter-spacing:0.4px;">
-              <th style="text-align:left;padding:3px 0;">Band</th><th style="text-align:right;">SKUs</th>
-              <th style="text-align:right;">SKU %</th><th style="text-align:right;">Line %</th>
+              <th style="text-align:left;padding:3px 0;">Band</th><th class="u-right">SKUs</th>
+              <th class="u-right">SKU %</th><th class="u-right">Line %</th>
             </tr></thead>
             <tbody>
               ${['A', 'B', 'C'].map(k => `
-                <tr style="border-top:1px solid var(--ies-gray-100);">
+                <tr class="wsc-rule-top">
                   <td style="padding:5px 0;font-weight:700;">${k}</td>
-                  <td style="text-align:right;">${fmt(bands[k].skuCount)}</td>
-                  <td style="text-align:right;">${fmt(bands[k].skuPct, 1)}%</td>
-                  <td style="text-align:right;">${fmt(bands[k].linePct, 1)}%</td>
+                  <td class="u-right">${fmt(bands[k].skuCount)}</td>
+                  <td class="u-right">${fmt(bands[k].skuPct, 1)}%</td>
+                  <td class="u-right">${fmt(bands[k].linePct, 1)}%</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -233,13 +234,13 @@ function _renderProfileSummary(p) {
       </div>
 
       <div class="hub-card" style="padding:14px 16px;">
-        <div style="font-size:12px;font-weight:700;margin-bottom:8px;">Depth of Holding ${provChip(prov.depthOfHolding || prov.onHandPallets)}</div>
+        <div class="wsc-card-title">Depth of Holding ${provChip(prov.depthOfHolding || prov.onHandPallets)}</div>
         ${d ? `
           <div style="display:flex;gap:16px;font-size:12px;margin-bottom:8px;">
-            <div><span style="font-size:16px;font-weight:700;">${fmt(d.avgPalletsPerSku, 1)}</span><br><span style="font-size:10px;color:var(--ies-gray-500);">avg plt/SKU</span></div>
-            ${d.p50 != null ? `<div><span style="font-size:16px;font-weight:700;">${fmt(d.p50, 1)}</span><br><span style="font-size:10px;color:var(--ies-gray-500);">median</span></div>` : ''}
-            ${d.p90 != null ? `<div><span style="font-size:16px;font-weight:700;">${fmt(d.p90, 1)}</span><br><span style="font-size:10px;color:var(--ies-gray-500);">p90</span></div>` : ''}
-            ${p.volumes?.onHandPallets != null ? `<div><span style="font-size:16px;font-weight:700;">${fmt(p.volumes.onHandPallets)}</span><br><span style="font-size:10px;color:var(--ies-gray-500);">total pallets</span></div>` : ''}
+            <div><span class="wsc-stat">${fmt(d.avgPalletsPerSku, 1)}</span><br><span style="font-size:10px;color:var(--ies-gray-500);">avg plt/SKU</span></div>
+            ${d.p50 != null ? `<div><span class="wsc-stat">${fmt(d.p50, 1)}</span><br><span style="font-size:10px;color:var(--ies-gray-500);">median</span></div>` : ''}
+            ${d.p90 != null ? `<div><span class="wsc-stat">${fmt(d.p90, 1)}</span><br><span style="font-size:10px;color:var(--ies-gray-500);">p90</span></div>` : ''}
+            ${p.volumes?.onHandPallets != null ? `<div><span class="wsc-stat">${fmt(p.volumes.onHandPallets)}</span><br><span style="font-size:10px;color:var(--ies-gray-500);">total pallets</span></div>` : ''}
           </div>
           ${d.distribution ? `
             <div style="font-size:10px;color:var(--ies-gray-500);margin-bottom:3px;">SKUs by pallets-per-SKU (media-map buckets)</div>
@@ -256,7 +257,7 @@ function _renderProfileSummary(p) {
       </div>
 
       <div class="hub-card" style="padding:14px 16px;">
-        <div style="font-size:12px;font-weight:700;margin-bottom:8px;">Volumes & Peak</div>
+        <div class="wsc-card-title">Volumes & Peak</div>
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
           ${[
             ['SKU universe', fmt(p.skuCount), prov.skuCount],
@@ -266,7 +267,7 @@ function _renderProfileSummary(p) {
             ['Peak factor', fmt(p.peak?.peakFactor, 2), prov.peak],
             p.peak?.weeksObserved != null ? ['Weeks observed', fmt(p.peak.weeksObserved), 'derived'] : null,
           ].filter(Boolean).map(([label, value, pv]) => `
-            <tr style="border-top:1px solid var(--ies-gray-100);">
+            <tr class="wsc-rule-top">
               <td style="padding:5px 0;color:var(--ies-gray-600);">${label}</td>
               <td style="text-align:right;font-weight:700;">${value}</td>
               <td style="text-align:right;width:78px;">${pv ? provChip(pv) : ''}</td>
@@ -276,11 +277,11 @@ function _renderProfileSummary(p) {
       </div>
 
       <div class="hub-card" style="padding:14px 16px;">
-        <div style="font-size:12px;font-weight:700;margin-bottom:8px;">Data Gap Report
+        <div class="wsc-card-title">Data Gap Report
           <span style="font-weight:400;color:var(--ies-gray-500);font-size:11px;">· ${p.dataGaps.length} item${p.dataGaps.length === 1 ? '' : 's'}</span>
         </div>
         ${p.dataGaps.length === 0
-          ? '<div style="font-size:12px;color:#15803d;font-weight:600;">✓ No gaps — fully derived basis.</div>'
+          ? '<div style="font-size:12px;color:var(--c-success-strong);font-weight:600;">✓ No gaps — fully derived basis.</div>'
           : p.dataGaps.map(g => `
             <div style="display:flex;gap:7px;font-size:11.5px;padding:4px 0;border-top:1px solid var(--ies-gray-100);">
               <span>${gapIcon[g.severity] || 'ℹ'}</span>
@@ -320,14 +321,14 @@ function _renderWizard(container, ctx) {
     : pu.slot === 'inventory' ? 'a SKU column AND an on-hand column'
     : 'a SKU column AND a qty column';
   const statusMsg = valid
-    ? `<span style="color:#15803d;font-weight:600;">✓ Ready — ${aoa.length - (pu.headerRow ? 1 : 0)} data rows</span>`
-    : `<span style="color:#b91c1c;font-weight:600;">⚠ Need ${needMsg}</span>`;
+    ? `<span style="color:var(--c-success-strong);font-weight:600;">✓ Ready — ${aoa.length - (pu.headerRow ? 1 : 0)} data rows</span>`
+    : `<span style="color:var(--c-danger-strong);font-weight:600;">⚠ Need ${needMsg}</span>`;
   container.style.display = 'block';
   container.innerHTML = `
-    <div class="hub-card" style="margin-top:14px;padding:14px 16px;background:#fffbeb;border-left:3px solid #f59e0b;">
+    <div class="hub-card" style="margin-top:14px;padding:14px 16px;background:var(--c-warn-soft);border-left:3px solid var(--c-warn);">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
         <div>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#92400e;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--c-warn-ink);">
             ${slot.label} — column mapping for "${esc(pu.fileName)}"</div>
           <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">Assign each column a role. Auto-detected roles are pre-selected.</div>
         </div>
@@ -342,7 +343,7 @@ function _renderWizard(container, ctx) {
             ${Array.from({ length: ncol }, (_, i) => `
               <th style="padding:6px 8px;text-align:left;border:1px solid #fcd34d;font-weight:700;min-width:120px;">
                 <div style="font-size:10px;color:#78350f;letter-spacing:0.3px;text-transform:uppercase;margin-bottom:2px;">Col ${String.fromCharCode(65 + i)}${pu.headerRow ? ' · ' + esc(pu.headerRow[i] || '') : ''}</div>
-                <select data-basis-wiz-col="${i}" style="width:100%;padding:4px 6px;border:1px solid #d97706;border-radius:4px;font-size:12px;font-weight:600;background:#fff;">
+                <select data-basis-wiz-col="${i}" style="width:100%;padding:4px 6px;border:1px solid var(--c-warn-strong);border-radius:4px;font-size:12px;font-weight:600;background:#fff;">
                   ${slot.roles.map(r => `<option value="${r.value}"${(pu.mapping[i] || '') === r.value ? ' selected' : ''}>${r.label}</option>`).join('')}
                 </select>
               </th>`).join('')}
@@ -356,8 +357,8 @@ function _renderWizard(container, ctx) {
         </table>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-        <div style="font-size:12px;">${statusMsg}</div>
-        <div style="display:flex;gap:8px;">
+        <div class="u-12">${statusMsg}</div>
+        <div class="u-flex">
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="wsc-wiz-cancel">Cancel</button>
           <button class="hub-btn hub-btn-sm hub-btn-primary" id="wsc-wiz-confirm" ${valid ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}>Confirm & Profile</button>
         </div>
@@ -443,10 +444,10 @@ function _renderMediaCard(profile, ctx) {
   return `
     <div class="hub-card" style="padding:14px 16px;margin-top:14px;border-left:3px solid #6366f1;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
-        <div style="font-size:12px;font-weight:700;">Media Selection ${provChip(plan.provenance)}
+        <div class="u-12 u-bold">Media Selection ${provChip(plan.provenance)}
           ${isApplied ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:#e0e7ff;color:#4338ca;">APPLIED ${esc(applied.createdAt)}</span>` : ''}
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
+        <div class="u-row">
           <label style="font-size:11px;font-weight:600;color:var(--ies-gray-600);display:flex;align-items:center;gap:5px;">
             Rotation
             <select id="wsc-media-rotation" style="padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:5px;font-size:11px;">
@@ -461,45 +462,45 @@ function _renderMediaCard(profile, ctx) {
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
         <thead><tr style="color:var(--ies-gray-500);font-size:10px;text-transform:uppercase;letter-spacing:0.4px;">
-          <th style="text-align:left;padding:3px 0;">Depth band</th><th style="text-align:right;">SKUs</th>
-          <th style="text-align:right;">Pallets</th><th style="text-align:left;padding-left:12px;">Medium</th>
-          <th style="text-align:right;">Occ.</th><th style="text-align:right;">Positions</th><th style="text-align:right;">Rack cost</th>
+          <th style="text-align:left;padding:3px 0;">Depth band</th><th class="u-right">SKUs</th>
+          <th class="u-right">Pallets</th><th style="text-align:left;padding-left:12px;">Medium</th>
+          <th class="u-right">Occ.</th><th class="u-right">Positions</th><th class="u-right">Rack cost</th>
         </tr></thead>
         <tbody>
           ${plan.bands.map(b => `
-            <tr style="border-top:1px solid var(--ies-gray-100);" title="${esc(b.rationale)}&#10;&#10;${esc((b.checks || []).join('\n'))}">
+            <tr class="wsc-rule-top" title="${esc(b.rationale)}&#10;&#10;${esc((b.checks || []).join('\n'))}">
               <td style="padding:5px 0;font-weight:600;">${esc(b.bucket)}</td>
-              <td style="text-align:right;">${fmt(b.skuCount)}</td>
-              <td style="text-align:right;">${fmt(b.pallets)}</td>
+              <td class="u-right">${fmt(b.skuCount)}</td>
+              <td class="u-right">${fmt(b.pallets)}</td>
               <td style="padding-left:12px;">${esc(b.mediaLabel)}</td>
-              <td style="text-align:right;">${b.occupancyPct}%</td>
+              <td class="u-right">${b.occupancyPct}%</td>
               <td style="text-align:right;font-weight:600;">${fmt(b.positions)}</td>
               <td style="text-align:right;color:var(--ies-gray-600);">${_fmtUsd(b.costBand.min)}–${_fmtUsd(b.costBand.max)}</td>
             </tr>`).join('')}
           ${plan.shelving ? `
-            <tr style="border-top:1px solid var(--ies-gray-100);" title="${esc(plan.shelving.rationale)}">
+            <tr class="wsc-rule-top" title="${esc(plan.shelving.rationale)}">
               <td style="padding:5px 0;font-weight:600;">&lt;1 plt/SKU</td>
-              <td style="text-align:right;">${fmt(plan.shelving.skuCount)}</td>
-              <td style="text-align:right;">${fmt(plan.shelving.pallets)}</td>
+              <td class="u-right">${fmt(plan.shelving.skuCount)}</td>
+              <td class="u-right">${fmt(plan.shelving.pallets)}</td>
               <td style="padding-left:12px;">Carton shelving / bins</td>
-              <td style="text-align:right;">—</td><td style="text-align:right;">—</td><td style="text-align:right;">—</td>
+              <td class="u-right">—</td><td class="u-right">—</td><td class="u-right">—</td>
             </tr>` : ''}
           <tr style="border-top:2px solid var(--ies-gray-200);font-weight:700;">
             <td style="padding:5px 0;">Total · ${plan.totals.mediaCount} media</td>
             <td></td>
-            <td style="text-align:right;">${fmt(plan.totals.pallets)}</td>
+            <td class="u-right">${fmt(plan.totals.pallets)}</td>
             <td></td><td></td>
-            <td style="text-align:right;">${fmt(plan.totals.positions)}</td>
-            <td style="text-align:right;">${_fmtUsd(plan.totals.costBand.min)}–${_fmtUsd(plan.totals.costBand.max)}</td>
+            <td class="u-right">${fmt(plan.totals.positions)}</td>
+            <td class="u-right">${_fmtUsd(plan.totals.costBand.min)}–${_fmtUsd(plan.totals.costBand.max)}</td>
           </tr>
         </tbody>
       </table>
       <div style="font-size:10.5px;color:var(--ies-gray-600);margin-top:8px;" title="${esc(a.rationale)}">
         Derived storage mix → Full-pallet <b>${a.fullPallet}%</b> · Carton-on-pallet <b>${a.cartonOnPallet}%</b> · Shelving <b>${a.cartonOnShelving}%</b>
-        <span style="color:var(--ies-gray-500);">(replaces the asserted mix on Apply; hover for basis)</span>
+        <span class="u-muted">(replaces the asserted mix on Apply; hover for basis)</span>
       </div>
       ${plan.gaps.length ? plan.gaps.map(g => `
-        <div style="font-size:10.5px;color:${g.severity === 'warn' ? '#b45309' : 'var(--ies-gray-500)'};margin-top:4px;">
+        <div style="font-size:10.5px;color:${g.severity === 'warn' ? 'var(--c-warn-deep)' : 'var(--ies-gray-500)'};margin-top:4px;">
           ${g.severity === 'warn' ? '⚠' : 'ℹ'} ${esc(g.message)}</div>`).join('') : ''}
       <div style="font-size:10px;color:var(--ies-gray-500);margin-top:8px;">
         Hover any row for the full selection audit (candidates considered, Rule-of-3 checks, rejections). Factor citations ride each band into the Design Basis doc.
@@ -562,7 +563,7 @@ function _renderDynamicsCard(profile, ctx) {
   return `
     <div class="hub-card" style="padding:14px 16px;margin-top:14px;border-left:3px solid #0ea5e9;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
-        <div style="font-size:12px;font-weight:700;">Dynamics — Docks · Staging · MHE ${provChip(plan.provenance)}
+        <div class="u-12 u-bold">Dynamics — Docks · Staging · MHE ${provChip(plan.provenance)}
           ${isApplied ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:#e0f2fe;color:#0369a1;">APPLIED ${esc(applied.createdAt)}</span>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -587,26 +588,26 @@ function _renderDynamicsCard(profile, ctx) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">
         <div>
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:4px;">Dock doors — rate method</div>
-          <div style="font-size:12px;" title="${esc(d.rationale)}">
+          <div class="u-12" title="${esc(d.rationale)}">
             Flow ${fmt(plan.flow.peakIn)} in / ${fmt(plan.flow.peakOut)} out peak plt/day (×${plan.flow.peakFactor} peak) →
             <b>${d.inbound.doors} inbound + ${d.outbound.doors} outbound = ${d.totalDoors} doors</b>
           </div>
           <div style="font-size:10.5px;color:var(--ies-gray-500);margin-top:3px;">
             Dwell-method cross-check: ${d.dwellCheck.doors} doors (${d.dwellCheck.trucksPerPeakDay} trucks/peak-day)
-            ${d.methodsDiverge ? '<span style="color:#b91c1c;font-weight:700;">— DIVERGES</span>' : '— agrees'}
+            ${d.methodsDiverge ? '<span style="color:var(--c-danger-strong);font-weight:700;">— DIVERGES</span>' : '— agrees'}
           </div>
           ${d.sanityNote ? `<div style="font-size:10.5px;color:var(--ies-gray-500);margin-top:3px;">${esc(d.sanityNote)}</div>` : ''}
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin:10px 0 4px;">Staging</div>
-          <div style="font-size:12px;">
-            Receive <b>${fmt(s.inbound.sqft)} sqft</b> <span style="color:var(--ies-gray-500);">(${s.inbound.governedBy}, ${fmt(s.inbound.stagedPallets)} plt)</span> ·
-            Ship <b>${fmt(s.outbound.sqft)} sqft</b> <span style="color:var(--ies-gray-500);">(${s.outbound.governedBy})</span>
+          <div class="u-12">
+            Receive <b>${fmt(s.inbound.sqft)} sqft</b> <span class="u-muted">(${s.inbound.governedBy}, ${fmt(s.inbound.stagedPallets)} plt)</span> ·
+            Ship <b>${fmt(s.outbound.sqft)} sqft</b> <span class="u-muted">(${s.outbound.governedBy})</span>
           </div>
         </div>
         <div>
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:4px;">MHE assumption → aisles${plan.mhe.source === 'asserted' ? ' <span style="color:#b45309;">(asserted)</span>' : ''}</div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:4px;">MHE assumption → aisles${plan.mhe.source === 'asserted' ? ' <span style="color:var(--c-warn-deep);">(asserted)</span>' : ''}</div>
           ${plan.mhe.fleet.map(f => `
             <div style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:3px 0;border-top:1px solid var(--ies-gray-100);" title="${esc(f.rationale)}">
-              <span>${esc(f.label)} <span style="color:var(--ies-gray-500);">· ${esc(f.role)}</span></span>
+              <span>${esc(f.label)} <span class="u-muted">· ${esc(f.role)}</span></span>
               <span style="font-weight:600;white-space:nowrap;">${f.aisleFt} ft</span>
             </div>`).join('')}
           <div style="font-size:11px;margin-top:4px;">Governing storage aisle: <b>${plan.mhe.governingAisleFt} ft</b></div>
@@ -615,7 +616,7 @@ function _renderDynamicsCard(profile, ctx) {
         </div>
       </div>
       ${plan.gaps.length ? plan.gaps.map(g => `
-        <div style="font-size:10.5px;color:${g.severity === 'warn' ? '#b45309' : 'var(--ies-gray-500)'};margin-top:4px;">
+        <div style="font-size:10.5px;color:${g.severity === 'warn' ? 'var(--c-warn-deep)' : 'var(--ies-gray-500)'};margin-top:4px;">
           ${g.severity === 'warn' ? '⚠' : 'ℹ'} ${esc(g.message)}</div>`).join('') : ''}
     </div>
   `;
@@ -650,7 +651,7 @@ function _bindDynamicsEvents(container, ctx) {
 // ============================================================
 
 const _STATUS_CHIP = {
-  PASS: ['#dcfce7', '#15803d'], FAIL: ['#fee2e2', '#b91c1c'], 'N/A': ['#f3f4f6', '#6b7280'],
+  PASS: ['var(--c-success-bg)', 'var(--c-success-strong)'], FAIL: ['var(--c-danger-bg)', 'var(--c-danger-strong)'], 'N/A': ['#f3f4f6', 'var(--c-muted)'],
 };
 function _statusChip(status) {
   const [bg, fg] = _STATUS_CHIP[status] || _STATUS_CHIP['N/A'];
@@ -674,14 +675,14 @@ function _renderLayoutCard(ctx) {
   const isApplied = !!applied;
   const g = plan.gridFit;
   return `
-    <div class="hub-card" style="padding:14px 16px;margin-top:14px;border-left:3px solid #16a34a;">
+    <div class="hub-card" style="padding:14px 16px;margin-top:14px;border-left:3px solid var(--c-success);">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
-        <div style="font-size:12px;font-weight:700;">Layout & Compliance
+        <div class="u-12 u-bold">Layout & Compliance
           <span style="font-weight:400;color:var(--ies-gray-500);font-size:11px;">· ${esc(plan.flow.pattern)}</span>
-          ${plan.compliance.failCount > 0 ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:#fee2e2;color:#b91c1c;">${plan.compliance.failCount} FAILING</span>` : '<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:#dcfce7;color:#15803d;">ALL CLEAR</span>'}
-          ${isApplied ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:#dcfce7;color:#166534;">APPLIED ${esc(applied.createdAt)}</span>` : ''}
+          ${plan.compliance.failCount > 0 ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:var(--c-danger-bg);color:var(--c-danger-strong);">${plan.compliance.failCount} FAILING</span>` : '<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:var(--c-success-bg);color:var(--c-success-strong);">ALL CLEAR</span>'}
+          ${isApplied ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:var(--c-success-bg);color:var(--c-success-ink);">APPLIED ${esc(applied.createdAt)}</span>` : ''}
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
+        <div class="u-row">
           <label style="font-size:11px;font-weight:600;color:var(--ies-gray-600);display:flex;align-items:center;gap:5px;">
             Flue standard
             <select id="wsc-layout-flue" style="padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:5px;font-size:11px;">
@@ -698,13 +699,13 @@ function _renderLayoutCard(ctx) {
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:3px;">Column grid ↔ rack-bay fit</div>
       <div style="font-size:11.5px;" title="${esc(g.rationale)}">
         ${g.spanXFt} ft span → <b>${g.baysPerModule} bays/module</b>, ${g.slackIn}" slack
-        ${g.flueConflict ? '<span style="color:#b91c1c;font-weight:700;"> — flue conflict at column line</span>' : ''}
-        ${g.recommended && g.recommended.spanFt !== g.spanXFt ? ` · <span style="color:#166534;font-weight:600;">recommend ${g.recommended.spanFt} ft (${g.recommended.baysPerModule} bays, ${g.recommended.slackIn}" slack)</span>` : ''}
+        ${g.flueConflict ? '<span style="color:var(--c-danger-strong);font-weight:700;"> — flue conflict at column line</span>' : ''}
+        ${g.recommended && g.recommended.spanFt !== g.spanXFt ? ` · <span style="color:var(--c-success-ink);font-weight:600;">recommend ${g.recommended.spanFt} ft (${g.recommended.baysPerModule} bays, ${g.recommended.slackIn}" slack)</span>` : ''}
       </div>
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin:10px 0 3px;">Standards checklist — ${esc(plan.flueStandard)} governing</div>
       <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
         ${plan.compliance.checks.map(c => `
-          <tr style="border-top:1px solid var(--ies-gray-100);"${c.note ? ` title="${esc(c.note)}"` : ''}>
+          <tr class="wsc-rule-top"${c.note ? ` title="${esc(c.note)}"` : ''}>
             <td style="padding:4px 0;">${esc(c.label)}</td>
             <td style="text-align:right;color:var(--ies-gray-600);white-space:nowrap;padding:0 10px;">${esc(c.required)}</td>
             <td style="text-align:right;font-weight:600;white-space:nowrap;padding-right:10px;">${esc(c.actual)}</td>
@@ -714,7 +715,7 @@ function _renderLayoutCard(ctx) {
       </table>
       <div style="font-size:10.5px;color:var(--ies-gray-500);margin-top:6px;">${esc(plan.flow.advisory)}</div>
       ${plan.gaps.map(gp => `
-        <div style="font-size:10.5px;color:${gp.severity === 'warn' ? '#b45309' : 'var(--ies-gray-500)'};margin-top:4px;">
+        <div style="font-size:10.5px;color:${gp.severity === 'warn' ? 'var(--c-warn-deep)' : 'var(--ies-gray-500)'};margin-top:4px;">
           ${gp.severity === 'warn' ? '⚠' : 'ℹ'} ${esc(gp.message)}</div>`).join('')}
     </div>
   `;
@@ -738,9 +739,9 @@ function _bindLayoutEvents(container, ctx) {
 // ============================================================
 
 const _SRC_CHIP = {
-  'standard':        ['#dcfce7', '#15803d'],
-  'industry method': ['#dbeafe', '#1d4ed8'],
-  'vendor heuristic':['#fef3c7', '#b45309'],
+  'standard':        ['var(--c-success-bg)', 'var(--c-success-strong)'],
+  'industry method': ['var(--c-info-bg)', 'var(--c-info-strong)'],
+  'vendor heuristic':['var(--c-warn-bg)', 'var(--c-warn-deep)'],
   'IES assumption':  ['#f3e8ff', '#7e22ce'],
 };
 function _srcChip(source) {
@@ -753,7 +754,7 @@ function _factorValueLabel(r) {
   if (j && typeof j === 'object' && !Array.isArray(j) && 'min' in j && 'max' in j) {
     return `${fmt(j.min, 2)}–${fmt(j.max, 2)}${r.value_unit ? ' ' + esc(r.value_unit) : ''}`;
   }
-  return '<span style="color:var(--ies-gray-500);">structured</span>';
+  return '<span class="u-muted">structured</span>';
 }
 
 async function _renderFactorsCard(el, ctx) {
@@ -780,10 +781,10 @@ async function _renderFactorsCard(el, ctx) {
   el.innerHTML = `
     <div class="hub-card" style="padding:14px 16px;margin-top:14px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
-        <div style="font-size:12px;font-weight:700;">Design Factors
+        <div class="u-12 u-bold">Design Factors
           <span style="font-weight:400;color:var(--ies-gray-500);font-size:11px;">
             · ${pinned ? `pinned ${esc(pinned.pinnedAt)}` : 'not pinned yet — pins at first save'}</span>
-          ${drift?.anyDrift ? '<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:#fee2e2;color:#b91c1c;">CATALOG MOVED</span>' : ''}
+          ${drift?.anyDrift ? '<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:var(--c-danger-bg);color:var(--c-danger-strong);">CATALOG MOVED</span>' : ''}
         </div>
         ${drift?.anyDrift ? '<button class="hub-btn hub-btn-sm hub-btn-secondary" id="wsc-factors-adopt" title="Re-pin this scenario to today\'s catalog. Nothing else about the design changes.">Adopt current catalog</button>' : ''}
       </div>
@@ -794,11 +795,11 @@ async function _renderFactorsCard(el, ctx) {
             <span style="flex:1;" title="${esc(r.source_detail || '')}">${esc(r.display_name)}</span>
             ${_srcChip(r.source)}
             <span style="width:120px;text-align:right;font-weight:600;">${_factorValueLabel(r)}</span>
-            ${r.changed ? `<span style="color:#b91c1c;font-size:10px;font-weight:700;" title="Catalog now: ${esc(_factorValueLabel(r.current).replace(/<[^>]*>/g, ''))}">Δ</span>` : r.missing ? '<span style="color:#b45309;font-size:10px;font-weight:700;" title="Removed from catalog">✕</span>' : '<span style="width:10px;"></span>'}
+            ${r.changed ? `<span style="color:var(--c-danger-strong);font-size:10px;font-weight:700;" title="Catalog now: ${esc(_factorValueLabel(r.current).replace(/<[^>]*>/g, ''))}">Δ</span>` : r.missing ? '<span style="color:var(--c-warn-deep);font-size:10px;font-weight:700;" title="Removed from catalog">✕</span>' : '<span style="width:10px;"></span>'}
           </div>
         `).join('')}
       `).join('')}
-      ${drift?.added?.length ? `<div style="font-size:10.5px;color:#b45309;margin-top:8px;">＋ ${drift.added.length} new factor(s) in the catalog since this scenario pinned — adopt to include.</div>` : ''}
+      ${drift?.added?.length ? `<div style="font-size:10.5px;color:var(--c-warn-deep);margin-top:8px;">＋ ${drift.added.length} new factor(s) in the catalog since this scenario pinned — adopt to include.</div>` : ''}
       <div style="font-size:10px;color:var(--ies-gray-500);margin-top:8px;">
         Org-wide guidance pinned per scenario — catalog changes never silently alter a saved design. Sources cited per factor (hover names).
       </div>
