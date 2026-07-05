@@ -7,15 +7,15 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260703-dc2';
-import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260703-ls1';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260705-u1a';
+import { showToast } from '../../shared/toast.js?v=20260705-u1a';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260705-u1a';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260702-p1m1';
 import { splitCsvLine } from '../../shared/export.js?v=20260702-p1m1';
 import * as api from './api.js?v=20260504-auth1';
-import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
+import { showConfirm } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 
 // ============================================================

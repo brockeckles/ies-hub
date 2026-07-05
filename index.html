@@ -42,7 +42,7 @@
   <link rel="modulepreload" href="./shared/router.js?v=20260704-ux2b">
 
   <!-- Design System -->
-  <link rel="stylesheet" href="./css/hub.css?v=20260705-u0a">
+  <link rel="stylesheet" href="./css/hub.css?v=20260705-u1a">
 
   <!-- Feature flags — defaults ON for engines that have shipped past Phase 1 -->
   <script>
@@ -212,18 +212,18 @@
 
   <!-- App Bootstrap -->
   <script type="module">
-    import { auth } from './shared/auth.js?v=20260704-mfa1';
+    import { auth } from './shared/auth.js?v=20260705-u1a';
     import { router } from './shared/router.js?v=20260704-ux2b';
     import { search } from './shared/search.js?v=20260704-ux2b';
     import { bus } from './shared/event-bus.js?v=20260418-sK';
     // Shared UX modules — self-wire their listeners/guards on import.
-    import { showToast } from './shared/toast.js?v=20260419-uC';
+    import { showToast } from './shared/toast.js?v=20260705-u1a';
     import './shared/error-net.js?v=20260703-net1';  // P3-2 global error net — keep first among side-effect imports
     import { mountFeedbackFab } from './shared/feedback-fab.js?v=20260430-btn-cleanup';
     import './shared/unsaved-guard.js?v=20260703-p34';
-    import { tour } from './shared/tour.js?v=20260610-honest1';
+    import { tour } from './shared/tour.js?v=20260705-u1a';
     import { analytics } from './shared/analytics.js?v=20260504-auth1';
-    import { openMfaGate } from './shared/mfa-ui.js?v=20260704-mfa1';
+    import { openMfaGate } from './shared/mfa-ui.js?v=20260705-u1a';
     // Expose a couple of helpers for inline handlers + console debugging.
     window.__hubToast = showToast;
     window.__hubTour = tour;
@@ -481,22 +481,22 @@
                 <!-- Header -->
                 <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:6px;">
                   <div>
-                    <h1 class="text-page" style="margin:0;">Design Tools</h1>
+                    <h1 class="text-page u-m0">Design Tools</h1>
                     <p style="margin:4px 0 0;font-size:13px;color:var(--ies-gray-500);">${tools.length} production tools. Every scenario saves to Supabase and links back to a deal.</p>
                   </div>
                 </div>
 
                 <!-- Beta advisory banner -->
-                <div class="hub-dt-beta-banner" style="margin:14px 0 18px;padding:10px 14px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:12px;font-weight:600;display:flex;align-items:center;gap:10px;">
-                  <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#2563eb;color:#fff;font-weight:800;">β</span>
-                  <span>Design Tools are in active development — calcs are production-grade but layouts may shift session to session. File anything odd in <a href="#feedback" style="color:#1e40af;text-decoration:underline;">Ideas &amp; Feedback</a>.</span>
+                <div class="hub-dt-beta-banner" style="margin:14px 0 18px;padding:10px 14px;border-radius:8px;background:var(--c-info-soft);border:1px solid #bfdbfe;color:var(--c-info-ink);font-size:12px;font-weight:600;display:flex;align-items:center;gap:10px;">
+                  <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--c-info);color:#fff;font-weight:800;">β</span>
+                  <span>Design Tools are in active development — calcs are production-grade but layouts may shift session to session. File anything odd in <a href="#feedback" style="color:var(--c-info-ink);text-decoration:underline;">Ideas &amp; Feedback</a>.</span>
                 </div>
 
                 <!-- Filter tabs -->
                 <div class="hub-dt-filter-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:22px;border-bottom:1px solid var(--ies-gray-200);padding-bottom:12px;">
                   ${['all', ...tools.map(t => t.key)].map(key => {
                     const label = key === 'all' ? 'All Tools' : (tools.find(t => t.key === key)?.name || key);
-                    return `<button type="button" data-dt-filter="${key}" class="hub-dt-tab ${key === 'all' ? 'active' : ''}" style="background:${key === 'all' ? '#1c1c1c' : 'transparent'};color:${key === 'all' ? '#fff' : 'var(--ies-gray-700)'};border:1px solid ${key === 'all' ? '#1c1c1c' : 'var(--ies-gray-300)'};border-radius:999px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;">${label}</button>`;
+                    return `<button type="button" data-dt-filter="${key}" class="hub-dt-tab ${key === 'all' ? 'active' : ''}" style="background:${key === 'all' ? 'var(--ies-navy)' : 'transparent'};color:${key === 'all' ? '#fff' : 'var(--ies-gray-700)'};border:1px solid ${key === 'all' ? 'var(--ies-navy)' : 'var(--ies-gray-300)'};border-radius:999px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;">${label}</button>`;
                   }).join('')}
                 </div>
 
@@ -507,7 +507,7 @@
                     return `
                       <section class="hub-dt-category" data-dt-category="${cat}" style="margin-bottom:32px;">
                         <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-                          <h2 style="margin:0;font-size:15px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#1c1c1c;flex-shrink:0;">${cat}</h2>
+                          <h2 style="margin:0;font-size:15px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ies-navy);flex-shrink:0;">${cat}</h2>
                           <span style="font-size:12px;color:var(--ies-gray-500);font-weight:500;">— ${categoryDesc[cat]}</span>
                         </div>
                         <div class="hub-dt-grid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:16px;">
@@ -518,7 +518,7 @@
                                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${t.iconPath}</svg>
                                 </div>
                                 <div style="flex:1 1 auto;min-width:0;">
-                                  <h3 style="margin:0;font-size:14px;font-weight:800;color:#1c1c1c;">${t.name}</h3>
+                                  <h3 style="margin:0;font-size:14px;font-weight:800;color:var(--ies-navy);">${t.name}</h3>
                                   <div style="font-size:11px;color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-top:2px;">${t.category}</div>
                                 </div>
                               </div>
@@ -544,9 +544,9 @@
               tabs.querySelectorAll('[data-dt-filter]').forEach(b => {
                 const active = b.dataset.dtFilter === key;
                 b.classList.toggle('active', active);
-                b.style.background = active ? '#1c1c1c' : 'transparent';
+                b.style.background = active ? 'var(--ies-navy)' : 'transparent';
                 b.style.color = active ? '#fff' : 'var(--ies-gray-700)';
-                b.style.borderColor = active ? '#1c1c1c' : 'var(--ies-gray-300)';
+                b.style.borderColor = active ? 'var(--ies-navy)' : 'var(--ies-gray-300)';
               });
               cards().forEach(c => {
                 c.style.display = (key === 'all' || c.dataset.dtTool === key) ? '' : 'none';
@@ -562,7 +562,7 @@
               card.addEventListener('mouseenter', () => {
                 card.style.transform = 'translateY(-2px)';
                 card.style.boxShadow = '0 6px 16px rgba(0,0,0,.08)';
-                card.style.borderColor = '#ff3a00';
+                card.style.borderColor = 'var(--ies-orange)';
               });
               card.addEventListener('mouseleave', () => {
                 card.style.transform = '';
@@ -578,7 +578,7 @@
       // Design Tool sub-routes (lazy loaded)
       const toolRoutes = {
         'designtools/cost-model': { title: 'Cost Model Builder', path: './tools/cost-model/ui.js?v=20260704-wq2' },
-        'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260705-n7a' },
+        'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260705-u1a' },
         'designtools/most-standards': { title: 'MOST Labor Standards', path: './tools/most-standards/ui.js?v=20260704-wcr1' },
         'designtools/network-opt': { title: 'Network Optimization', path: './tools/network-opt/ui.js?v=20260703-dc2' },
         'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260703-dc2' },
@@ -711,7 +711,7 @@
         const secLabel = ROUTE_LABELS[section] || section;
         if (tool) {
           crumbs.push(`<a href="#${section}" style="color:var(--ies-gray-500);text-decoration:none;">${secLabel}</a>`);
-          crumbs.push(`<span style="color:var(--ies-gray-400);">/</span>`);
+          crumbs.push(`<span class="u-faint">/</span>`);
           crumbs.push(`<span style="color:var(--ies-gray-800);">${TOOL_LABELS[tool] || tool}</span>`);
         } else {
           crumbs.push(`<span style="color:var(--ies-gray-800);">${secLabel}</span>`);
@@ -780,7 +780,7 @@
       `;
       // Hover styles via JS — keeps css/hub.css free of one-offs.
       for (const btn of el.querySelectorAll('button')) {
-        btn.addEventListener('mouseenter', () => { btn.style.background = 'var(--ies-gray-100, #f1f3f5)'; });
+        btn.addEventListener('mouseenter', () => { btn.style.background = 'var(--ies-gray-100, var(--ies-gray-100))'; });
         btn.addEventListener('mouseleave', () => { btn.style.background = 'none'; });
       }
       document.body.appendChild(el);
@@ -833,14 +833,14 @@
       el.style.cssText = 'position:fixed;top:56px;right:24px;z-index:9997;max-width:340px;background:#fff;border:1px solid var(--ies-gray-200);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:16px 18px;font-size:13px;';
       el.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <div style="font-weight:800;color:#1c1c1c;">Keyboard shortcuts</div>
+          <div style="font-weight:800;color:var(--ies-navy);">Keyboard shortcuts</div>
           <button type="button" aria-label="Close" style="background:none;border:none;color:var(--ies-gray-500);font-size:18px;cursor:pointer;line-height:1;">×</button>
         </div>
         <table style="width:100%;border-collapse:collapse;font-size:12px;color:var(--ies-gray-700);">
-          <tr><td style="padding:4px 0;"><kbd style="background:#f1f3f5;border:1px solid #dee2e6;border-radius:4px;padding:1px 6px;font-family:monospace;">Ctrl + K</kbd></td><td style="padding:4px 8px;">Global search</td></tr>
-          <tr><td style="padding:4px 0;"><kbd style="background:#f1f3f5;border:1px solid #dee2e6;border-radius:4px;padding:1px 6px;font-family:monospace;">Shift + R</kbd></td><td style="padding:4px 8px;">Reload current view</td></tr>
-          <tr><td style="padding:4px 0;"><kbd style="background:#f1f3f5;border:1px solid #dee2e6;border-radius:4px;padding:1px 6px;font-family:monospace;">?</kbd></td><td style="padding:4px 8px;">Toggle this help</td></tr>
-          <tr><td style="padding:4px 0;"><kbd style="background:#f1f3f5;border:1px solid #dee2e6;border-radius:4px;padding:1px 6px;font-family:monospace;">Esc</kbd></td><td style="padding:4px 8px;">Dismiss tour / modal</td></tr>
+          <tr><td style="padding:4px 0;"><kbd style="background:var(--ies-gray-100);border:1px solid #dee2e6;border-radius:4px;padding:1px 6px;font-family:monospace;">Ctrl + K</kbd></td><td style="padding:4px 8px;">Global search</td></tr>
+          <tr><td style="padding:4px 0;"><kbd style="background:var(--ies-gray-100);border:1px solid #dee2e6;border-radius:4px;padding:1px 6px;font-family:monospace;">Shift + R</kbd></td><td style="padding:4px 8px;">Reload current view</td></tr>
+          <tr><td style="padding:4px 0;"><kbd style="background:var(--ies-gray-100);border:1px solid #dee2e6;border-radius:4px;padding:1px 6px;font-family:monospace;">?</kbd></td><td style="padding:4px 8px;">Toggle this help</td></tr>
+          <tr><td style="padding:4px 0;"><kbd style="background:var(--ies-gray-100);border:1px solid #dee2e6;border-radius:4px;padding:1px 6px;font-family:monospace;">Esc</kbd></td><td style="padding:4px 8px;">Dismiss tour / modal</td></tr>
         </table>
         <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--ies-gray-200);font-size:12px;color:var(--ies-gray-600);">
           Tip: click the <strong>compass icon</strong> in the header to start a guided tour of whichever page you're on.

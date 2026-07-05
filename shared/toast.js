@@ -5,7 +5,7 @@
  * calls. Standardizes the toast UX across every tool.
  *
  * Usage:
- *   import { showToast } from './shared/toast.js?v=20260419-uC';
+ *   import { showToast } from './shared/toast.js?v=20260705-u1a';
  *   showToast('Model saved', 'success');
  *   showToast('Save failed: invalid input', 'error');
  *
@@ -27,10 +27,10 @@ const STACK_ID = 'hub-toast-stack';
 const MAX_TOASTS = 5;
 
 const LEVEL_STYLES = {
-  success: { bg: '#f0fdf4', border: '#16a34a', text: '#166534', icon: '✓' },
-  error:   { bg: '#fef2f2', border: '#dc2626', text: '#991b1b', icon: '✕' },
-  warning: { bg: '#fffbeb', border: '#d97706', text: '#92400e', icon: '!' },
-  info:    { bg: '#eff6ff', border: '#2563eb', text: '#1e40af', icon: 'i' },
+  success: { bg: 'var(--c-success-soft)', border: 'var(--c-success)', text: 'var(--c-success-ink)', icon: '✓' },
+  error:   { bg: 'var(--c-danger-soft)', border: 'var(--c-danger)', text: 'var(--c-danger-ink)', icon: '✕' },
+  warning: { bg: 'var(--c-warn-soft)', border: 'var(--c-warn-strong)', text: 'var(--c-warn-ink)', icon: '!' },
+  info:    { bg: 'var(--c-info-soft)', border: 'var(--c-info)', text: 'var(--c-info-ink)', icon: 'i' },
 };
 
 const DURATION = { success: 4000, info: 4000, warning: 5000, error: 6000 };

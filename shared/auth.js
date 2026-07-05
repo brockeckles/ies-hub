@@ -29,7 +29,7 @@
  *   completePasswordRecovery → signed in.
  *
  * Usage:
- *   import { auth } from './auth.js?v=20260704-mfa1';
+ *   import { auth } from './auth.js?v=20260705-u1a';
  *
  *   await auth.bootstrapSession();            // call once before gate check
  *   if (!auth.isAuthenticated()) {
@@ -857,11 +857,11 @@ function renderLoginScreen(overlay, onSuccess) {
         </button>
         <div style="margin-top:10px;text-align:center;display:flex;justify-content:center;gap:18px;">
           <button type="button" id="auth-forgot-link"
-            style="background:none;border:none;padding:4px 6px;font-size:12px;color:var(--ies-gray-500, #6b7280);cursor:pointer;text-decoration:underline;text-decoration-color:rgba(0,0,0,.2);font-family:inherit;">
+            style="background:none;border:none;padding:4px 6px;font-size:12px;color:var(--ies-gray-500, var(--c-muted));cursor:pointer;text-decoration:underline;text-decoration-color:rgba(0,0,0,.2);font-family:inherit;">
             Forgot password?
           </button>
           <button type="button" id="auth-invite-link"
-            style="background:none;border:none;padding:4px 6px;font-size:12px;color:var(--ies-gray-500, #6b7280);cursor:pointer;text-decoration:underline;text-decoration-color:rgba(0,0,0,.2);font-family:inherit;">
+            style="background:none;border:none;padding:4px 6px;font-size:12px;color:var(--ies-gray-500, var(--c-muted));cursor:pointer;text-decoration:underline;text-decoration-color:rgba(0,0,0,.2);font-family:inherit;">
             I was invited
           </button>
         </div>
@@ -992,7 +992,7 @@ function renderForgotPasswordModal(opts = {}) {
   // Stacks above the persistent login overlay (z-index 9999 from .hub-auth-overlay).
   overlay.style.zIndex = '10000';
   overlay.innerHTML = `
-    <div class="hub-auth-card" role="dialog" aria-modal="true" aria-label="Reset password" style="text-align:left;">
+    <div class="hub-auth-card" role="dialog" aria-modal="true" aria-label="Reset password" class="u-left">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
         <h2 class="hub-auth-title" id="fp-heading" style="margin:0;font-size:18px;">Reset password</h2>
         <button type="button" id="fp-close" aria-label="Close"
@@ -1035,10 +1035,10 @@ function renderForgotPasswordModal(opts = {}) {
 
         <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:18px;">
           <button type="button" id="fp-resend"
-            style="background:none;border:none;padding:4px 6px;font-size:12px;color:var(--ies-gray-500, #6b7280);cursor:pointer;text-decoration:underline;text-decoration-color:rgba(0,0,0,.2);font-family:inherit;">
+            style="background:none;border:none;padding:4px 6px;font-size:12px;color:var(--ies-gray-500, var(--c-muted));cursor:pointer;text-decoration:underline;text-decoration-color:rgba(0,0,0,.2);font-family:inherit;">
             Didn't get a code? Resend
           </button>
-          <div style="display:flex;gap:8px;">
+          <div class="u-flex">
             <button type="button" class="hub-btn hub-btn-secondary" id="fp-back">Back</button>
             <button type="button" class="hub-btn hub-btn-primary" id="fp-verify-btn">Verify code</button>
           </div>
@@ -1340,7 +1340,7 @@ function renderRecoverySetPasswordModal(opts = {}) {
   // either state via cross-tab PASSWORD_RECOVERY delivery.
   overlay.style.zIndex = '10001';
   overlay.innerHTML = `
-    <div class="hub-auth-card" role="dialog" aria-modal="true" aria-label="Set a new password" style="text-align:left;">
+    <div class="hub-auth-card" role="dialog" aria-modal="true" aria-label="Set a new password" class="u-left">
       <div style="margin-bottom:14px;">
         <h2 class="hub-auth-title" style="margin:0 0 4px 0;font-size:18px;">Set a new password</h2>
         <p class="hub-auth-subtitle" style="margin:0;text-align:left;font-size:13px;">
@@ -1484,7 +1484,7 @@ function renderChangePasswordModal(opts = {}) {
   overlay.className = 'hub-auth-overlay';
   overlay.style.background = 'rgba(10, 22, 40, 0.55)';
   overlay.innerHTML = `
-    <div class="hub-auth-card" role="dialog" aria-modal="true" aria-label="Change password" style="text-align:left;">
+    <div class="hub-auth-card" role="dialog" aria-modal="true" aria-label="Change password" class="u-left">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
         <h2 class="hub-auth-title" style="margin:0;font-size:18px;">Change password</h2>
         <button type="button" id="cp-close" aria-label="Close"
@@ -1773,7 +1773,7 @@ function renderAcceptInviteModal(opts = {}) {
   // Above the persistent login overlay (9999).
   overlay.style.zIndex = '10000';
   overlay.innerHTML = `
-    <div class="hub-auth-card" role="dialog" aria-modal="true" aria-label="Accept invite" style="text-align:left;">
+    <div class="hub-auth-card" role="dialog" aria-modal="true" aria-label="Accept invite" class="u-left">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
         <h2 class="hub-auth-title" style="margin:0;font-size:18px;">Accept invite</h2>
         <button type="button" id="ai-close" aria-label="Close"

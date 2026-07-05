@@ -9,11 +9,11 @@
  *
  * Usage from a tool's ui.js:
  *
- *   import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=...';
+ *   import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260705-u1a';
  *   await renderScenarioLanding(rootEl, {
  *     toolName: 'Warehouse Sizing',
  *     toolKey: 'wsc',               // key for CSS scoping + analytics
- *     accent: '#0047AB',             // color accent for header + new-button
+ *     accent: 'var(--ies-blue)',             // color accent for header + new-button
  *     list: () => api.listConfigs(),
  *     getId:       (row) => row.id,
  *     getName:     (row) => row.name || row.config_data?.name || 'Untitled',
@@ -33,8 +33,8 @@
 
 import { db } from './supabase.js?v=20260703-hw1';
 import * as dealContext from './deal-context.js?v=20260703-dc1';
-import { showToast } from './toast.js?v=20260419-uC';
-import { showConfirm } from './confirm-modal.js?v=20260601-prompt2';
+import { showToast } from './toast.js?v=20260705-u1a';
+import { showConfirm } from './confirm-modal.js?v=20260705-u1a';
 
 /**
  * @param {HTMLElement} rootEl
@@ -44,7 +44,7 @@ export async function renderScenarioLanding(rootEl, opts) {
   const {
     toolName,
     toolKey,
-    accent = '#ff3a00',
+    accent = 'var(--ies-orange)',
     list,
     getId = (r) => r.id,
     getName = (r) => r.name || 'Untitled',
@@ -250,19 +250,19 @@ function renderShell({
       </a>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap;">
         <div>
-          <h1 class="text-page" style="margin:0;">${escapeText(toolName)}</h1>
+          <h1 class="text-page u-m0">${escapeText(toolName)}</h1>
           <p style="margin:4px 0 0;font-size:12px;color:var(--ies-gray-500);">
             ${total} scenario${total === 1 ? '' : 's'} saved
             ${total > 0 ? `· <strong style="color:${accent};">${linked}</strong> linked, <strong>${standalone}</strong> stand-alone` : ''}
           </p>
           ${dealCtx ? `
           <div style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;font-size:12px;background:#fff7f5;border:1px solid #ffd9cf;border-radius:16px;padding:4px 12px;">
-            <span style="color:var(--ies-gray-500);">Working in deal:</span>
+            <span class="u-muted">Working in deal:</span>
             <span style="font-weight:700;color:var(--ies-navy);">${escapeText(dealCtx.name || (dealsById && dealsById.get(String(dealCtx.id))) || dealCtx.id)}</span>
             <button type="button" data-sl-dc-clear title="Clear deal binding — new scenarios will start unassigned" style="border:none;background:none;cursor:pointer;color:var(--ies-gray-400);font-weight:700;font-size:12px;line-height:1;padding:0;">✕</button>
           </div>` : ''}
         </div>
-        <button type="button" data-sl-action="new" class="hub-btn hub-btn-primary" style="font-weight:700;">
+        <button type="button" data-sl-action="new" class="hub-btn hub-btn-primary u-bold">
           + New Scenario
         </button>
       </div>
@@ -273,7 +273,7 @@ function renderShell({
             <div>Scenario</div>
             <div>Linkage</div>
             <div>Last updated</div>
-            <div style="text-align:right;">Actions</div>
+            <div class="u-right">Actions</div>
           </div>
           ${scenarios.map(s => renderRow({
             s, accent, costModelsById, dealsById,
@@ -293,7 +293,7 @@ function renderEmpty(toolName, accent, hint) {
       <p style="font-size:13px;color:var(--ies-gray-500);margin:0 auto 20px;max-width:460px;line-height:1.5;">
         ${hint ? escapeText(hint) : `Start a new scenario to build your first ${escapeText(toolName)} analysis. Scenarios save automatically as you work and can be linked to a cost model or deal later.`}
       </p>
-      <button type="button" data-sl-action="new" class="hub-btn hub-btn-primary" style="font-weight:700;">
+      <button type="button" data-sl-action="new" class="hub-btn hub-btn-primary u-bold">
         + Start New Scenario
       </button>
     </div>
@@ -320,7 +320,7 @@ function renderRow({ s, accent, costModelsById, dealsById, getId, getName, getUp
   return `
     <div class="sl-row" data-sl-id="${escapeAttr(id)}" style="display:grid;grid-template-columns:minmax(240px,2fr) 1fr 160px 120px;gap:0;padding:12px 16px;border-bottom:1px solid var(--ies-gray-100);cursor:pointer;align-items:center;">
       <div>
-        <div style="font-size:14px;font-weight:700;color:#1c1c1c;">${escapeText(name)}</div>
+        <div style="font-size:14px;font-weight:700;color:var(--ies-navy);">${escapeText(name)}</div>
         ${subtitle ? `<div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">${escapeText(subtitle)}</div>` : ''}
       </div>
       <div>${chipCell}</div>
@@ -329,7 +329,7 @@ function renderRow({ s, accent, costModelsById, dealsById, getId, getName, getUp
         ${canCopy ? `<button type="button" data-sl-row-action="copy" aria-label="Copy" title="Copy" style="opacity:0;transition:opacity .12s ease;border:1px solid var(--ies-gray-200);background:#fff;border-radius:6px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ies-gray-600);">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
         </button>` : ''}
-        ${canDelete ? `<button type="button" data-sl-row-action="delete" aria-label="Delete" title="Delete" style="opacity:0;transition:opacity .12s ease;border:1px solid var(--ies-gray-200);background:#fff;border-radius:6px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:#dc2626;">
+        ${canDelete ? `<button type="button" data-sl-row-action="delete" aria-label="Delete" title="Delete" style="opacity:0;transition:opacity .12s ease;border:1px solid var(--ies-gray-200);background:#fff;border-radius:6px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--c-danger);">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
         </button>` : ''}
       </div>
@@ -358,7 +358,7 @@ function pickCostModel(costModelsById) {
       .join('');
     backdrop.innerHTML = `
       <div style="background:#fff;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);min-width:420px;max-width:90vw;padding:22px;">
-        <div style="font-size:15px;font-weight:800;color:#1c1c1c;margin-bottom:6px;">Link to a Cost Model</div>
+        <div style="font-size:15px;font-weight:800;color:var(--ies-navy);margin-bottom:6px;">Link to a Cost Model</div>
         <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:14px;">Pick the Cost Model this scenario belongs to. This drives the Linked chip + roll-ups.</div>
         <select id="sl-pick-cm" class="hub-input" style="width:100%;font-size:13px;padding:8px 10px;">
           ${options}
@@ -388,7 +388,7 @@ function linkageBadge(parent, cmName, accent, dealName) {
     </span>`;
   }
   if (parent.dealId) {
-    return `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;font-size:11px;font-weight:700;max-width:100%;">
+    return `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:var(--c-info-soft);border:1px solid #bfdbfe;color:var(--c-info-ink);font-size:11px;font-weight:700;max-width:100%;">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
       <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Deal: ${escapeText(dealName || parent.dealId)}</span>
     </span>`;

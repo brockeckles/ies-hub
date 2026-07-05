@@ -8,11 +8,11 @@
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { downloadXLSX } from '../../shared/export.js?v=20260702-p1m1';
-import { showToast } from '../../shared/toast.js?v=20260419-uC';
-import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
+import { showToast } from '../../shared/toast.js?v=20260705-u1a';
+import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import ofpStyles from './operational-flow-styles.js?v=20260511-port4';
-import { auth } from '../../shared/auth.js?v=20260704-mfa1';
+import { auth } from '../../shared/auth.js?v=20260705-u1a';
 import * as calc from './calc.js?v=20260704-ebr1';
 import * as api from './api.js?v=20260704-cmp1';
 import * as scenarios from './calc.scenarios.js?v=20260704-ebr1';
@@ -26,8 +26,8 @@ import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
 import * as shiftPlannerUi from './shift-planner-ui.js?v=20260702-p1e';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
-import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260703-p33';
-import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260703-ls1';
+import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260705-u1a';
+import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260705-u1a';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
@@ -11443,7 +11443,7 @@ function _launchToTool(target) {
       // state. Invisible to the cache-bust guard because the './tools/...'
       // path resolves module-relative in the scanner but page-relative at
       // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260705-n7a',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260705-u1a',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {

@@ -9,12 +9,12 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260703-ls1';
+import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260705-u1a';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean, listDirty as guardListDirty } from '../../shared/unsaved-guard.js?v=20260703-p34';
-import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260601-prompt2';
-import { showToast } from '../../shared/toast.js?v=20260419-uC';
+import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
+import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260703-dc2';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260705-u1a';
 // Note: MOST intentionally opts out of run-state tracking. Its Quick Analysis
 // tab recomputes inline on every render — the primary "Run"
 // button is a convenience trigger rather than a discrete compute step, so a

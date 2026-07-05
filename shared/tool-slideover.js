@@ -86,11 +86,11 @@ export async function openToolInSlideOver(opts) {
   ].join(';');
   header.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-      <strong style="font-size:14px;color:#1c1c1c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(title || 'Design tool')}</strong>
-      ${subtitle ? `<span style="font-size:11px;color:var(--ies-gray-500, #6b7280);background:var(--ies-gray-100, #f3f4f6);padding:2px 8px;border-radius:999px;white-space:nowrap;flex-shrink:0;">${escapeHtml(subtitle)}</span>` : ''}
+      <strong style="font-size:14px;color:var(--ies-navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(title || 'Design tool')}</strong>
+      ${subtitle ? `<span style="font-size:11px;color:var(--ies-gray-500, var(--c-muted));background:var(--ies-gray-100, #f3f4f6);padding:2px 8px;border-radius:999px;white-space:nowrap;flex-shrink:0;">${escapeHtml(subtitle)}</span>` : ''}
     </div>
     <button type="button" data-slideover-close aria-label="Close"
-      style="background:none;border:none;font-size:22px;line-height:1;color:var(--ies-gray-500, #6b7280);cursor:pointer;padding:4px 10px;border-radius:6px;"
+      style="background:none;border:none;font-size:22px;line-height:1;color:var(--ies-gray-500, var(--c-muted));cursor:pointer;padding:4px 10px;border-radius:6px;"
       onmouseover="this.style.background='var(--ies-gray-100, #f3f4f6)'"
       onmouseout="this.style.background='none'">×</button>
   `;
@@ -167,7 +167,7 @@ export async function openToolInSlideOver(opts) {
     console.error('[slideover] failed to mount tool', err);
     host.innerHTML = `
       <div style="padding:24px;">
-        <div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:8px;padding:14px 16px;font-size:13px;">
+        <div style="background:var(--c-danger-soft);border:1px solid #fecaca;color:var(--c-danger-ink);border-radius:8px;padding:14px 16px;font-size:13px;">
           <strong>Could not load tool.</strong><br>
           ${escapeHtml(String(err?.message || err))}
         </div>

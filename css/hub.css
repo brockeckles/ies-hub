@@ -100,6 +100,11 @@
   --c-muted:          #6b7280;
   --c-ink-deep:       #0a1628;
   --c-purple:         #7c3aed;
+  --c-ink:            #1f2937; /* Tailwind gray-800, 16x hub-wide */
+  --c-success-soft:   #f0fdf4; /* -50 tints: soft card/row backgrounds */
+  --c-danger-soft:    #fef2f2;
+  --c-warn-soft:      #fffbeb;
+  --c-info-soft:      #eff6ff;
 
   /* Accent semantics (Brock 2026-07-05): orange = brand + primary action,
      blue = informational / links / selected-state. */

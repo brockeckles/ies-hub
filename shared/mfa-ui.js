@@ -24,7 +24,7 @@
  * @module shared/mfa-ui
  */
 
-import { auth } from './auth.js?v=20260704-mfa1';
+import { auth } from './auth.js?v=20260705-u1a';
 
 // ─── Public entry point ──────────────────────────────────────────────────
 
@@ -124,7 +124,7 @@ async function renderEnrollModal(overlay, { onPass, onLogout, grace = null }) {
            friction of "do I really need to install another random app?". -->
       <div style="background:rgba(0,71,171,0.06);border:1px solid rgba(0,71,171,0.18);border-radius:8px;padding:10px 12px;margin:0 0 14px;font-size:12px;color:var(--ies-gray-700,#374151);line-height:1.5;">
         <div style="font-weight:700;color:var(--ies-navy, #1c1c1c);margin-bottom:4px;">Recommended apps</div>
-        <div><strong>Microsoft Authenticator</strong> — most GXO employees already have it installed for Outlook / Teams MFA. <span style="color:var(--ies-gray-500,#6b7280);">No extra install needed.</span></div>
+        <div><strong>Microsoft Authenticator</strong> — most GXO employees already have it installed for Outlook / Teams MFA. <span style="color:var(--ies-gray-500,var(--c-muted));">No extra install needed.</span></div>
         <div style="margin-top:3px;"><strong>Google Authenticator</strong> · <strong>1Password</strong> · <strong>Authy</strong> — any of these also work if Microsoft Authenticator isn't on your phone.</div>
       </div>
 
@@ -135,11 +135,11 @@ async function renderEnrollModal(overlay, { onPass, onLogout, grace = null }) {
       <div class="hub-auth-error" id="mfa-error" role="alert"></div>
 
       <div id="mfa-enroll-qr" style="display:flex;justify-content:center;align-items:center;background:#fff;border-radius:12px;padding:12px;margin:8px 0 12px;min-height:180px;">
-        <span style="color:#6b7280;font-size:12px;">Generating secret…</span>
+        <span style="color:var(--c-muted);font-size:12px;">Generating secret…</span>
       </div>
 
       <details style="margin:0 0 14px;">
-        <summary style="cursor:pointer;font-size:12px;color:var(--ies-gray-500, #6b7280);">Can't scan? Show secret instead</summary>
+        <summary style="cursor:pointer;font-size:12px;color:var(--ies-gray-500, var(--c-muted));">Can't scan? Show secret instead</summary>
         <div style="margin-top:8px;font-family:ui-monospace,monospace;font-size:12px;padding:8px;background:rgba(0,0,0,.04);border-radius:6px;word-break:break-all;" id="mfa-enroll-secret"></div>
       </details>
 
@@ -217,11 +217,11 @@ async function renderEnrollModal(overlay, { onPass, onLogout, grace = null }) {
       img.style.display = 'block';
       qrHost.appendChild(img);
     } else {
-      qrHost.innerHTML = '<span style="color:#b91c1c;font-size:12px;">QR not returned</span>';
+      qrHost.innerHTML = '<span style="color:var(--c-danger-strong);font-size:12px;">QR not returned</span>';
     }
     secretHost.textContent = res.secret || '(secret unavailable)';
   } catch (err) {
-    qrHost.innerHTML = '<span style="color:#b91c1c;font-size:12px;">Could not start enrollment.</span>';
+    qrHost.innerHTML = '<span style="color:var(--c-danger-strong);font-size:12px;">Could not start enrollment.</span>';
     showError(err?.message || 'Enrollment failed. Sign out and retry.');
     return;
   }

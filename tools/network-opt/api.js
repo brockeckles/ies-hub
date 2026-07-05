@@ -6,7 +6,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
-import { auth } from '../../shared/auth.js?v=20260704-mfa1';
+import { auth } from '../../shared/auth.js?v=20260705-u1a';
 
 // ============================================================
 // NETWORK CONFIGS (saved network scenarios)

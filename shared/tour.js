@@ -5,7 +5,7 @@
  * popover; the rest of the page stays fully interactive (no modal overlay).
  *
  * Usage:
- *   import { tour } from './shared/tour.js?v=20260418-sK';
+ *   import { tour } from './shared/tour.js?v=20260705-u1a';
  *   tour.start('overview');   // start a named tour
  *   tour.next();              // advance manually (normally user clicks)
  *   tour.stop();              // end immediately
@@ -199,7 +199,7 @@ function renderPopover(step, target) {
         style="background:transparent;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.7);border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-weight:600;"
         ${idxOf === 1 ? 'disabled' : ''}>Back</button>
       <button type="button" data-tour-action="next"
-        style="background:#ff3a00;border:none;color:#fff;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;font-weight:700;">
+        style="background:var(--ies-orange);border:none;color:#fff;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;font-weight:700;">
         ${idxOf === total ? 'Done' : 'Next →'}
       </button>
     </div>
@@ -266,7 +266,7 @@ function highlightTarget(target) {
     `left:${r.left - 4}px`,
     `width:${r.width + 8}px`,
     `height:${r.height + 8}px`,
-    'border:2px solid #ff3a00',
+    'border:2px solid var(--ies-orange)',
     'border-radius:8px',
     'pointer-events:none',
     'z-index:9998',

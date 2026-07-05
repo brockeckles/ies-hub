@@ -22,7 +22,7 @@
  */
 
 import { bus } from './event-bus.js?v=20260418-sK';
-import { showConfirm } from './confirm-modal.js?v=20260601-prompt2';
+import { showConfirm } from './confirm-modal.js?v=20260705-u1a';
 
 /** @type {Set<string>} */
 const dirty = new Set();

@@ -78,24 +78,24 @@ export function render3DView(container, ctx) {
       </div>
       <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">
         <span class="text-caption text-muted" style="margin-right:4px;">View:</span>
-        <button type="button" class="hub-btn hub-btn--sm ${_wscShowWalls ? '' : 'hub-btn--ghost'}" data-3d-toggle="walls" title="Toggle facility walls. Hide them to see inside the building more clearly.">
+        <button type="button" class="hub-btn hub-btn-sm ${_wscShowWalls ? '' : 'hub-btn--ghost'}" data-3d-toggle="walls" title="Toggle facility walls. Hide them to see inside the building more clearly.">
           ${_wscShowWalls ? 'Hide Walls' : 'Show Walls'}
         </button>
-        <button type="button" class="hub-btn hub-btn--sm ${_wscShowRoof ? '' : 'hub-btn--ghost'}" data-3d-toggle="roof" title="Toggle the roof apex line. Off lets a high-angle camera see rack tops without the overhead beam in the way.">
+        <button type="button" class="hub-btn hub-btn-sm ${_wscShowRoof ? '' : 'hub-btn--ghost'}" data-3d-toggle="roof" title="Toggle the roof apex line. Off lets a high-angle camera see rack tops without the overhead beam in the way.">
           ${_wscShowRoof ? 'Hide Roof' : 'Show Roof'}
         </button>
-        <button type="button" class="hub-btn hub-btn--sm ${_wscShowHud ? '' : 'hub-btn--ghost'}" data-3d-toggle="hud" title="Toggle the achieved-vs-target HUD table that overlays the top-right of the 3D canvas. Hide for a clean view of the rendered layout.">
+        <button type="button" class="hub-btn hub-btn-sm ${_wscShowHud ? '' : 'hub-btn--ghost'}" data-3d-toggle="hud" title="Toggle the achieved-vs-target HUD table that overlays the top-right of the 3D canvas. Hide for a clean view of the rendered layout.">
           ${_wscShowHud ? 'Hide HUD' : 'Show HUD'}
         </button>
         <!-- Phase A.A5 (2026-05-26) — Camera presets. Click tweens the
              camera+target via cubic ease-out. OrbitControls take over again
              once the tween completes. -->
         <span class="text-caption text-muted" style="margin-left:8px;margin-right:2px;">Camera:</span>
-        <button type="button" class="hub-btn hub-btn--sm hub-btn--ghost" data-3d-camera="overview" title="Iso-style front-left-above view (default)">Overview</button>
-        <button type="button" class="hub-btn hub-btn--sm hub-btn--ghost" data-3d-camera="iso-right" title="Iso-style front-right-above view">Iso ↻</button>
-        <button type="button" class="hub-btn hub-btn--sm hub-btn--ghost" data-3d-camera="aisle" title="Eye-level inside the building looking down the long aisle">Aisle</button>
-        <button type="button" class="hub-btn hub-btn--sm hub-btn--ghost" data-3d-camera="dock" title="Outside the dock face looking toward the building">Dock</button>
-        <button type="button" class="hub-btn hub-btn--sm hub-btn--ghost" data-3d-camera="topdown" title="Bird's-eye plan view from straight above">Top-Down</button>
+        <button type="button" class="hub-btn hub-btn-sm hub-btn--ghost" data-3d-camera="overview" title="Iso-style front-left-above view (default)">Overview</button>
+        <button type="button" class="hub-btn hub-btn-sm hub-btn--ghost" data-3d-camera="iso-right" title="Iso-style front-right-above view">Iso ↻</button>
+        <button type="button" class="hub-btn hub-btn-sm hub-btn--ghost" data-3d-camera="aisle" title="Eye-level inside the building looking down the long aisle">Aisle</button>
+        <button type="button" class="hub-btn hub-btn-sm hub-btn--ghost" data-3d-camera="dock" title="Outside the dock face looking toward the building">Dock</button>
+        <button type="button" class="hub-btn hub-btn-sm hub-btn--ghost" data-3d-camera="topdown" title="Bird's-eye plan view from straight above">Top-Down</button>
       </div>
       <div id="wsc-3d-container" style="position:relative; width:100%; height:520px; background:#e9eef5; border-radius:6px; overflow:hidden;">
         <div id="wsc-3d-hud" class="wsc-3d-hud" aria-live="polite"></div>

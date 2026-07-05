@@ -397,8 +397,8 @@ function _stylesheet() {
         background: rgba(255,255,255,0.16);
         color: rgba(255,255,255,0.85);
       }
-      .tool-chrome-shell .tc-phase-tab__count--complete { background: var(--ies-green, #16a34a); color: #fff; }
-      .tool-chrome-shell .tc-phase-tab__count--partial  { background: #f59e0b; color: #fff; }
+      .tool-chrome-shell .tc-phase-tab__count--complete { background: var(--ies-green, var(--c-success)); color: #fff; }
+      .tool-chrome-shell .tc-phase-tab__count--partial  { background: var(--c-warn); color: #fff; }
       .tool-chrome-shell .tc-phase-tab__count--empty    { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.6); }
       .tool-chrome-shell .tc-top__row1-spacer { flex: 1 1 auto; min-width: 8px; }
       .tool-chrome-shell .tc-top__kpis {
@@ -477,8 +477,8 @@ function _stylesheet() {
         width: 7px; height: 7px; border-radius: 50%;
         flex-shrink: 0;
       }
-      .tool-chrome-shell .tc-section-pill__dot--complete { background: var(--ies-green, #16a34a); }
-      .tool-chrome-shell .tc-section-pill__dot--partial  { background: #f59e0b; }
+      .tool-chrome-shell .tc-section-pill__dot--complete { background: var(--ies-green, var(--c-success)); }
+      .tool-chrome-shell .tc-section-pill__dot--partial  { background: var(--c-warn); }
       .tool-chrome-shell .tc-section-pill__dot--empty    { background: rgba(255,255,255,0.25); }
       /* Brock 2026-04-30 NIGHT — 'na' = derived view (Summary, Cashflow & P&L,
          Scenarios, What-If, Assumptions, Linked Designs). Sidebar treats these
@@ -570,8 +570,8 @@ function _stylesheet() {
         flex-shrink: 0;
       }
       .tool-chrome-shell .tc-nav-check.complete {
-        background: var(--ies-green, #16a34a);
-        border-color: var(--ies-green, #16a34a);
+        background: var(--ies-green, var(--c-success));
+        border-color: var(--ies-green, var(--c-success));
       }
       .tool-chrome-shell .tc-sidebar__close {
         background: transparent; border: none; cursor: pointer;

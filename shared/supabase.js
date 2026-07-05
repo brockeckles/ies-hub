@@ -242,7 +242,7 @@ async function _stampOwnerIdIfNeeded(table, record) {
   // suffix MUST match every other auth.js import site — ES modules key on
   // the full URL, so a bare './auth.js' created a SECOND auth instance with
   // separate session state on every owner-stamped insert.
-  const authMod = await import('./auth.js?v=20260704-mfa1');
+  const authMod = await import('./auth.js?v=20260705-u1a');
   const u = await authMod.auth.ensureSession();
   if (!u || !u.id) {
     throw new Error(`Cannot insert into ${table}: not signed in. Please sign in and try again.`);

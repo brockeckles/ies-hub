@@ -18,7 +18,7 @@
  * Import for side effects from index.html:  import './shared/error-net.js?v=…'
  */
 
-import { showToast } from './toast.js?v=20260419-uC';
+import { showToast } from './toast.js?v=20260705-u1a';
 
 /** message → last-shown epoch ms (dedup window) */
 const _recent = new Map();

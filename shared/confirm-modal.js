@@ -1,4 +1,4 @@
-// shared/confirm-modal.js?v=20260601-prompt2 — non-blocking confirm/prompt dialogs.
+// shared/confirm-modal.js?v=20260705-u1a — non-blocking confirm/prompt dialogs.
 // Replaces native window.confirm()/window.alert() which suspend the renderer
 // (a problem for Chrome MCP automation and a minor problem for unloads).
 
@@ -13,7 +13,7 @@ export function showConfirm(message, opts = {}) {
     const overlay = document.createElement('div');
     overlay.className = 'hub-modal-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:9999;';
-    const okBg = opts.danger ? '#dc2626' : 'var(--ies-blue-600)';
+    const okBg = 'var(--c-danger)'; // only interpolated when opts.danger (U1: removed dead --ies-blue-600 branch — token was never defined)
     overlay.innerHTML = `
       <div style="background:white;border-radius: 10px;padding:24px;min-width:420px;max-width:90vw;">
         <div style="white-space:pre-line;font-size:14px;line-height:1.45;">${String(message).replace(/</g, '&lt;')}</div>
@@ -60,7 +60,7 @@ export function showPrompt(message, defaultValue = '') {
     overlay.innerHTML = `
       <div style="background:white;border-radius: 10px;padding:24px;min-width:420px;max-width:90vw;">
         <div style="white-space:pre-line;font-size:14px;line-height:1.45;margin-bottom:12px;">${String(message).replace(/</g, '&lt;')}</div>
-        <input type="text" class="hub-input" data-prompt-input style="width:100%;" />
+        <input type="text" class="hub-input" data-prompt-input class="u-full" />
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
           <button type="button" class="hub-btn" data-ans="cancel">Cancel</button>
           <button type="button" class="hub-btn hub-btn-primary" data-ans="ok">OK</button>
