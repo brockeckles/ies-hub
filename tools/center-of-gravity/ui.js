@@ -9,7 +9,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260705-u1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
-import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260705-u1a';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260705-r1';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260702-p1m1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
@@ -43,9 +43,9 @@ function _cogQuickChrome() {
     || (activePhase === 'run' && tierSvc.getTier('cog') === 'quick');
 }
 const COG_SECTIONS = [
-  { key: 'numbers',     label: '\u{1F4CA} Numbers',     group: 'run' },
-  { key: 'map',         label: '\u{1F5FA} Map',         group: 'run' },
-  { key: 'sensitivity', label: '\u{1F4C8} Sensitivity', group: 'run' },
+  { key: 'numbers',     label: 'Numbers',     iconName: 'chart', group: 'run' },
+  { key: 'map',         label: 'Map',         iconName: 'map',   group: 'run' },
+  { key: 'sensitivity', label: 'Sensitivity', iconName: 'chart', group: 'run' },
   { key: 'compare',     label: '\u{2696}\u{FE0F} Compare',     group: 'run' },
 ];
 
@@ -791,7 +791,8 @@ function _buildCogChromeOpts() {
       title: _quick ? 'Switch to Engineering mode — all phases & knobs'
                     : 'Switch to Quick mode — 5-question Setup (everything else keeps its current value)' },
     { id: 'cog-save',
-      label: activeScenarioId ? '\u{1F4BE} Save' : '\u{1F4BE} Save Scenario',
+      label: activeScenarioId ? 'Save' : 'Save Scenario',
+      iconName: 'save',
       title: activeScenarioId ? 'Update this scenario' : 'Save this scenario to open it again later',
       primary: modified },
     { id: 'cog-run',

@@ -10,7 +10,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260705-u1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
-import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260705-u1a';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260705-r1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260702-p1m1';
@@ -45,13 +45,13 @@ const NO_GROUPS = [
   { key: 'compare',    label: 'Compare',    description: 'k-sweep & sensitivity' },
 ];
 const NO_SECTIONS = [
-  { key: 'demand',     label: '\u{1F4CD} Demand',       group: 'inputs' },
-  { key: 'facilities', label: '\u{1F3ED} Facilities',   group: 'inputs' },
-  { key: 'modemix',    label: '\u{1F69B} Mode Mix',     group: 'parameters' },
-  { key: 'rates',      label: '\u{1F4B2} Rate Card',    group: 'parameters' },
+  { key: 'demand',     label: 'Demand',       iconName: 'pin',       group: 'inputs' },
+  { key: 'facilities', label: 'Facilities',   iconName: 'warehouse', group: 'inputs' },
+  { key: 'modemix',    label: 'Mode Mix',     iconName: 'truck',     group: 'parameters' },
+  { key: 'rates',      label: 'Rate Card',    iconName: 'dollar',    group: 'parameters' },
   { key: 'service',    label: '⏱ Service',         group: 'parameters' },
-  { key: 'results',    label: '\u{1F4C8} Numbers',      group: 'run', viewKey: 'results' },
-  { key: 'map',        label: '\u{1F5FA} Map',          group: 'run', viewKey: 'map' },
+  { key: 'results',    label: 'Numbers',      iconName: 'chart',     group: 'run', viewKey: 'results' },
+  { key: 'map',        label: 'Map',          iconName: 'map',       group: 'run', viewKey: 'map' },
 ];
 let _noSidebarOpen = false;
 let _noKpiRefreshTimer = null;
@@ -601,10 +601,11 @@ function _buildChromeOpts() {
   const isCompare = activePhase === 'compare';
 
   const actions = [
-    { id: 'export-csv', label: '\u{1F4E5} Export', title: 'Export scenarios to XLSX' },
-    isCompare ? { id: 'clear-scenarios', label: '\u{1F5D1} Clear', title: 'Clear all run scenarios' } : null,
+    { id: 'export-csv', label: 'Export', iconName: 'download', title: 'Export scenarios to XLSX' },
+    isCompare ? { id: 'clear-scenarios', label: 'Clear', iconName: 'trash', title: 'Clear all run scenarios' } : null,
     { id: 'netopt-save',
-      label: activeConfigId ? '\u{1F4BE} Save' : '\u{1F4BE} Save Scenario',
+      label: activeConfigId ? 'Save' : 'Save Scenario',
+      iconName: 'save',
       title: activeConfigId ? 'Update this scenario' : 'Save this scenario so you can reopen it later',
       primary: modified },
     { id: 'netopt-run',

@@ -17,6 +17,8 @@
  * @module shared/tool-chrome
  */
 
+import { icon as _svgIcon } from './icons.js?v=20260705-r1';
+
 function _h(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -65,6 +67,7 @@ function _sectionPillsHtml(opts) {
     const isActive = sec.key === activeSection;
     return '<button class="tc-section-pill' + (isActive ? ' tc-section-pill--active' : '') + '" data-tc-section="' + _a(sec.key) + '">' +
       '<span class="tc-section-pill__dot tc-section-pill__dot--' + c + '"></span>' +
+      (sec.iconName ? _svgIcon(sec.iconName) + ' ' : '') +
       '<span class="tc-section-pill__label">' + _h(sec.label) + '</span>' +
       '</button>';
   }).join('');
@@ -85,7 +88,7 @@ function _actionButtonHtml(a) {
   if (a.kind === 'primary' || a.runState) {
     const isClean = a.runState === 'clean';
     const label = isClean ? (a.cleanLabel || '✓ Results current') : a.label;
-    const icon = isClean ? '' : (a.icon ? '<span class="hub-run-icon">' + _h(a.icon) + '</span>' : '');
+    const icon = isClean ? '' : (a.iconName ? '<span class="hub-run-icon">' + _svgIcon(a.iconName) + '</span>' : (a.icon ? '<span class="hub-run-icon">' + _h(a.icon) + '</span>' : ''));
     const title = isClean ? (a.cleanTitle || 'Inputs unchanged since last run. Click to force a re-run.') : (a.title || '');
     return '<button class="hub-btn hub-run-btn ' + (isClean ? 'is-clean' : '') + '" data-tc-action="' + _a(a.id) + '" data-tc-primary data-run-state="' + (a.runState || 'dirty') + '" title="' + _a(title) + '">' +
       icon +
@@ -95,7 +98,7 @@ function _actionButtonHtml(a) {
   }
   const cls = a.primary ? 'hub-btn hub-btn-primary hub-btn-sm' : 'hub-btn hub-btn-secondary hub-btn-sm';
   return '<button class="' + cls + '" data-tc-action="' + _a(a.id) + '" title="' + _a(a.title || '') + '">' +
-    (a.icon ? _h(a.icon) + ' ' : '') + _h(a.label) +
+    (a.iconName ? _svgIcon(a.iconName) + ' ' : (a.icon ? _h(a.icon) + ' ' : '')) + _h(a.label) +
     '</button>';
 }
 

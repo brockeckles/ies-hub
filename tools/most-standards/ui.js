@@ -9,7 +9,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260705-u1a';
+import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260705-r1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean, listDirty as guardListDirty } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
@@ -794,7 +794,8 @@ function _buildMostChromeOpts() {
   if (activeTab === 'editor' && editorTemplate) {
     actions.push({
       id: 'most-save-template',
-      label: '\u{1F4BE} Save Template',
+      label: 'Save Template',
+      iconName: 'save',
       title: 'Save this template back to the library',
       primary: true,
     });
@@ -802,7 +803,8 @@ function _buildMostChromeOpts() {
   if (activeTab === 'analysis') {
     actions.push({
       id: 'most-save-scenario',
-      label: '\u{1F4BE} Save',
+      label: 'Save',
+      iconName: 'save',
       title: 'Save this analysis scenario',
     });
     actions.push({

@@ -9,7 +9,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260705-u1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
-import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260705-u1a';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260705-r1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260702-p1m1';
@@ -28,14 +28,14 @@ const FLEET_GROUPS = [
 ];
 const FLEET_SECTIONS = [
   // parameters
-  { key: 'vehicles',    label: '\u{1F69B} Vehicles',          group: 'parameters' },
-  { key: 'operating',   label: '\u{1F4B0} Operating Costs',   group: 'parameters' },
-  { key: 'ratedeck',    label: '\u{1F4CB} Rate Deck',         group: 'parameters' },
+  { key: 'vehicles',    label: 'Vehicles',          iconName: 'truck',     group: 'parameters' },
+  { key: 'operating',   label: 'Operating Costs',   iconName: 'dollar',    group: 'parameters' },
+  { key: 'ratedeck',    label: 'Rate Deck',         iconName: 'clipboard', group: 'parameters' },
   // run
-  { key: 'cost',        label: '\u{1F4B5} Cost',              group: 'run' },
+  { key: 'cost',        label: 'Cost',              iconName: 'dollar',    group: 'run' },
   { key: 'comparison',  label: '⚖ Comparison',             group: 'run' },
-  { key: 'sensitivity', label: '\u{1F4C8} Sensitivity',       group: 'run' },
-  { key: 'map',         label: '\u{1F5FA} Route Map',         group: 'run' },
+  { key: 'sensitivity', label: 'Sensitivity',       iconName: 'chart',     group: 'run' },
+  { key: 'map',         label: 'Route Map',         iconName: 'map',       group: 'run' },
   { key: 'feasibility', label: '⏱ Feasibility',            group: 'run' },
 ];
 
@@ -313,7 +313,8 @@ function _buildFleetChromeOpts() {
 
   const actions = [
     { id: 'fleet-save',
-      label: activeScenarioId ? '\u{1F4BE} Save' : '\u{1F4BE} Save Scenario',
+      label: activeScenarioId ? 'Save' : 'Save Scenario',
+      iconName: 'save',
       title: activeScenarioId ? 'Update this scenario' : 'Save this scenario to open it again later',
       primary: modified },
     { id: 'fleet-run',
