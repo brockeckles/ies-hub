@@ -178,10 +178,10 @@ export function runComplianceChecks({ facility = {}, zones = {}, dynamicsPlan = 
   const governing = dynamicsPlan?.mhe?.governingAisleFt || null;
   const aisleFt = Number(facility.aisleWidth) > 0 ? Number(facility.aisleWidth) : null;
   if (governing && aisleFt) {
-    checks.push(_check('aisle', 'Storage aisle vs MHE requirement', `≥ ${governing} ft (${dynamicsPlan.mhe.fleet.find(f => f.aisleFt === governing)?.label || 'governing truck'})`,
+    checks.push(_check('aisle', 'Storage aisle vs MHE assumption', `≥ ${governing} ft (${dynamicsPlan.mhe.fleet.find(f => f.aisleFt === governing)?.label || 'governing truck'})`,
       `${aisleFt} ft`, aisleFt >= governing, 'wsc.aisle.widths_by_mhe_ft (catalog)'));
   } else {
-    checks.push(_check('aisle', 'Storage aisle vs MHE requirement', 'run Dynamics (N4)', aisleFt ? `${aisleFt} ft` : 'default',
+    checks.push(_check('aisle', 'Storage aisle vs MHE assumption', 'run Dynamics (N4)', aisleFt ? `${aisleFt} ft` : 'default',
       null, 'wsc.aisle.widths_by_mhe_ft (catalog)', 'Apply a dynamics plan to derive the governing aisle.'));
   }
 

@@ -3,7 +3,9 @@
  *
  * Docks, staging, and aisles become THROUGHPUT-DERIVED conclusions:
  *
- *   MHE fleet   ← media plan (N3) + clear height   → aisle widths
+ *   MHE         ← ASSUMPTION (default from media plan, analyst-overridable)
+ *                 → aisle widths. NOT equipment selection: MHE is selected in
+ *                 the MOST / direct-labor template work (Brock, 2026-07-05).
  *   Dock doors  ← peak-day pallet flow ÷ (door rate × arrival window) × safety
  *                 cross-checked against the legacy dwell-based method
  *                 (calc.js computeDockRequirement) — divergence is flagged,
@@ -44,27 +46,31 @@ function _factor(pinned, code, fallback) {
 }
 
 // ============================================================
-// MHE SELECTION — media families + clear height → fleet + aisles
+// MHE ASSUMPTION — aisle-width driver only, NOT equipment selection
 // ============================================================
 
 /**
- * N4 MHE-selection logic (v1, documented for Brock's review):
- *   - Reach truck = default storage truck (selective / push-back / flow /
- *     drive-in lane entry). Aisle = reach band.
- *   - Double-deep in plan → double-deep reach (pantograph), its wider band
- *     governs those aisles.
- *   - Counterbalance always present for trailer/dock work (never governs
- *     storage aisles).
- *   - Shelving band in plan → order picker at 4–5 ft pick aisles.
- *   - VNA/turret = ADVISORY ONLY when clear ≥ 35 ft and selective-family
- *     positions ≥ 50% of the portfolio (density upside up to +50%, but
- *     requires F-min defined-traffic floor — an engineering commitment,
- *     not a default).
+ * MHE assumption (ownership boundary — Brock, 2026-07-05): MHE selection is
+ * finalized in the MOST / direct-labor template development work. WSC only
+ * needs an MHE *assumption* to derive storage aisle widths for sizing.
  *
- * @param {Object} args — { mediaPlan, clearHeightFt, pinnedFactors }
- * @returns {{ fleet: Object[], governingAisleFt: number, vnaAdvisory: string|null, citations: string[] }}
+ * Defaults are planning assumptions seeded from the media plan:
+ *   - Reach truck = default assumed storage truck (selective / push-back /
+ *     flow / drive-in lane entry). Aisle = reach band.
+ *   - Double-deep in plan → double-deep reach assumed; wider band governs.
+ *   - Counterbalance assumed for trailer/dock work (never governs storage).
+ *   - Shelving band in plan → order picker assumed at 4–5 ft pick aisles.
+ *   - VNA density note = informational only (clear ≥ 35 ft + ≥ 50%
+ *     selective-class positions → up to +50% density, F-min floor required).
+ *
+ * `storageTypeOverride` lets the analyst assert the storage truck type
+ * ('reach' | 'double_deep_reach' | 'vna' | 'counterbalance'); the override
+ * governs the aisle and is provenance-flagged as asserted.
+ *
+ * @param {Object} args — { mediaPlan, clearHeightFt, pinnedFactors, storageTypeOverride }
+ * @returns {{ fleet: Object[], governingAisleFt: number, source: 'default'|'asserted', vnaAdvisory: string|null, citations: string[] }}
  */
-export function selectMhe({ mediaPlan, clearHeightFt = 32, pinnedFactors = null } = {}) {
+export function resolveMheAssumption({ mediaPlan, clearHeightFt = 32, pinnedFactors = null, storageTypeOverride = null } = {}) {
   const aisles = _factor(pinnedFactors, 'wsc.aisle.widths_by_mhe_ft', DEFAULTS.aisles);
   const families = new Set((mediaPlan?.bands || []).map(b => b.family));
   const hasShelving = !!mediaPlan?.shelving;
@@ -75,21 +81,38 @@ export function selectMhe({ mediaPlan, clearHeightFt = 32, pinnedFactors = null 
   const cbAisle = _mid(aisles.counterbalance) ?? 12.5;
   const opAisle = _mid(aisles.order_picker) ?? 4.5;
 
+  const ASSUMPTION_NOTE = 'aisle-width assumption; MHE selection is finalized in MOST / direct-labor template development';
+  const OVERRIDES = {
+    reach: { label: 'Reach truck', aisleFt: reachAisle },
+    double_deep_reach: { label: 'Double-deep reach', aisleFt: ddAisle },
+    counterbalance: { label: 'Counterbalance', aisleFt: cbAisle },
+    vna: { label: 'VNA / turret', aisleFt: Math.round((aisles.vna_turret_clear_in / 12) * 10) / 10 },
+  };
+  const ov = storageTypeOverride && OVERRIDES[storageTypeOverride] ? storageTypeOverride : null;
+
   const storageFamilies = [...families].filter(f => f !== 'double_deep');
-  if (storageFamilies.length > 0 || families.size === 0) {
+  if (ov) {
     fleet.push({
-      type: 'reach', label: 'Reach truck', role: 'storage put-away / retrieval',
-      servesFamilies: storageFamilies.length ? storageFamilies : ['selective'],
-      aisleFt: reachAisle,
-      rationale: `Default storage truck for ${storageFamilies.join(', ') || 'selective'} — ${aisles.reach.min}–${aisles.reach.max} ft aisles (planned at ${reachAisle} ft midpoint)`,
+      type: ov, label: OVERRIDES[ov].label, role: 'storage put-away / retrieval (asserted)',
+      servesFamilies: [...families], aisleFt: OVERRIDES[ov].aisleFt,
+      rationale: `Analyst-asserted storage MHE — planned at ${OVERRIDES[ov].aisleFt} ft (${ASSUMPTION_NOTE})`,
     });
-  }
-  if (families.has('double_deep')) {
-    fleet.push({
-      type: 'double_deep_reach', label: 'Double-deep reach', role: 'double-deep lanes',
-      servesFamilies: ['double_deep'], aisleFt: ddAisle,
-      rationale: `Pantograph reach for 2-deep lanes — ${aisles.double_deep_reach.min}–${aisles.double_deep_reach.max} ft aisles (planned ${ddAisle} ft)`,
-    });
+  } else {
+    if (storageFamilies.length > 0 || families.size === 0) {
+      fleet.push({
+        type: 'reach', label: 'Reach truck', role: 'storage put-away / retrieval',
+        servesFamilies: storageFamilies.length ? storageFamilies : ['selective'],
+        aisleFt: reachAisle,
+        rationale: `Assumed storage truck for ${storageFamilies.join(', ') || 'selective'} — ${aisles.reach.min}–${aisles.reach.max} ft aisles (planned at ${reachAisle} ft midpoint; ${ASSUMPTION_NOTE})`,
+      });
+    }
+    if (families.has('double_deep')) {
+      fleet.push({
+        type: 'double_deep_reach', label: 'Double-deep reach', role: 'double-deep lanes',
+        servesFamilies: ['double_deep'], aisleFt: ddAisle,
+        rationale: `Assumed pantograph reach for 2-deep lanes — ${aisles.double_deep_reach.min}–${aisles.double_deep_reach.max} ft aisles (planned ${ddAisle} ft; ${ASSUMPTION_NOTE})`,
+      });
+    }
   }
   fleet.push({
     type: 'counterbalance', label: 'Counterbalance (dock)', role: 'trailer load/unload + yard',
@@ -104,17 +127,19 @@ export function selectMhe({ mediaPlan, clearHeightFt = 32, pinnedFactors = null 
     });
   }
 
-  // Storage aisle that governs the layout = widest truck that works storage.
+  // Storage aisle that governs the layout = the asserted type, else the
+  // widest assumed truck that works storage.
   const storageTrucks = fleet.filter(f => f.type !== 'counterbalance' && f.type !== 'order_picker');
-  const governingAisleFt = storageTrucks.length ? Math.max(...storageTrucks.map(f => f.aisleFt)) : reachAisle;
+  const governingAisleFt = ov ? OVERRIDES[ov].aisleFt
+    : (storageTrucks.length ? Math.max(...storageTrucks.map(f => f.aisleFt)) : reachAisle);
 
-  // VNA advisory
+  // VNA density note (informational; moot when VNA already asserted)
   let vnaAdvisory = null;
   const bands = mediaPlan?.bands || [];
   const totalPos = bands.reduce((s, b) => s + b.positions, 0);
   const selectivePos = bands.filter(b => b.family === 'selective' || b.family === 'double_deep')
     .reduce((s, b) => s + b.positions, 0);
-  if (clearHeightFt >= 35 && totalPos > 0 && selectivePos / totalPos >= 0.5) {
+  if (ov !== 'vna' && clearHeightFt >= 35 && totalPos > 0 && selectivePos / totalPos >= 0.5) {
     const gain = _factor(pinnedFactors, 'wsc.aisle.narrow_aisle_storage_gain_pct', { vna_max: 50 });
     vnaAdvisory = `Clear height ${clearHeightFt} ft with ${Math.round((selectivePos / totalPos) * 100)}% selective-class positions — ` +
       `VNA/turret at ${aisles.vna_turret_clear_in}" aisles could add up to ${gain.vna_max}% storage density. ` +
@@ -122,7 +147,7 @@ export function selectMhe({ mediaPlan, clearHeightFt = 32, pinnedFactors = null 
   }
 
   return {
-    fleet, governingAisleFt, vnaAdvisory,
+    fleet, governingAisleFt, source: ov ? 'asserted' : 'default', vnaAdvisory,
     citations: ['wsc.aisle.widths_by_mhe_ft'].concat(vnaAdvisory ? ['wsc.aisle.narrow_aisle_storage_gain_pct'] : []),
   };
 }
@@ -237,16 +262,19 @@ export function computeDynamics({ profile = null, mediaPlan = null, volumes = {}
   if (dwellIn >= 2) gaps.push({ code: 'DWELL_DOMINANT', severity: 'warn',
     message: `Inbound dwell of ${dwellIn} days multiplies staging ${Math.round(dwellIn / 0.5)}× vs same-shift clearance — validate dwell with ops before defending ${stagingIn.sqft.toLocaleString()} sqft.` });
 
-  // ── MHE ──
-  const mhe = selectMhe({ mediaPlan, clearHeightFt: Number(facility.clearHeight) || 32, pinnedFactors });
+  // ── MHE (assumption — see resolveMheAssumption ownership note) ──
+  const mhe = resolveMheAssumption({ mediaPlan, clearHeightFt: Number(facility.clearHeight) || 32,
+    pinnedFactors, storageTypeOverride: policy.mheStorageType || null });
+  gaps.push({ code: 'MHE_ASSUMPTION', severity: 'info',
+    message: 'MHE shown is an aisle-width planning assumption only — equipment selection is finalized in MOST / direct-labor template development.' });
   if (!mediaPlan) gaps.push({ code: 'NO_MEDIA_PLAN', severity: 'info',
-    message: 'No media plan yet — MHE defaulted to reach + counterbalance; run Media Selection first for a defendable fleet.' });
+    message: 'No media plan yet — MHE assumption defaulted to reach + counterbalance; run Media Selection to seed it from the media plan.' });
 
   return {
     engine: 'wsc-dynamics-v1',
     createdAt: new Date().toISOString().slice(0, 10),
     provenance: flowProvenance === 'asserted' && !usedFallback ? 'derived' : 'estimated',
-    policy: { arrivalWindowHrs, dwellDaysIn: dwellIn, dwellDaysOut: dwellOut },
+    policy: { arrivalWindowHrs, dwellDaysIn: dwellIn, dwellDaysOut: dwellOut, mheStorageType: policy.mheStorageType || null },
     flow: { inPerDay: Math.round(inPerDay), outPerDay: Math.round(outPerDay), peakFactor: peak,
             peakIn: Math.round(peakIn), peakOut: Math.round(peakOut), provenance: flowProvenance },
     docks: {

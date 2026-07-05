@@ -86,6 +86,11 @@ export function buildDesignBasisModel({ facility = {}, zones = {}, volumes = {},
   if (dynamicsPlan) {
     register.push({ item: 'Dynamics · arrival window', value: `${dynamicsPlan.policy.arrivalWindowHrs} hr`, basis: 'Asserted by analyst' });
     register.push({ item: 'Dynamics · dwell (in / out)', value: `${dynamicsPlan.policy.dwellDaysIn} / ${dynamicsPlan.policy.dwellDaysOut} days`, basis: 'Asserted by analyst' });
+    if (dynamicsPlan.mhe?.fleet?.length) {
+      const st = dynamicsPlan.mhe.fleet.find(f => (f.role || '').startsWith('storage'));
+      register.push({ item: 'Dynamics · storage MHE (aisle basis)', value: `${st?.label || 'Reach truck'} → ${dynamicsPlan.mhe.governingAisleFt} ft aisles`,
+        basis: dynamicsPlan.mhe.source === 'asserted' ? 'Asserted by analyst (selection finalized in MOST)' : 'Estimated (default; selection finalized in MOST)' });
+    }
   }
   if (layoutPlan) register.push({ item: 'Compliance · flue standard', value: layoutPlan.flueStandard, basis: 'Project decision (insurer governs)' });
   register.push(pinnedFactors?.pinnedAt
@@ -149,6 +154,7 @@ export function buildDesignBasisModel({ facility = {}, zones = {}, volumes = {},
     id: 'equipment', title: '8. Equipment (MHE & Storage)',
     fleet: dynamicsPlan?.mhe?.fleet?.map(f => ({ label: f.label, role: f.role, aisleFt: f.aisleFt, rationale: f.rationale })) || null,
     vnaAdvisory: dynamicsPlan?.mhe?.vnaAdvisory || null,
+    mheNote: dynamicsPlan?.mhe ? `MHE fleet shown is an aisle-width planning assumption (${dynamicsPlan.mhe.source === 'asserted' ? 'analyst-asserted' : 'default from media plan'}) — equipment selection is finalized in the MOST / direct-labor template development.` : null,
     rackCost: mediaPlan?.totals ? `Rack investment (equipment only): $${fmt(mediaPlan.totals.costBand.min / 1000)}K – $${fmt(mediaPlan.totals.costBand.max / 1000)}K for ${fmt(mediaPlan.totals.positions)} positions` : null,
   });
 
@@ -189,7 +195,7 @@ export function buildDesignBasisModel({ facility = {}, zones = {}, volumes = {},
     recon.push({ item: 'Staging sqft', required: reqStage, provided: provStage, status: provStage >= reqStage ? 'OK' : 'SHORT', basis: 'dwell model vs configured' });
     if (dynamicsPlan.mhe?.governingAisleFt && Number(facility.aisleWidth) > 0) {
       recon.push({ item: 'Storage aisle (ft)', required: dynamicsPlan.mhe.governingAisleFt, provided: Number(facility.aisleWidth),
-        status: Number(facility.aisleWidth) >= dynamicsPlan.mhe.governingAisleFt ? 'OK' : 'SHORT', basis: 'MHE requirement vs configured' });
+        status: Number(facility.aisleWidth) >= dynamicsPlan.mhe.governingAisleFt ? 'OK' : 'SHORT', basis: 'MHE aisle assumption vs configured' });
     }
   }
   if (sized?.requirementsDriven?.totalSfRequired > 0 && Number(facility.totalSqft) > 0) {
@@ -249,6 +255,7 @@ export function renderDesignBasisHtml(model) {
       body = (s.fleet ? `<table class="grid"><tr><th>Unit</th><th>Role</th><th>Aisle</th></tr>${s.fleet.map(f =>
         `<tr><td>${esc(f.label)}</td><td>${esc(f.role)}</td><td>${f.aisleFt} ft</td></tr>
          <tr class="rationale"><td colspan="3">↳ ${esc(f.rationale)}</td></tr>`).join('')}</table>` : '<p class="note">No dynamics plan — fleet not derived.</p>')
+        + (s.mheNote ? `<p class="note">${esc(s.mheNote)}</p>` : '')
         + (s.vnaAdvisory ? `<p class="note">◆ ${esc(s.vnaAdvisory)}</p>` : '')
         + (s.rackCost ? `<p class="note">${esc(s.rackCost)}</p>` : '');
     }

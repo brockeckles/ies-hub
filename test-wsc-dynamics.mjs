@@ -1,7 +1,8 @@
-// test-wsc-dynamics.mjs — N4 dynamics engine coverage (2026-07-04).
-// Pins MHE selection, rate-method dock math, dwell-driven staging,
+// test-wsc-dynamics.mjs — N4 dynamics engine coverage (2026-07-04; MHE demoted
+// to assumption 2026-07-05 — selection is MOST-owned, WSC only derives aisles).
+// Pins MHE assumption, rate-method dock math, dwell-driven staging,
 // cross-check divergence flag, and orchestrator derivation/gap behavior.
-import { selectMhe, computeDoorsRateMethod, computeStagingSf, computeDynamics }
+import { resolveMheAssumption, computeDoorsRateMethod, computeStagingSf, computeDynamics }
   from './tools/warehouse-sizing/dynamics-calc.js';
 import { pinWscFactors } from './tools/warehouse-sizing/factors-calc.js';
 
@@ -21,9 +22,9 @@ const mediaPlan = {
   shelving: { skuCount: 20, pallets: 30 },
 };
 
-// ── selectMhe ──
+// ── resolveMheAssumption ──
 {
-  const m = selectMhe({ mediaPlan, clearHeightFt: 32 });
+  const m = resolveMheAssumption({ mediaPlan, clearHeightFt: 32 });
   const types = m.fleet.map(f => f.type);
   t('reach for selective/flow', types.includes('reach'));
   t('double-deep reach present', types.includes('double_deep_reach'));
@@ -33,16 +34,31 @@ const mediaPlan = {
   t('CB does not govern storage aisle', m.governingAisleFt < 12);
   t('no VNA advisory at 32 ft', m.vnaAdvisory === null);
 
-  const hi = selectMhe({ mediaPlan, clearHeightFt: 36 });
+  const hi = resolveMheAssumption({ mediaPlan, clearHeightFt: 36 });
   t('VNA advisory at 36 ft + 70% selective-class', typeof hi.vnaAdvisory === 'string' && hi.vnaAdvisory.includes('F-min'));
 
-  const deepOnly = selectMhe({ mediaPlan: { bands: [{ family: 'drive_in', positions: 900 }], shelving: null }, clearHeightFt: 36 });
+  const deepOnly = resolveMheAssumption({ mediaPlan: { bands: [{ family: 'drive_in', positions: 900 }], shelving: null }, clearHeightFt: 36 });
   t('no VNA advisory when deep-lane dominates', deepOnly.vnaAdvisory === null);
   t('deep-only: no order picker', !deepOnly.fleet.some(f => f.type === 'order_picker'));
   t('deep-only: governing = reach 9', close(deepOnly.governingAisleFt, 9));
 
-  const none = selectMhe({ mediaPlan: null });
+  const none = resolveMheAssumption({ mediaPlan: null });
   t('null plan: reach + CB fallback', none.fleet.some(f => f.type === 'reach') && none.fleet.some(f => f.type === 'counterbalance'));
+  t('default source flag', none.source === 'default');
+
+  // analyst-asserted storage type governs the aisle
+  const ovVna = resolveMheAssumption({ mediaPlan, clearHeightFt: 36, storageTypeOverride: 'vna' });
+  t('vna override: source asserted', ovVna.source === 'asserted');
+  t('vna override: 66in → 5.5 ft governs', close(ovVna.governingAisleFt, 5.5));
+  t('vna override: advisory suppressed', ovVna.vnaAdvisory === null);
+  t('vna override: single asserted storage row', ovVna.fleet.filter(f => (f.role || '').startsWith('storage')).length === 1);
+  t('vna override: CB dock row still present', ovVna.fleet.some(f => f.type === 'counterbalance' && !(f.role || '').startsWith('storage')));
+
+  const ovReach = resolveMheAssumption({ mediaPlan, storageTypeOverride: 'reach' });
+  t('reach override beats DD default (9 not 9.5)', close(ovReach.governingAisleFt, 9));
+
+  const ovBad = resolveMheAssumption({ mediaPlan, storageTypeOverride: 'hoverboard' });
+  t('unknown override ignored → default', ovBad.source === 'default' && close(ovBad.governingAisleFt, 9.5));
 }
 
 // ── rate-method doors ──
@@ -98,6 +114,18 @@ const mediaPlan = {
     && plan.citations.includes('wsc.staging.min_sqft_per_door'));
   t('INBOUND_BALANCED not flagged (both asserted)', !plan.gaps.some(g => g.code === 'INBOUND_BALANCED'));
   t('FACTORS_UNPINNED flagged (none passed)', plan.gaps.some(g => g.code === 'FACTORS_UNPINNED'));
+  t('MHE_ASSUMPTION gap always flagged', plan.gaps.some(g => g.code === 'MHE_ASSUMPTION' && g.severity === 'info'));
+  t('policy echoes null mheStorageType', plan.policy.mheStorageType === null);
+
+  // policy override threads through orchestrator
+  const ovPlan = computeDynamics({
+    mediaPlan,
+    volumes: { avgDailyInbound: 400, avgDailyOutbound: 500, peakMultiplier: 1.4, daysOnHand: 30 },
+    facility: { clearHeight: 32, totalSqft: 150000 },
+    policy: { arrivalWindowHrs: 8, dwellDaysIn: 1, dwellDaysOut: 0.5, mheStorageType: 'vna' },
+  });
+  t('orchestrator override: asserted + 5.5 ft', ovPlan.mhe.source === 'asserted' && close(ovPlan.mhe.governingAisleFt, 5.5));
+  t('orchestrator override: policy echoed', ovPlan.policy.mheStorageType === 'vna');
 }
 
 // ── orchestrator: derived flows + dwell warning ──

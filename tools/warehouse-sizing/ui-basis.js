@@ -22,9 +22,9 @@ import {
 } from './profile-calc.js?v=20260704-n1a';
 import { wscFactorsDrift } from './factors-calc.js?v=20260704-n2a';
 import { selectMedia } from './media-calc.js?v=20260704-n3a';
-import { computeDynamics } from './dynamics-calc.js?v=20260704-n4a';
-import { synthesizeLayout } from './layout-calc.js?v=20260704-n5a';
-import { buildDesignBasisModel, renderDesignBasisHtml } from './basis-doc.js?v=20260704-n6a';
+import { computeDynamics } from './dynamics-calc.js?v=20260705-mhe1';
+import { synthesizeLayout } from './layout-calc.js?v=20260705-mhe1';
+import { buildDesignBasisModel, renderDesignBasisHtml } from './basis-doc.js?v=20260705-mhe1';
 
 // ── Module state (session-scoped; raw rows never persisted) ──
 /** Parsed datasets awaiting/backing the profile. */
@@ -38,7 +38,7 @@ let _liveFactors = null;
 /** N3 — rotation policy for the media plan preview (persisted on Apply). */
 let _rotationPolicy = 'none';
 /** N4 — dynamics policy inputs (persisted on Apply). */
-let _dynPolicy = { arrivalWindowHrs: 8, dwellDaysIn: 1, dwellDaysOut: 0.5 };
+let _dynPolicy = { arrivalWindowHrs: 8, dwellDaysIn: 1, dwellDaysOut: 0.5, mheStorageType: null };
 /** N5 — flue standard toggle (null = catalog default, currently FM). */
 let _flueStd = null;
 
@@ -569,6 +569,16 @@ function _renderDynamicsCard(profile, ctx) {
           ${polInput('wsc-dyn-window', 'Arrival window (hr)', _dynPolicy.arrivalWindowHrs, 1)}
           ${polInput('wsc-dyn-dwell-in', 'Dwell in (days)', _dynPolicy.dwellDaysIn, 0.5)}
           ${polInput('wsc-dyn-dwell-out', 'Dwell out (days)', _dynPolicy.dwellDaysOut, 0.5)}
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ies-gray-500);"
+                 title="Aisle-width assumption only — MHE selection is finalized in MOST / direct-labor template development.">Storage MHE
+            <select id="wsc-dyn-mhe" style="padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:5px;font-size:11px;">
+              <option value="">Default (from media)</option>
+              <option value="reach"${_dynPolicy.mheStorageType === 'reach' ? ' selected' : ''}>Reach truck</option>
+              <option value="double_deep_reach"${_dynPolicy.mheStorageType === 'double_deep_reach' ? ' selected' : ''}>Double-deep reach</option>
+              <option value="vna"${_dynPolicy.mheStorageType === 'vna' ? ' selected' : ''}>VNA / turret</option>
+              <option value="counterbalance"${_dynPolicy.mheStorageType === 'counterbalance' ? ' selected' : ''}>Counterbalance</option>
+            </select>
+          </label>
           <button class="hub-btn hub-btn-sm hub-btn-primary" id="wsc-dyn-apply"
                   title="Persist this plan and write dock doors, staging SF, and the governing storage aisle into the design.">
             ${isApplied ? 'Re-apply to design' : 'Apply to design'}</button>
@@ -593,13 +603,14 @@ function _renderDynamicsCard(profile, ctx) {
           </div>
         </div>
         <div>
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:4px;">MHE fleet → aisles</div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:4px;">MHE assumption → aisles${plan.mhe.source === 'asserted' ? ' <span style="color:#b45309;">(asserted)</span>' : ''}</div>
           ${plan.mhe.fleet.map(f => `
             <div style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:3px 0;border-top:1px solid var(--ies-gray-100);" title="${esc(f.rationale)}">
               <span>${esc(f.label)} <span style="color:var(--ies-gray-500);">· ${esc(f.role)}</span></span>
               <span style="font-weight:600;white-space:nowrap;">${f.aisleFt} ft</span>
             </div>`).join('')}
           <div style="font-size:11px;margin-top:4px;">Governing storage aisle: <b>${plan.mhe.governingAisleFt} ft</b></div>
+          <div style="font-size:10px;color:var(--ies-gray-500);margin-top:3px;">Assumption for aisle sizing only — MHE selection is finalized in MOST / direct-labor work.</div>
           ${plan.mhe.vnaAdvisory ? `<div style="font-size:10.5px;color:#7e22ce;margin-top:5px;">◆ ${esc(plan.mhe.vnaAdvisory)}</div>` : ''}
         </div>
       </div>
@@ -615,6 +626,10 @@ function _bindDynamicsEvents(container, ctx) {
     const n = parseFloat(container.querySelector('#' + id)?.value);
     return Number.isFinite(n) && n >= 0 ? n : fallback;
   };
+  container.querySelector('#wsc-dyn-mhe')?.addEventListener('change', (e) => {
+    _dynPolicy = { ..._dynPolicy, mheStorageType: e.target.value || null };
+    ctx.rerender();
+  });
   for (const [id, key] of [['wsc-dyn-window', 'arrivalWindowHrs'], ['wsc-dyn-dwell-in', 'dwellDaysIn'], ['wsc-dyn-dwell-out', 'dwellDaysOut']]) {
     container.querySelector('#' + id)?.addEventListener('change', () => {
       _dynPolicy = { ..._dynPolicy, [key]: num(id, _dynPolicy[key]) };
