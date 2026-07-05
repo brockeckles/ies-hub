@@ -18,7 +18,7 @@ import * as cmApi from '../cost-model/api.js?v=20260704-cmp1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260601-prompt2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
-import { render3DView, disposeScene3d } from './ui-3d.js?v=20260703-ls1';
+import { render3DView, disposeScene3d } from './ui-3d.js?v=20260705-n7a';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260704-wq1';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260703-ux0';
@@ -948,6 +948,10 @@ function renderContentView() {
       toSizingInputs,
       renderFacility: _renderFacility,
       shuffledBayLevelOrder,
+      // N7 — the 3D scene renders the ENGINEERED design when plans exist:
+      // media plan → per-family rack runs, dynamics plan → aisles/staging.
+      getMediaPlan: () => mediaPlan,
+      getDynamicsPlan: () => dynamicsPlan,
     }); break;
   }
 }

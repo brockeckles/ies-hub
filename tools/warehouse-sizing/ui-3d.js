@@ -14,6 +14,7 @@
  */
 
 import * as calc from './calc.js?v=20260703-ux0';
+import { buildScenePlan, positionsPerFaceSegment } from './scene-plan.js?v=20260705-n7a';
 
 // P3-1: single-live window.mouseup for the no-OrbitControls drag fallback
 let _wsc3dPrevMouseUp = null;
@@ -236,6 +237,33 @@ function renderRenderedFactsHud(facts, ctx = {}) {
     <div class="wsc-3d-hud-divider"></div>
     <div class="wsc-3d-hud-meta">${fmt(totalColumns)} rack pairs &middot; ${fmt(totalSegments)} segments</div>
     ${targets.total > 0 ? `<div class="wsc-3d-hud-status ${statusClass}">${statusLabel}</div>` : ''}
+  `;
+}
+
+/**
+ * N7 — media-mode HUD. One row per engineered run (placed / target),
+ * aisle + staging provenance lines, and a SHORT banner when the floor
+ * couldn't absorb the media plan (pairs with the red ghost columns).
+ */
+function renderMediaFactsHud({ runs = [], required = 0, shortfall = 0, aisles = {}, staging = {} } = {}) {
+  const fmt = (n) => (Number(n) || 0).toLocaleString();
+  const placedTotal = runs.filter(r => r.kind === 'pallet').reduce((s, r) => s + r.placed, 0);
+  const rows = runs.map(r => `
+    <div class="wsc-3d-hud-row">
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${r.labelColor};margin-right:5px;"></span>${r.label} <span class="wsc-3d-hud-meta" style="display:inline">(${r.levels} lvl${r.laneDepth > 1 ? ` · ${r.laneDepth}-deep` : ''})</span></span>
+      <span>${fmt(r.placed)}${r.target ? ` / ${fmt(r.target)}` : ''}</span>
+    </div>`).join('');
+  const statusHtml = shortfall > 0
+    ? `<div class="wsc-3d-hud-status wsc-3d-hud-status--under">SHORT ${fmt(shortfall)} positions — building can't absorb the media plan</div>`
+    : `<div class="wsc-3d-hud-status wsc-3d-hud-status--on">Media plan placed in full</div>`;
+  return `
+    <div class="wsc-3d-hud-title">Engineered media · live</div>
+    <div class="wsc-3d-hud-row"><span>Pallet positions</span><strong>${fmt(placedTotal)}${required > 0 ? ` / ${fmt(required)}` : ''}</strong></div>
+    <div class="wsc-3d-hud-divider"></div>
+    ${rows}
+    <div class="wsc-3d-hud-divider"></div>
+    <div class="wsc-3d-hud-meta">Aisle ${aisles.storageFt} ft (${aisles.source}) · staging ${aisles.stagingNote || staging.source}</div>
+    ${statusHtml}
   `;
 }
 
@@ -515,7 +543,16 @@ function build3DScene(ctx) {
     const elev = calc.elevationParams(ctx.renderFacility(ctx.facility, sized));
 
     const rackDepthFt = elev.rackDepthFt || 4.3;
-    const aisleFt     = ctx.facility.aisleWidth || elev.aisleWidth || 12;
+    // ── N7: engineered scene plan (media→racks, dynamics→aisles/staging) ──
+    // Pure translation of the N3/N4 plans; when no media plan exists the
+    // spec says source:'legacy' and every pre-N7 path below runs unchanged.
+    const _scenePlan = buildScenePlan({
+      mediaPlan: ctx.getMediaPlan?.() || null,
+      dynamicsPlan: ctx.getDynamicsPlan?.() || null,
+      sized, facility: ctx.facility, zones: ctx.zones,
+    });
+    // Storage aisle: dynamics governing MHE assumption → facility → 12 ft.
+    const aisleFt     = _scenePlan.aisles.storageFt || ctx.facility.aisleWidth || elev.aisleWidth || 12;
     const rackHeightFt= calc.topOfSteelFt(elev.rackLevels || 5);
     const moduleFt    = (2 * rackDepthFt) + aisleFt;
 
@@ -523,11 +560,24 @@ function build3DScene(ctx) {
     const moduleU     = moduleFt * scale;
     const rackHeightU = rackHeightFt * scale;
 
-    // Reserve front (-Z, dock face) and back (+Z) margins for staging
-    const stagingFt = 30;
+    // Reserve front (-Z, dock face) and back (+Z) margins for staging.
+    // N7 slice B: depths derive from the dynamics plan's dwell-driven sqft
+    // (or the configured zone sqft) spread along ~80% of the dock wall;
+    // legacy 30 ft strip only when no staging signal exists at all.
+    const _twoSidedStg = (ctx.zones.dockConfig?.sided || 'two') === 'two';
+    const _stgWallFt = Math.max(60, bwFt * 0.8);
+    const _stgDepthFt = (sqft) => Math.min(100, Math.max(20, sqft / _stgWallFt));
+    let stagingFt = 30, stagingBackFt = 30;
+    if (_scenePlan.staging.source !== 'default') {
+      const sIn = _scenePlan.staging.inboundSqft || 0;
+      const sOut = _scenePlan.staging.outboundSqft || 0;
+      if (_twoSidedStg) { stagingFt = _stgDepthFt(sIn); stagingBackFt = _stgDepthFt(sOut); }
+      else { stagingFt = _stgDepthFt(sIn + sOut); stagingBackFt = 12; }
+    }
     const stagingU  = stagingFt * scale;
+    const stagingBackU = stagingBackFt * scale;
     const rackZStart = -D / 2 + stagingU;
-    const rackZEnd   =  D / 2 - stagingU;
+    const rackZEnd   =  D / 2 - stagingBackU;
 
     // Soft volume materials (lower opacity now that uprights/beams/pallets
     // do the heavy visual lifting). The colored box hints "this zone is
@@ -622,6 +672,38 @@ function build3DScene(ctx) {
       { typeKey: 'shelving',     count: shelvingCols,     mat: matShelving,     heightU: 6.5 * scale,         kind: 'shelving', levels: shelvingLevels, bayWidthFt: calc.SHELVING_BAY_WIDTH_FT, structuralBayWidthFt: _structuralShelvingBay },
     ];
 
+    // ── N7 slice A: media-accurate runs ──
+    // One run per engineered medium. Each run owns its lane depth (rack
+    // depth = laneDepth × pallet depth), aisle band, level count, color,
+    // and gross-position target; the media placement walk below places
+    // columns for a run until its target is met, then moves to the next.
+    const _isMediaScene = _scenePlan.source === 'media' && _scenePlan.runs.length > 0;
+    const RUNS3D = !_isMediaScene ? null : _scenePlan.runs.map(r => {
+      const isShelf = r.kind === 'shelving';
+      return {
+        typeKey: r.key,
+        label: r.label,
+        family: r.family,
+        mat: new THREE.MeshStandardMaterial({
+          color: r.style.color, transparent: true,
+          opacity: isShelf ? 0.22 : 0.18, depthWrite: false, roughness: 0.7,
+        }),
+        heightU: isShelf ? 6.5 * scale : calc.topOfSteelFt(r.levels) * scale,
+        kind: r.kind,
+        levels: r.levels,
+        laneDepth: r.laneDepth,
+        bayWidthFt: isShelf ? calc.SHELVING_BAY_WIDTH_FT : calc.PALLET_BAY_WIDTH_FT,
+        structuralBayWidthFt: isShelf ? _structuralShelvingBay : _structuralPalletBay,
+        rackDepthU: (isShelf ? rackDepthFt : rackDepthFt * Math.max(1, r.laneDepth)) * scale,
+        aisleU: (r.aisleFt || aisleFt) * scale,
+        fillPct: Math.max(0.3, Math.min(0.95, r.fillPct || 0.85)),
+        target: Math.max(0, r.targetPositions || 0),
+        placed: 0,
+        extents: { minX: Infinity, maxX: -Infinity },
+        labelColor: '#' + r.style.color.toString(16).padStart(6, '0'),
+      };
+    });
+
     /** @type {Array<{typeKey:string,colKey:number,segmentLenFt:number,levels:number,bayWidthFt:number}>} */
     const placedRacks = [];
 
@@ -659,6 +741,82 @@ function build3DScene(ctx) {
     let typeUsed = 0;
     // Phase F.4 (2026-05-05) — track per-type X-extent for floating zone labels.
     const _zone3dXExtents = TYPES.map(() => ({ minX: Infinity, maxX: -Infinity }));
+
+    // ─────────────────────────────────────────────────────────────────
+    // N7 media placement walk — column module width varies per run
+    // (flow 8-deep is a far deeper module than selective), so the walk
+    // recomputes the module for the CURRENT run each step and advances
+    // to the next run once its position target is placed.
+    // ─────────────────────────────────────────────────────────────────
+    if (_isMediaScene) {
+      let runIdx = 0;
+      while (runIdx < RUNS3D.length) {
+        const t = RUNS3D[runIdx];
+        if (t.target <= 0) { runIdx++; continue; }
+        const moduleUThis = 2 * t.rackDepthU + t.aisleU;
+        if (mx + moduleUThis >= W / 2 - 6 * scale) break; // floor exhausted
+
+        const colLeft  = mx;
+        const colRight = mx + 2 * t.rackDepthU + 0.5;
+        const overlapsOfficeX = colRight > officeX0 && colLeft < officeX1;
+        const overlapsFpX     = fpEnabled3D && colRight > fpX0 && colLeft < fpX1;
+        let thisZStart = rackZStart;
+        const thisZEnd = rackZEnd;
+        if (overlapsOfficeX) thisZStart = Math.max(thisZStart, officeZ1 + 2);
+        if (overlapsFpX)     thisZStart = Math.max(thisZStart, fpZ1 + 2);
+        const thisLen = Math.max(0, thisZEnd - thisZStart);
+
+        if (thisLen > 4) {
+          for (const mseg of _3dMasterSegments) {
+            const segZ0Eff = Math.max(mseg.z0, thisZStart);
+            const segZ1Eff = Math.min(mseg.z1, thisZEnd);
+            const segLenU  = segZ1Eff - segZ0Eff;
+            if (segLenU <= 4) continue;
+            const segCenter = segZ0Eff + segLenU / 2;
+
+            const rackGeo = new THREE.BoxGeometry(t.rackDepthU, t.heightU, segLenU);
+            const r1 = new THREE.Mesh(rackGeo, t.mat);
+            r1.position.set(mx + t.rackDepthU / 2, t.heightU / 2, segCenter);
+            r1.castShadow = true;
+            scene.add(r1);
+            const r2 = new THREE.Mesh(rackGeo, t.mat);
+            r2.position.set(mx + t.rackDepthU + 0.5 + t.rackDepthU / 2, t.heightU / 2, segCenter);
+            r2.castShadow = true;
+            scene.add(r2);
+
+            const perFace = positionsPerFaceSegment({
+              segLenFt: segLenU / scale, bayWidthFt: t.bayWidthFt,
+              levels: t.levels, laneDepth: t.laneDepth,
+            });
+            t.placed += perFace * 2;
+
+            segmentMeta.push({
+              t, mx, segCenter, segLenU, side: 'A',
+              faceX: mx + t.rackDepthU / 2, frontFaceX: mx, intoRackDir: +1,
+              levels: t.levels, bayWidthFt: t.bayWidthFt,
+              structuralBayWidthFt: t.structuralBayWidthFt,
+              rackDepthU: t.rackDepthU, heightU: t.heightU, fillPct: t.fillPct,
+            });
+            segmentMeta.push({
+              t, mx, segCenter, segLenU, side: 'B',
+              faceX: mx + t.rackDepthU + 0.5 + t.rackDepthU / 2,
+              frontFaceX: mx + 2 * t.rackDepthU + 0.5, intoRackDir: -1,
+              levels: t.levels, bayWidthFt: t.bayWidthFt,
+              structuralBayWidthFt: t.structuralBayWidthFt,
+              rackDepthU: t.rackDepthU, heightU: t.heightU, fillPct: t.fillPct,
+            });
+            placedRacks.push({
+              typeKey: t.typeKey, colKey: mx, segmentLenFt: segLenU / scale,
+              levels: t.levels, bayWidthFt: t.bayWidthFt,
+            });
+          }
+        }
+        t.extents.minX = Math.min(t.extents.minX, mx);
+        t.extents.maxX = Math.max(t.extents.maxX, mx + 2 * t.rackDepthU + t.aisleU);
+        mx += moduleUThis;
+        if (t.placed >= t.target) runIdx++;
+      }
+    } else
     while (mx + 2 * rackDepthU + (aisleFt * scale) < W / 2 - 6 * scale) {
       while (typeIdx < TYPES.length && typeUsed >= TYPES[typeIdx].count) {
         typeIdx++;
@@ -809,6 +967,17 @@ function build3DScene(ctx) {
       sprite.scale.set(60 * scale, 15 * scale, 1);
       return sprite;
     }
+    if (_isMediaScene) {
+      // N7 — one label per media run, colored to the family volume.
+      for (const t of RUNS3D) {
+        const ex = t.extents;
+        if (!Number.isFinite(ex.minX) || !Number.isFinite(ex.maxX)) continue;
+        const sprite = _make3dZoneLabel(t.label, t.labelColor);
+        sprite.position.set((ex.minX + ex.maxX) / 2, rackHeightU + 8 * scale, 0);
+        sprite.renderOrder = 999;
+        scene.add(sprite);
+      }
+    } else
     for (let i = 0; i < TYPES.length; i++) {
       const ex = _zone3dXExtents[i];
       if (!Number.isFinite(ex.minX) || !Number.isFinite(ex.maxX)) continue;
@@ -826,6 +995,73 @@ function build3DScene(ctx) {
       sprite.position.set(cxWorld, rackHeightU + 8 * scale, 0);
       sprite.renderOrder = 999; // always on top
       scene.add(sprite);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // N7 slice B — staging slabs. Tinted floor zones sized to the
+    // dwell-derived (or configured) staging sqft, labeled with the value
+    // so the 3D scene shows the engineered staging, not a fixed strip.
+    // ─────────────────────────────────────────────────────────────────
+    if (_scenePlan.staging.source !== 'default') {
+      const _stgSlab = (depthU, zCenter, color) => {
+        const g = new THREE.BoxGeometry(W * 0.9, 0.06, depthU);
+        const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+          color, transparent: true, opacity: 0.12, depthWrite: false, roughness: 0.8,
+        }));
+        m.position.set(0, 0.08, zCenter);
+        m.receiveShadow = true;
+        scene.add(m);
+      };
+      const fmtSf = (n) => (Math.round(n) || 0).toLocaleString();
+      const sIn = _scenePlan.staging.inboundSqft || 0;
+      const sOut = _scenePlan.staging.outboundSqft || 0;
+      _stgSlab(stagingU, -D / 2 + stagingU / 2, 0x16a34a);
+      const inLabel = _make3dZoneLabel(
+        _twoSidedStg ? `Receive · ${fmtSf(sIn)} sf` : `Staging · ${fmtSf(sIn + sOut)} sf`, '#15803d');
+      inLabel.position.set(-W / 4, 6 * scale, -D / 2 + stagingU / 2);
+      inLabel.renderOrder = 999;
+      scene.add(inLabel);
+      if (_twoSidedStg && sOut > 0) {
+        _stgSlab(stagingBackU, D / 2 - stagingBackU / 2, 0x2563eb);
+        const outLabel = _make3dZoneLabel(`Ship · ${fmtSf(sOut)} sf`, '#1d4ed8');
+        outLabel.position.set(-W / 4, 6 * scale, D / 2 - stagingBackU / 2);
+        outLabel.renderOrder = 999;
+        scene.add(outLabel);
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // N7 slice C — reconciliation ghosts. Any pallet-run positions the
+    // floor could not absorb render as red wireframe columns marching
+    // past the +X wall: the building is visibly too small for the
+    // engineered media plan, and the HUD says by how much.
+    // ─────────────────────────────────────────────────────────────────
+    let _ghostShortfall = 0;
+    if (_isMediaScene) {
+      _ghostShortfall = RUNS3D.reduce((sum, r) => sum + Math.max(0, r.target - r.placed), 0);
+      if (_ghostShortfall > 0) {
+        const ghostRun = RUNS3D.find(r => r.placed < r.target) || RUNS3D[RUNS3D.length - 1];
+        const ghostMat = new THREE.MeshBasicMaterial({
+          color: 0xdc2626, wireframe: true, transparent: true, opacity: 0.35,
+        });
+        const gDepthU = ghostRun.rackDepthU;
+        const gModule = 2 * gDepthU + ghostRun.aisleU;
+        const gLenU = Math.min((rackZEnd - rackZStart), 120 * scale);
+        const gCols = Math.min(6, Math.max(1, Math.ceil(_ghostShortfall
+          / Math.max(1, positionsPerFaceSegment({ segLenFt: gLenU / scale, bayWidthFt: ghostRun.bayWidthFt, levels: ghostRun.levels, laneDepth: ghostRun.laneDepth }) * 2))));
+        let gx = W / 2 + 8 * scale;
+        for (let i = 0; i < gCols; i++) {
+          const gGeo = new THREE.BoxGeometry(2 * gDepthU + 0.5, ghostRun.heightU, gLenU);
+          const gMesh = new THREE.Mesh(gGeo, ghostMat);
+          gMesh.position.set(gx + gDepthU + 0.25, ghostRun.heightU / 2, (rackZStart + rackZEnd) / 2);
+          scene.add(gMesh);
+          gx += gModule;
+        }
+        const shortLabel = _make3dZoneLabel(`SHORT ${_ghostShortfall.toLocaleString()} positions`, '#b91c1c');
+        shortLabel.position.set(W / 2 + (gx - W / 2) / 2, ghostRun.heightU + 10 * scale, 0);
+        shortLabel.renderOrder = 999;
+        scene.add(shortLabel);
+      }
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -1880,14 +2116,23 @@ function build3DScene(ctx) {
     // facility/zones/volumes mutation), so counts are always live.
     // ------------------------------------------------------------
     try {
-      const facts = calc.rollupRenderedFacts(placedRacks, sized);
       const hud = el.querySelector('#wsc-3d-hud');
-      // Phase F.2 (2026-05-05) — pass sizing mode into HUD so the status
-      // copy can reframe "Over-built" (which now reads as a bug) into
-      // "Padded to footprint" (intentional Phase F.1 fill behavior) when
-      // in Design mode.
       if (hud) {
-        hud.innerHTML = renderRenderedFactsHud(facts, { palletLevels, shelvingLevels, sized, sizingMode: ctx.facility.sizingMode || 'design' });
+        // N7 — media scenes get the engineered-media HUD (per-run placed vs
+        // target + SHORT banner); legacy scenes keep the pre-N7 rollup.
+        if (_isMediaScene) {
+          hud.innerHTML = renderMediaFactsHud({
+            runs: RUNS3D, required: _scenePlan.recon.requiredPositions,
+            shortfall: _ghostShortfall, aisles: _scenePlan.aisles, staging: _scenePlan.staging,
+          });
+        } else {
+          const facts = calc.rollupRenderedFacts(placedRacks, sized);
+          // Phase F.2 (2026-05-05) — pass sizing mode into HUD so the status
+          // copy can reframe "Over-built" (which now reads as a bug) into
+          // "Padded to footprint" (intentional Phase F.1 fill behavior) when
+          // in Design mode.
+          hud.innerHTML = renderRenderedFactsHud(facts, { palletLevels, shelvingLevels, sized, sizingMode: ctx.facility.sizingMode || 'design' });
+        }
         // Honor the persistent Show/Hide HUD toggle across scene rebuilds.
         hud.style.display = _wscShowHud ? '' : 'none';
       }
