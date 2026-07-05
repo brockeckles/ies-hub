@@ -1727,6 +1727,7 @@ function bindContentEvents(container) {
     const line = createEmptyAnalysisLine();
     _fillLineFromTemplate(line, tpl);
     analysis.lines.push(line);
+    guardMarkDirty('most'); // 2026-07-05: unsaved analysis line (back-guard gap)
     selectedTemplate = null;
     selectedElements = [];
     activeTab = 'analysis';
@@ -1761,6 +1762,7 @@ function bindContentEvents(container) {
       line.daily_volume = vol;
       analysis.lines.push(line);
     }
+    guardMarkDirty('most'); // 2026-07-05: unsaved analysis lines (back-guard gap)
     seqTray = [];
     activeTab = 'analysis';
     if (rootEl) {
@@ -1827,6 +1829,7 @@ function bindContentEvents(container) {
         else if (type === 'text') value = tgt.value;
         else value = parseFloat(tgt.value) || 0;
         analysis.lines[idx][field] = value;
+        guardMarkDirty('most'); // 2026-07-05: unsaved analysis-line edit
         rerenderPreservingFocus();
       }
     });
@@ -1841,7 +1844,7 @@ function bindContentEvents(container) {
       const idx = parseInt(/** @type {HTMLSelectElement} */ (e.target).dataset.idx);
       const tplId = /** @type {HTMLSelectElement} */ (e.target).value;
       const tpl = (refData.templates || []).find(t => String(t.id) === String(tplId));
-      if (tpl && analysis.lines[idx]) _fillLineFromTemplate(analysis.lines[idx], tpl);
+      if (tpl && analysis.lines[idx]) { _fillLineFromTemplate(analysis.lines[idx], tpl); guardMarkDirty('most'); }
       renderContent();
     });
   });
@@ -2060,9 +2063,11 @@ function handleAction(action, idx) {
       return;
     case 'add-analysis-line':
       analysis.lines.push(createEmptyAnalysisLine());
+      guardMarkDirty('most'); // 2026-07-05: unsaved analysis line (back-guard gap)
       break;
     case 'delete-analysis-line':
       analysis.lines.splice(idx, 1);
+      guardMarkDirty('most'); // 2026-07-05: unsaved analysis-line removal
       break;
 
     // Sequence Preview (decision #10 C)
@@ -2535,6 +2540,7 @@ async function saveCurrentScenario() {
     // Refresh the list from Supabase so we get the canonical row (incl. id, timestamps)
     const rows = await api.listAnalyses();
     savedScenarios = rows.map(analysisRowToScenario);
+    guardMarkClean('most'); // 2026-07-05: analysis saved — nothing pending
     renderContent();
   } catch (err) {
     console.warn('[MOST] saveAnalysis failed, falling back to localStorage:', err);

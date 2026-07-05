@@ -315,15 +315,21 @@ function openEditor(savedRow) {
 
 /** I-05 — mark editor dirty + refresh the Save button state without a full re-render. */
 let _scenarioName = '';
-function markDirty() {
+function markDirty(opts = {}) {
   // Run-state check runs regardless of isDirty short-circuit — a repeat edit
   // against a clean run still needs to flip the Run button back to orange.
   updateRunButtonState();
   // COG-F4 — schedule a debounced auto-recompute if there's already a result
-  // on screen (don't surprise users who haven't run yet).
-  scheduleAutoRun();
+  // on screen (don't surprise users who haven't run yet). Skipped when the
+  // caller IS the run handler (opts.autoRun === false) — re-running right
+  // after a manual run is pointless.
+  if (opts.autoRun !== false) scheduleAutoRun();
   // COG-F2 — schedule a debounced autosave for already-saved scenarios.
-  scheduleAutoSave();
+  // Skipped for run-only changes (opts.autoSave === false): clicking Run on
+  // a saved scenario must not silently write to the DB (2026-07-05 zero-write
+  // fix — opening a demo + Run used to flip its updated_at). Input EDITS still
+  // autosave per COG-F2; the Save button lights up either way.
+  if (opts.autoSave !== false) scheduleAutoSave();
   if (isDirty) return;
   isDirty = true;
   guardMarkDirty('cog');
@@ -1046,7 +1052,7 @@ async function bindShellEvents() {
             activePhase = 'run';
             runSubTab = 'numbers';
             runState.markClean(runStateInputs());
-            markDirty();
+            markDirty({ autoSave: false, autoRun: false }); // run-only: no silent DB write
             updateRunButtonState();
             rootEl.innerHTML = renderShell();
             bindShellEvents();
