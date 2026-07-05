@@ -326,8 +326,8 @@ function render() {
 
       <!-- KPI strip -->
       ${_liveMeta.loaded && _liveMeta.matched > 0
-        ? `<div style="display:inline-flex;align-items:center;gap:6px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;margin-bottom:8px;" title="Wages, labor scores, lease rates, and vacancy overlay live from the hub's labor_markets / industrial_real_estate tables (same source as Command Center). Freight index, unemployment, verticals, and deal counts remain modeled estimates.">● LIVE — ${_liveMeta.matched} of ${markets.length} markets carry live wage/real-estate data${_liveMeta.asOf ? ' (as of ' + _liveMeta.asOf + ')' : ''} · other fields modeled</div>`
-        : `<div style="display:inline-flex;align-items:center;gap:6px;background:#fef3c7;border:1px solid #fde68a;color:#92400e;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;margin-bottom:8px;" title="No live rows matched from labor_markets / industrial_real_estate — every figure on this page is a modeled estimate.">MODELED ESTIMATES — live market data ${_liveMeta.loaded ? 'unavailable' : 'loading…'}</div>`}
+        ? `<div style="display:inline-flex;align-items:center;gap:6px;background:var(--c-success-soft);border:1px solid #bbf7d0;color:var(--c-success-ink);padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;margin-bottom:8px;" title="Wages, labor scores, lease rates, and vacancy overlay live from the hub's labor_markets / industrial_real_estate tables (same source as Command Center). Freight index, unemployment, verticals, and deal counts remain modeled estimates.">● LIVE — ${_liveMeta.matched} of ${markets.length} markets carry live wage/real-estate data${_liveMeta.asOf ? ' (as of ' + _liveMeta.asOf + ')' : ''} · other fields modeled</div>`
+        : `<div style="display:inline-flex;align-items:center;gap:6px;background:var(--c-warn-bg);border:1px solid #fde68a;color:var(--c-warn-ink);padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;margin-bottom:8px;" title="No live rows matched from labor_markets / industrial_real_estate — every figure on this page is a modeled estimate.">MODELED ESTIMATES — live market data ${_liveMeta.loaded ? 'unavailable' : 'loading…'}</div>`}
       <div class="hub-kpi-strip" style="margin-bottom: var(--sp-3);">
         ${meKpi('Markets Tracked', String(stats.totalMarkets), 'Count of MSAs in the filter set (of ' + markets.length + ' total tracked).')}
         ${meKpi('Avg Labor Score', calc.scoreBadge(stats.avgLaborScore), 'Composite labor-availability score (0-100) for filtered markets. Higher = more available workforce.')}
@@ -851,7 +851,7 @@ function renderIntelligencePanel(m) {
               </div>
               ${n.summary ? `<div style="color:var(--ies-gray-500);line-height:1.4;">${escapeHtml(n.summary)}</div>` : ''}
               <div style="display:flex;gap:8px;margin-top:4px;font-size:10px;color:var(--ies-gray-400);">
-                ${n.competitor ? `<span style="font-weight:600;">${escapeHtml(n.competitor)}</span>` : ''}
+                ${n.competitor ? `<span class="u-semibold">${escapeHtml(n.competitor)}</span>` : ''}
                 ${n.source ? `<span>${escapeHtml(n.source)}</span>` : ''}
                 <span>${formatDateShort(n.published_date || n.created_at)}</span>
               </div>

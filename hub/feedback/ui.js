@@ -118,7 +118,7 @@ function renderBoard(el) {
         <div class="hub-card" style="margin-bottom:10px;padding:14px;cursor:pointer;" data-item="${_a(item.id)}">
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="display:flex;flex-direction:column;align-items:center;min-width:40px;">
-              <span style="font-size:16px;font-weight:800;color:${item.upvotes >= 8 ? '#2563eb' : 'var(--ies-gray-400)'};">${item.upvotes}</span>
+              <span style="font-size:16px;font-weight:800;color:${item.upvotes >= 8 ? 'var(--c-info)' : 'var(--ies-gray-400)'};">${item.upvotes}</span>
               <span style="font-size:9px;color:var(--ies-gray-400);">votes</span>
             </div>
             <div style="flex:1;">
@@ -129,7 +129,7 @@ function renderBoard(el) {
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                 <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;color:#fff;background:${calc.typeBadgeColor(item.type)};">${_h(item.type)}</span>
                 <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;color:#fff;background:${calc.statusBadgeColor(item.status)};">${_h(item.status)}</span>
-                ${item.tool ? `<span style="font-size:11px;color:var(--ies-gray-400);">${_h(item.tool)}</span>` : ''}
+                ${item.tool ? `<span class="u-cap u-faint">${_h(item.tool)}</span>` : ''}
                 <span style="font-size:11px;color:var(--ies-gray-300);margin-left:auto;">${calc.formatDate(item.submittedDate)} • ${item.comments.length} comment${item.comments.length !== 1 ? 's' : ''}</span>
               </div>
             </div>
@@ -159,20 +159,20 @@ function renderDetail(el) {
         <span>${calc.formatDate(item.submittedDate)}</span>
         <span>Tool: ${_h(item.tool || 'General')}</span>
         <span style="font-weight:700;color:${calc.priorityBadgeColor(item.priority)};">${_h(item.priority)} priority</span>
-        <span style="margin-left:auto;font-weight:700;color:#2563eb;">▲ ${item.upvotes} votes</span>
+        <span style="margin-left:auto;font-weight:700;color:var(--c-info);">▲ ${item.upvotes} votes</span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        ${(item.tags || []).map(t => `<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:#f3f4f6;color:#6b7280;">${_h(t)}</span>`).join('')}
+        ${(item.tags || []).map(t => `<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:#f3f4f6;color:var(--c-muted);">${_h(t)}</span>`).join('')}
       </div>
     </div>
-    <div class="hub-card" style="padding:16px;">
+    <div class="hub-card u-p-4">
       <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Comments (${item.comments.length})</div>
       ${item.comments.length === 0 ? '<div style="font-size:12px;color:var(--ies-gray-400);">No comments yet.</div>' :
         item.comments.map(c => `
           <div style="padding:10px 0;border-bottom:1px solid var(--ies-gray-100);">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
               <span style="font-size:12px;font-weight:700;">${_h(c.author)}</span>
-              <span style="font-size:11px;color:var(--ies-gray-400);">${new Date(c.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+              <span class="u-cap u-faint">${new Date(c.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
             </div>
             <div style="font-size:13px;color:var(--ies-gray-500);">${_h(c.content)}</div>
           </div>

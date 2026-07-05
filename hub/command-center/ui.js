@@ -42,7 +42,7 @@ export function unmount() {
 
 function renderLoading() {
   return `<div class="hub-content-inner" style="padding:24px;display:flex;align-items:center;justify-content:center;min-height:400px;">
-    <div style="text-align:center;"><div style="font-size:14px;color:var(--ies-gray-400);">Loading Command Center...</div></div>
+    <div class="u-center"><div style="font-size:14px;color:var(--ies-gray-400);">Loading Command Center...</div></div>
   </div>`;
 }
 
@@ -79,12 +79,12 @@ function render() {
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
         <div>
-          <h1 class="text-page" style="margin-bottom:4px;">${greeting}</h1>
+          <h1 class="text-page u-mb-1">${greeting}</h1>
           <p style="font-size:13px;color:var(--ies-gray-400);margin:0;">${dateStr} — IES Intelligence Hub v3.0</p>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
+        <div class="u-row">
           <span style="width:8px;height:8px;border-radius:50%;background:${d.supabaseConnected ? 'var(--ies-green)' : 'var(--ies-orange)'};"></span>
-          <span style="font-size:11px;color:var(--ies-gray-400);">${d.supabaseConnected ? 'Live' : 'Demo'} Data</span>
+          <span class="u-cap u-faint">${d.supabaseConnected ? 'Live' : 'Demo'} Data</span>
           <span style="font-size:11px;color:var(--ies-gray-300);margin-left:4px;">Updated ${timeStr}</span>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="refresh" style="margin-left:8px;padding:4px 10px;font-size:11px;">↻ Refresh</button>
         </div>
@@ -115,8 +115,8 @@ function render() {
         <div class="hub-card" id="cc-signal-stream" style="padding:0;display:flex;flex-direction:column;overflow:hidden;height:100%;min-height:0;">
           <div style="padding:14px 16px 0;border-bottom:1px solid var(--ies-gray-100);">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-              <div style="font-size:13px;font-weight:700;">Signal Stream</div>
-              <span style="font-size:11px;color:var(--ies-gray-400);">All market intelligence in one place</span>
+              <div class="u-13 u-bold">Signal Stream</div>
+              <span class="u-cap u-faint">All market intelligence in one place</span>
             </div>
             <div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:10px;">
               ${['all','alerts','competitor','accounts','tariff','rfp'].map((k, i) => `
@@ -188,7 +188,7 @@ function vitalSignTile(label, value, unit, trend, color, change, sparkData, href
       </div>
       <div style="display:flex;align-items:baseline;gap:4px;">
         <span style="font-size:22px;font-weight:800;color:${color};line-height:1;">${value}</span>
-        ${unit ? `<span style="font-size:11px;color:var(--ies-gray-500);">${unit}</span>` : ''}
+        ${unit ? `<span class="u-cap u-muted">${unit}</span>` : ''}
       </div>
       ${renderSparkline(sparkData, color)}
       <div style="font-size:10px;color:var(--ies-gray-500);margin-top:2px;">${change}</div>
@@ -231,8 +231,8 @@ function renderPipelineSnapshot(p) {
   return `
     <a href="#deals" class="hub-card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;text-decoration:none;color:inherit;cursor:pointer;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div style="font-size:13px;font-weight:700;">Pipeline Snapshot</div>
-        <span style="font-size:11px;color:#2563eb;font-weight:700;">Open Deal Mgmt →</span>
+        <div class="u-13 u-bold">Pipeline Snapshot</div>
+        <span style="font-size:11px;color:var(--c-info);font-weight:700;">Open Deal Mgmt →</span>
       </div>
       <div style="display:flex;gap:18px;align-items:flex-start;">
         <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
@@ -468,7 +468,7 @@ function alertRow(a) {
   };
   const hasLink = isRealLink(a.source_url);
   const linkArrow = hasLink
-    ? `<span style="font-size:11px;color:#2563eb;flex-shrink:0;margin-top:1px;">↗</span>`
+    ? `<span style="font-size:11px;color:var(--c-info);flex-shrink:0;margin-top:1px;">↗</span>`
     : '';
   const sourceLine = a.source
     ? `<span style="font-size:10px;color:var(--ies-gray-400);">${escapeText(a.source)}</span>`
@@ -488,7 +488,7 @@ function alertRow(a) {
 
 function miniKpi(label, value, color) {
   return `
-    <div style="text-align:center;">
+    <div class="u-center">
       <div style="font-size:18px;font-weight:800;color:${color};">${value}</div>
       <div style="font-size:10px;color:var(--ies-gray-400);font-weight:600;">${label}</div>
     </div>
@@ -509,8 +509,8 @@ function activityItem(title, desc, time, color) {
     <div style="display:flex;align-items:start;gap:10px;padding:8px 0;border-bottom:1px solid var(--ies-gray-100);">
       <span style="width:8px;height:8px;border-radius:50%;background:${color};margin-top:5px;flex-shrink:0;"></span>
       <div style="flex:1;">
-        <div style="font-size:13px;font-weight:600;">${title}</div>
-        <div style="font-size:11px;color:var(--ies-gray-400);">${desc}</div>
+        <div class="u-13 u-semibold">${title}</div>
+        <div class="u-cap u-faint">${desc}</div>
       </div>
       <span style="font-size:11px;color:var(--ies-gray-300);white-space:nowrap;">${time}</span>
     </div>
@@ -532,7 +532,7 @@ function renderIntelFeed(items, fallbackActivity) {
   if (!items || !items.length) {
     // 2026-06-10 (assessment hub #11): the fallback stream is curated sample
     // content — label it so it can't be mistaken for live activity.
-    return `<div style="display:inline-flex;align-items:center;gap:6px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;margin-bottom:8px;">SAMPLE DATA — no live intelligence yet</div>`
+    return `<div style="display:inline-flex;align-items:center;gap:6px;background:var(--c-warn-bg);color:var(--c-warn-ink);padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;margin-bottom:8px;">SAMPLE DATA — no live intelligence yet</div>`
       + (fallbackActivity || []).map(a => activityItem(a.title, a.description, a.time, a.color)).join('');
   }
   // Bare-domain guard — ingest pipeline sometimes stores the publisher home
@@ -589,7 +589,7 @@ function renderIntelFeed(items, fallbackActivity) {
         <div style="flex:1;min-width:0;">
           <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:2px;">
             <span style="font-size:11px;font-weight:800;color:${categoryColor(item.category)};text-transform:uppercase;letter-spacing:.04em;">${escapeText(item.category || '')}</span>
-            <span style="font-size:13px;font-weight:600;color:${clickable ? '#1d4ed8' : 'var(--ies-gray-800)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeText(item.title)}</span>
+            <span style="font-size:13px;font-weight:600;color:${clickable ? 'var(--c-info-strong)' : 'var(--ies-gray-800)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeText(item.title)}</span>
             ${linkIcon}
           </div>
           ${item.detail ? `<div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${escapeText(item.detail).slice(0, 180)}${sourceLabel}</div>` : (sourceLabel ? `<div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${sourceLabel}</div>` : '')}
@@ -616,8 +616,8 @@ function escapeText(s) {
  */
 function renderInlineAlertBanner(alerts) {
   if (!alerts || !alerts.length) {
-    return `<div style="margin:0 0 16px;padding:8px 14px;border-radius:8px;background:#f0fdf4;border:1px solid #86efac;color:#166534;font-size:12px;font-weight:600;display:flex;align-items:center;gap:10px;">
-      <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#16a34a;color:#fff;font-weight:800;">✓</span>
+    return `<div style="margin:0 0 16px;padding:8px 14px;border-radius:8px;background:var(--c-success-soft);border:1px solid #86efac;color:var(--c-success-ink);font-size:12px;font-weight:600;display:flex;align-items:center;gap:10px;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--c-success);color:#fff;font-weight:800;">✓</span>
       No active market alerts.
     </div>`;
   }
@@ -652,7 +652,7 @@ function renderInlineAlertBanner(alerts) {
     if (clean) topUrl = `https://www.google.com/search?tbm=nws&q=${encodeURIComponent(clean)}`;
   }
   return `<div class="cc-alert-banner" data-action="show-alerts" role="button" tabindex="0" style="margin:0 0 16px;padding:10px 14px;border-radius:8px;background:${bg};border:1px solid ${border};color:${text};font-size:12px;font-weight:600;display:flex;align-items:center;gap:14px;">
-    <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${hasCritical ? '#dc2626' : counts.high > 0 ? '#ea580c' : '#2563eb'};color:#fff;font-weight:800;flex-shrink:0;">!</span>
+    <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${hasCritical ? 'var(--c-danger)' : counts.high > 0 ? '#ea580c' : 'var(--c-info)'};color:#fff;font-weight:800;flex-shrink:0;">!</span>
     <span style="flex-shrink:0;">${alerts.length} active alert${alerts.length === 1 ? '' : 's'}</span>
     <span style="color:${text};opacity:.8;flex-shrink:0;">${summary}</span>
     ${top ? `<span style="margin-left:auto;color:${text};opacity:.9;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:420px;">Top:
@@ -666,9 +666,9 @@ function renderInlineAlertBanner(alerts) {
 function statusTile(name, status, healthy) {
   return `
     <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;background:var(--ies-gray-50);">
-      <span style="width:8px;height:8px;border-radius:50%;background:${healthy ? '#16a34a' : '#d97706'};"></span>
+      <span style="width:8px;height:8px;border-radius:50%;background:${healthy ? 'var(--c-success)' : 'var(--c-warn-strong)'};"></span>
       <span style="font-size:12px;font-weight:600;flex:1;">${name}</span>
-      <span style="font-size:11px;color:${healthy ? '#16a34a' : '#d97706'};font-weight:700;">${status}</span>
+      <span style="font-size:11px;color:${healthy ? 'var(--c-success)' : 'var(--c-warn-strong)'};font-weight:700;">${status}</span>
     </div>
   `;
 }
@@ -694,7 +694,7 @@ function renderRfpFeed(rfpSignals) {
     const filled = Math.max(0, Math.min(5, n || 0));
     const dots = [];
     for (let i = 0; i < 5; i++) {
-      dots.push(`<span style="display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:2px;background:${i < filled ? '#16a34a' : '#e5e7eb'};"></span>`);
+      dots.push(`<span style="display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:2px;background:${i < filled ? 'var(--c-success)' : '#e5e7eb'};"></span>`);
     }
     return dots.join('');
   };

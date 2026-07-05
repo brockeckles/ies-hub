@@ -89,10 +89,10 @@ function render() {
     <div class="hub-content-inner" style="padding:24px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
         <div style="display:flex;align-items:center;gap:10px;">
-          <h2 class="text-page" style="margin:0;">Admin</h2>
+          <h2 class="text-page u-m0">Admin</h2>
           ${renderEnvChip()}
         </div>
-        <div style="display:flex;gap:8px;" id="admin-tabs">
+        <div class="u-flex" id="admin-tabs">
           ${['tables', 'activity', 'escalations', 'audit'].map(t => `
             <button class="hub-btn hub-btn-sm ${t === activeTab ? '' : 'hub-btn-secondary'}" data-tab="${t}">${
               t === 'tables' ? 'Master Data'
@@ -237,7 +237,7 @@ function _renderMasterTableBody(el, table, rows) {
   if (!body) return;
   body.innerHTML = `
     <div class="hub-card" style="padding:0;overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <table class="u-table">
         <thead>
           <tr style="background:var(--ies-gray-50);">
             ${table.columns.map(c => `<th style="text-align:left;padding:10px 12px;border-bottom:2px solid var(--ies-gray-200);font-weight:700;font-size:11px;text-transform:uppercase;color:var(--ies-gray-600);">${c.label}</th>`).join('')}
@@ -422,7 +422,7 @@ function renderActivity(el) {
   const kpis = _activityKpis || {};
   const nowMs = Date.now();
   const loadingBanner = !_activityLoaded
-    ? '<div class="hub-card" style="padding:12px;background:#fef3c7;color:#92400e;margin-bottom:12px;">Loading activity…</div>'
+    ? '<div class="hub-card" style="padding:12px;background:var(--c-warn-bg);color:var(--c-warn-ink);margin-bottom:12px;">Loading activity…</div>'
     : '';
 
   // Activity-tab tile reuses hub-kpi-tile + hub-kpi-tile__hint for the sub-line.
@@ -454,7 +454,7 @@ function renderActivity(el) {
       </span>
       <span style="flex:1;"></span>
       <button class="hub-btn hub-btn-sm" data-activity-invite title="Invite a new pilot user via email">+ Invite user</button>
-      <button class="hub-btn hub-btn-sm hub-btn-secondary" data-activity-refresh title="Re-fetch events from Supabase">🔄 Refresh</button>
+      <button class="hub-btn hub-btn-sm hub-btn-secondary" data-activity-refresh title="Re-fetch events from Supabase">↻ Refresh</button>
     </div>
 
     <div class="hub-kpi-strip" style="margin-bottom:16px;">
@@ -465,7 +465,7 @@ function renderActivity(el) {
     </div>
 
     <div class="hub-card" style="padding:16px;overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <table class="u-table">
         <thead>
           <tr>
             <th style="text-align:left;padding:8px;border-bottom:2px solid var(--ies-gray-200);font-size:11px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:0.04em;">User</th>
@@ -487,10 +487,10 @@ function renderActivity(el) {
             <tr style="border-bottom:1px solid var(--ies-gray-100);${r.onlineNow ? 'background:#ecfdf5;' : ''}">
               <td style="padding:8px;">
                 <div style="font-weight:600;display:flex;align-items:center;gap:6px;">
-                  ${r.onlineNow ? '<span title="Online now" style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block;"></span>' : ''}
+                  ${r.onlineNow ? '<span title="Online now" style="width:7px;height:7px;border-radius:50%;background:var(--c-success);display:inline-block;"></span>' : ''}
                   ${escapeHtml(r.displayName)}
                 </div>
-                <div style="font-size:11px;color:var(--ies-gray-400);">${escapeHtml(r.email || '')}</div>
+                <div class="u-cap u-faint">${escapeHtml(r.email || '')}</div>
               </td>
               <td style="padding:8px;">
                 ${r.role && r.role !== '—' ? `<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:${roleColor};">${escapeHtml(r.role)}</span>` : '<span style="color:var(--ies-gray-400);font-size:12px;">—</span>'}
@@ -718,16 +718,16 @@ function renderEscalations(el) {
   const rules = calc.DEMO_ESCALATIONS;
 
   el.innerHTML = `
-    <div class="hub-card" style="padding:16px;">
+    <div class="hub-card u-p-4">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <span style="font-size:14px;font-weight:700;">Escalation Rules</span>
-        <span style="font-size:11px;color:var(--ies-gray-400);">${rules.filter(r => r.active).length} active</span>
+        <span class="u-cap u-faint">${rules.filter(r => r.active).length} active</span>
       </div>
       ${rules.map(r => `
         <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--ies-gray-100);">
-          <span style="width:8px;height:8px;border-radius:50%;background:${r.active ? '#16a34a' : '#d1d5db'};"></span>
+          <span style="width:8px;height:8px;border-radius:50%;background:${r.active ? 'var(--c-success)' : '#d1d5db'};"></span>
           <span style="font-size:13px;font-weight:600;flex:1;">${r.name}</span>
-          <span style="font-size:11px;color:var(--ies-gray-400);">${r.metric} ${r.condition} ${r.threshold}</span>
+          <span class="u-cap u-faint">${r.metric} ${r.condition} ${r.threshold}</span>
           <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:${calc.severityColor(r.severity)};">${r.severity}</span>
         </div>
       `).join('')}
@@ -783,7 +783,7 @@ function renderAudit(el) {
   }));
   const counts = rows.reduce((m, r) => { m[r.action] = (m[r.action] || 0) + 1; return m; }, {});
   const pendingBanner = !_auditLoaded
-    ? '<div class="hub-card" style="padding:12px;background:#fef3c7;color:#92400e;margin-bottom:12px;">Loading audit log…</div>'
+    ? '<div class="hub-card" style="padding:12px;background:var(--c-warn-bg);color:var(--c-warn-ink);margin-bottom:12px;">Loading audit log…</div>'
     : '';
 
   el.innerHTML = `
@@ -797,7 +797,7 @@ function renderAudit(el) {
       `).join('')}
       <div class="hub-card" style="padding:8px 16px;text-align:center;">
         <div style="font-size:16px;font-weight:800;">${rows.length}</div>
-        <div style="font-size:11px;color:var(--ies-gray-400);">Rows shown (limit ${_auditFilter.limit})</div>
+        <div class="u-cap u-faint">Rows shown (limit ${_auditFilter.limit})</div>
       </div>
     </div>
 
@@ -839,10 +839,10 @@ function renderAudit(el) {
             <tr>
               <th style="text-align:left;width:160px;">When</th>
               <th style="text-align:left;width:70px;">Action</th>
-              <th style="text-align:left;">Entity</th>
+              <th class="u-left">Entity</th>
               <th style="text-align:left;width:120px;">Entity ID</th>
               <th style="text-align:left;width:180px;">User</th>
-              <th style="text-align:left;">Changed Fields</th>
+              <th class="u-left">Changed Fields</th>
             </tr>
           </thead>
           <tbody>
@@ -852,15 +852,15 @@ function renderAudit(el) {
                 : '';
               return `
                 <tr>
-                  <td style="color:var(--ies-gray-500);">${calc.formatDateTime(r.timestamp)}</td>
+                  <td class="u-muted">${calc.formatDateTime(r.timestamp)}</td>
                   <td><span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;color:#fff;background:${calc.actionBadgeColor(r.action)};">${r.action}</span></td>
-                  <td><code style="font-size:11px;">${r.tableName || ''}</code></td>
+                  <td><code class="u-cap">${r.tableName || ''}</code></td>
                   <td style="color:var(--ies-gray-500);font-size:11px;">${r.recordId || ''}</td>
-                  <td style="font-size:11px;" title="${r.authed ? 'Authenticated user (auth.uid)' : 'Pre-auth / code session'}">
+                  <td class="u-cap" title="${r.authed ? 'Authenticated user (auth.uid)' : 'Pre-auth / code session'}">
                     ${r.authed ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#10b981;margin-right:6px;vertical-align:middle;"></span>' : ''}
                     ${r.userName}
                   </td>
-                  <td style="font-size:11px;color:var(--ies-gray-500);" title="${JSON.stringify(r.fields || {}).replace(/"/g, '&quot;')}">${fieldStr}</td>
+                  <td class="u-cap u-muted" title="${JSON.stringify(r.fields || {}).replace(/"/g, '&quot;')}">${fieldStr}</td>
                 </tr>
               `;
             }).join('')}

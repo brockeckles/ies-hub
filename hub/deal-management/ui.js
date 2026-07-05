@@ -206,52 +206,52 @@ function openNewOppModal() {
 
       <div style="display:flex;flex-direction:column;gap:14px;">
         <div>
-          <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Deal Name *</label>
-          <input id="opp-name" class="hub-input" placeholder="e.g., Acme Midwest Expansion" style="width:100%;">
+          <label class="dm-label">Deal Name *</label>
+          <input id="opp-name" class="hub-input u-full" placeholder="e.g., Acme Midwest Expansion">
         </div>
         <div>
-          <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Client *</label>
-          <input id="opp-client" class="hub-input" placeholder="e.g., Acme Corp" style="width:100%;">
+          <label class="dm-label">Client *</label>
+          <input id="opp-client" class="hub-input u-full" placeholder="e.g., Acme Corp">
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Initial Stage</label>
-            <select id="opp-stage" class="hub-select" style="width:100%;">
+            <label class="dm-label">Initial Stage</label>
+            <select id="opp-stage" class="hub-select u-full">
               ${DOS_STAGES.map(s => `<option value="${s.id}"${s.id === 1 ? ' selected' : ''}>${s.id}. ${s.name}</option>`).join('')}
             </select>
           </div>
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Owner</label>
-            <input id="opp-owner" class="hub-input" placeholder="Your name" style="width:100%;">
+            <label class="dm-label">Owner</label>
+            <input id="opp-owner" class="hub-input u-full" placeholder="Your name">
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Est. Annual Revenue ($M)</label>
-            <input id="opp-revenue" class="hub-input" type="number" step="0.1" placeholder="e.g., 12.5" style="width:100%;">
+            <label class="dm-label">Est. Annual Revenue ($M)</label>
+            <input id="opp-revenue" class="hub-input u-full" type="number" step="0.1" placeholder="e.g., 12.5">
           </div>
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Target Margin (%)</label>
-            <input id="opp-margin" class="hub-input" type="number" step="0.1" placeholder="e.g., 11" style="width:100%;">
+            <label class="dm-label">Target Margin (%)</label>
+            <input id="opp-margin" class="hub-input u-full" type="number" step="0.1" placeholder="e.g., 11">
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Contract Term (yrs)</label>
-            <input id="opp-term" class="hub-input" type="number" step="1" placeholder="5" value="5" style="width:100%;">
+            <label class="dm-label">Contract Term (yrs)</label>
+            <input id="opp-term" class="hub-input u-full" type="number" step="1" placeholder="5" value="5">
           </div>
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Site Count</label>
-            <input id="opp-sites" class="hub-input" type="number" step="1" placeholder="1" value="1" style="width:100%;">
+            <label class="dm-label">Site Count</label>
+            <input id="opp-sites" class="hub-input u-full" type="number" step="1" placeholder="1" value="1">
           </div>
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Target Go-Live</label>
-            <input id="opp-golive" class="hub-input" type="date" style="width:100%;">
+            <label class="dm-label">Target Go-Live</label>
+            <input id="opp-golive" class="hub-input u-full" type="date">
           </div>
         </div>
         <div>
-          <label style="display:block;font-size:11px;font-weight:700;color:var(--ies-gray-400);margin-bottom:4px;">Industry / Vertical</label>
-          <select id="opp-vertical" class="hub-select" style="width:100%;">
+          <label class="dm-label">Industry / Vertical</label>
+          <select id="opp-vertical" class="hub-select u-full">
             <option value="">— Select —</option>
             <option value="Retail">Retail</option>
             <option value="E-commerce">E-commerce</option>
@@ -820,9 +820,9 @@ function renderPipeline(el) {
                 <div style="font-size:12px;font-weight:700;margin-bottom:4px;">${escapeHtml(deal.name)}</div>
                 <div style="font-size:11px;color:var(--ies-gray-400);margin-bottom:4px;">${escapeHtml(deal.client)} — ${siteCount} site${siteCount > 1 ? 's' : ''}</div>
                 <div style="display:flex;justify-content:space-between;font-size:10px;">
-                  <span style="color:var(--ies-gray-400);">$${(deal.revenue / 1e6).toFixed(1)}M</span>
-                  ${deal.margin > 0 ? `<span style="font-weight:700;color:${deal.margin >= 10 ? '#16a34a' : '#d97706'};">${deal.margin}%</span>` : ''}
-                  ${deal.score !== '—' ? `<span style="font-weight:800;color:${deal.score.startsWith('A') ? '#16a34a' : '#2563eb'};">${deal.score}</span>` : ''}
+                  <span class="u-faint">$${(deal.revenue / 1e6).toFixed(1)}M</span>
+                  ${deal.margin > 0 ? `<span style="font-weight:700;color:${deal.margin >= 10 ? 'var(--c-success)' : 'var(--c-warn-strong)'};">${deal.margin}%</span>` : ''}
+                  ${deal.score !== '—' ? `<span style="font-weight:800;color:${deal.score.startsWith('A') ? 'var(--c-success)' : 'var(--c-info)'};">${deal.score}</span>` : ''}
                 </div>
                 <div style="font-size:9px;color:var(--ies-gray-300);margin-top:4px;">${deal.daysInStage}d in stage — ${formatOwnerShort(deal.owner)}</div>
               </div>
@@ -838,17 +838,17 @@ function renderList(el) {
   const visible = filteredDeals();
   el.innerHTML = `
     <div class="hub-card" style="padding:0;overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <table class="u-table">
         <thead>
           <tr style="background:var(--ies-gray-50);">
-            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Deal</th>
-            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Client</th>
-            <th style="text-align:center;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Stage</th>
-            <th style="text-align:center;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Sites</th>
-            <th style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Revenue</th>
-            <th style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Margin</th>
-            <th style="text-align:center;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Score</th>
-            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Owner</th>
+            <th class="dm-th">Deal</th>
+            <th class="dm-th">Client</th>
+            <th class="dm-th dm-th--c">Stage</th>
+            <th class="dm-th dm-th--c">Sites</th>
+            <th class="dm-th dm-th--r">Revenue</th>
+            <th class="dm-th dm-th--r">Margin</th>
+            <th class="dm-th dm-th--c">Score</th>
+            <th class="dm-th">Owner</th>
           </tr>
         </thead>
         <tbody>
@@ -865,8 +865,8 @@ function renderList(el) {
                 </td>
                 <td style="padding:10px 12px;text-align:center;">${siteCount}</td>
                 <td style="padding:10px 12px;text-align:right;font-weight:600;">$${(d.revenue / 1e6).toFixed(1)}M</td>
-                <td style="padding:10px 12px;text-align:right;font-weight:700;color:${d.margin >= 10 ? '#16a34a' : d.margin > 0 ? '#d97706' : 'var(--ies-gray-300)'};">${d.margin > 0 ? d.margin + '%' : '—'}</td>
-                <td style="padding:10px 12px;text-align:center;font-weight:800;color:${d.score.startsWith('A') ? '#16a34a' : d.score !== '—' ? '#2563eb' : 'var(--ies-gray-300)'};">${d.score}</td>
+                <td style="padding:10px 12px;text-align:right;font-weight:700;color:${d.margin >= 10 ? 'var(--c-success)' : d.margin > 0 ? 'var(--c-warn-strong)' : 'var(--ies-gray-300)'};">${d.margin > 0 ? d.margin + '%' : '—'}</td>
+                <td style="padding:10px 12px;text-align:center;font-weight:800;color:${d.score.startsWith('A') ? 'var(--c-success)' : d.score !== '—' ? 'var(--c-info)' : 'var(--ies-gray-300)'};">${d.score}</td>
                 <td style="padding:10px 12px;color:var(--ies-gray-500);">${formatOwnerFull(d.owner)}</td>
               </tr>
             `;
@@ -896,14 +896,14 @@ function renderCustomers(el) {
   const rows = Array.from(byCustomer.values()).sort((a, b) => b.revenue - a.revenue);
   el.innerHTML = `
     <div class="hub-card" style="padding:0;overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <table class="u-table">
         <thead>
           <tr style="background:var(--ies-gray-50);">
-            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Customer</th>
-            <th style="text-align:center;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Deals</th>
-            <th style="text-align:center;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Sites</th>
-            <th style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Total Pipeline</th>
-            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Deal Names</th>
+            <th class="dm-th">Customer</th>
+            <th class="dm-th dm-th--c">Deals</th>
+            <th class="dm-th dm-th--c">Sites</th>
+            <th class="dm-th dm-th--r">Total Pipeline</th>
+            <th class="dm-th">Deal Names</th>
           </tr>
         </thead>
         <tbody>
@@ -944,31 +944,31 @@ function renderMyHours(el) {
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
       <div class="hub-card" style="padding:14px;">
         <div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Forecast Hours</div>
-        <div style="font-size:26px;font-weight:800;color:#2563eb;margin-top:6px;">${totalForecast.toLocaleString()}</div>
+        <div style="font-size:26px;font-weight:800;color:var(--c-info);margin-top:6px;">${totalForecast.toLocaleString()}</div>
         <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">planned across ${rows.length} deal${rows.length === 1 ? '' : 's'}</div>
       </div>
       <div class="hub-card" style="padding:14px;">
         <div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Actual Hours</div>
-        <div style="font-size:26px;font-weight:800;color:#16a34a;margin-top:6px;">${totalActual.toLocaleString()}</div>
+        <div style="font-size:26px;font-weight:800;color:var(--c-success);margin-top:6px;">${totalActual.toLocaleString()}</div>
         <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">logged to date</div>
       </div>
       <div class="hub-card" style="padding:14px;">
         <div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Consumption</div>
-        <div style="font-size:26px;font-weight:800;color:${pct < 100 ? '#7c3aed' : '#dc2626'};margin-top:6px;">${pct.toFixed(0)}%</div>
+        <div style="font-size:26px;font-weight:800;color:${pct < 100 ? 'var(--c-purple)' : 'var(--c-danger)'};margin-top:6px;">${pct.toFixed(0)}%</div>
         <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">actual / forecast</div>
       </div>
     </div>
 
     <div class="hub-card" style="padding:0;overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <table class="u-table">
         <thead>
           <tr style="background:var(--ies-gray-50);">
-            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Deal</th>
-            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Customer</th>
-            <th style="text-align:center;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Stage</th>
-            <th style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:#2563eb;">Forecast</th>
-            <th style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:#16a34a;">Actual</th>
-            <th style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Δ</th>
+            <th class="dm-th">Deal</th>
+            <th class="dm-th">Customer</th>
+            <th class="dm-th dm-th--c">Stage</th>
+            <th style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:var(--c-info);">Forecast</th>
+            <th style="text-align:right;padding:10px 12px;font-size:11px;font-weight:700;color:var(--c-success);">Actual</th>
+            <th class="dm-th dm-th--r">Δ</th>
           </tr>
         </thead>
         <tbody>
@@ -979,10 +979,10 @@ function renderMyHours(el) {
               <tr style="border-bottom:1px solid var(--ies-gray-100);cursor:pointer;" data-deal="${r.id}" onmouseover="this.style.background='var(--ies-gray-50)'" onmouseout="this.style.background='transparent'">
                 <td style="padding:10px 12px;font-weight:600;">${escapeAttr(r.name)}</td>
                 <td style="padding:10px 12px;color:var(--ies-gray-500);">${escapeAttr(r.client)}</td>
-                <td style="padding:10px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;color:#fff;background:${stage?.color || '#6b7280'};">${stage?.name || ''}</span></td>
-                <td style="padding:10px 12px;text-align:right;color:#2563eb;font-weight:600;">${r.forecast.toLocaleString()}h</td>
-                <td style="padding:10px 12px;text-align:right;color:#16a34a;font-weight:600;">${r.actual.toLocaleString()}h</td>
-                <td style="padding:10px 12px;text-align:right;font-weight:700;color:${delta < 0 ? '#16a34a' : delta > 0 ? '#dc2626' : 'var(--ies-gray-400)'};">${delta > 0 ? '+' : ''}${delta.toLocaleString()}h</td>
+                <td style="padding:10px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;color:#fff;background:${stage?.color || 'var(--c-muted)'};">${stage?.name || ''}</span></td>
+                <td style="padding:10px 12px;text-align:right;color:var(--c-info);font-weight:600;">${r.forecast.toLocaleString()}h</td>
+                <td style="padding:10px 12px;text-align:right;color:var(--c-success);font-weight:600;">${r.actual.toLocaleString()}h</td>
+                <td style="padding:10px 12px;text-align:right;font-weight:700;color:${delta < 0 ? 'var(--c-success)' : delta > 0 ? 'var(--c-danger)' : 'var(--ies-gray-400)'};">${delta > 0 ? '+' : ''}${delta.toLocaleString()}h</td>
               </tr>
             `;
           }).join('')}
@@ -1030,7 +1030,7 @@ function renderDetail() {
           </div>
         </div>
         <span style="display:inline-block;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;color:#fff;background:${stage.color};">Stage ${d.stage}: ${stage.name}</span>
-        ${d.score !== '—' ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;font-size:16px;font-weight:800;color:#fff;background:${d.score.startsWith('A') ? '#16a34a' : '#2563eb'};">${d.score}</span>` : ''}
+        ${d.score !== '—' ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;font-size:16px;font-weight:800;color:#fff;background:${d.score.startsWith('A') ? 'var(--c-success)' : 'var(--c-info)'};">${d.score}</span>` : ''}
       </div>
 
       <!-- Quick Action chip group — surfaces most-used workflow actions without
@@ -1053,8 +1053,8 @@ function renderDetail() {
             ? `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="advance-stage" title="Move this deal to Stage ${d.stage + 1}">Advance to Stage ${d.stage + 1} →</button>`
             : `<span class="hub-chip" style="font-size:11px;color:var(--ies-gray-500);background:var(--ies-gray-100);padding:4px 10px;border-radius:16px;">Final stage reached</span>`}
           ${d.isReal ? `
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="deal-outcome" data-outcome="won" title="Close this deal as Won" style="color:#16a34a;border-color:#bbe5c8;">Won</button>
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="deal-outcome" data-outcome="lost" title="Close this deal as Lost" style="color:#dc2626;border-color:#f3c1c1;">Lost</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="deal-outcome" data-outcome="won" title="Close this deal as Won" style="color:var(--c-success);border-color:#bbe5c8;">Won</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="deal-outcome" data-outcome="lost" title="Close this deal as Lost" style="color:var(--c-danger);border-color:#f3c1c1;">Lost</button>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="deal-outcome" data-outcome="withdrawn" title="Close as Withdrawn / No decision">…</button>` : ''}`;
         })()}
         ${renderCostModelButton(d)}
@@ -1134,7 +1134,7 @@ function renderDealWinStrategy() {
   const s = getStrategy(d.id);
   return `
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
-      <div class="hub-card" style="padding:16px;">
+      <div class="hub-card u-p-4">
         <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Value Proposition</div>
         <textarea data-strategy-field="valueProp" rows="4" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-family:Montserrat,sans-serif;font-size:13px;line-height:1.5;resize:vertical;">${escapeAttr(s.valueProp)}</textarea>
 
@@ -1146,23 +1146,23 @@ function renderDealWinStrategy() {
       </div>
 
       <div style="display:flex;flex-direction:column;gap:16px;">
-        <div class="hub-card" style="padding:16px;">
-          <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#dc2626;">Risks</div>
+        <div class="hub-card u-p-4">
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--c-danger);">Risks</div>
           <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--ies-gray-700);line-height:1.7;">
             ${s.risks.map((x, i) => `<li><input type="text" data-strategy-list="risks" data-strategy-idx="${i}" value="${escapeAttr(x)}" style="width:100%;border:none;padding:2px 0;font-family:Montserrat,sans-serif;font-size:13px;background:transparent;"/></li>`).join('')}
           </ul>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" data-strategy-add="risks" style="font-size:11px;margin-top:6px;">+ Add risk</button>
         </div>
 
-        <div class="hub-card" style="padding:16px;">
-          <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#d97706;">Open Asks</div>
+        <div class="hub-card u-p-4">
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--c-warn-strong);">Open Asks</div>
           <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--ies-gray-700);line-height:1.7;">
             ${s.asks.map((x, i) => `<li><input type="text" data-strategy-list="asks" data-strategy-idx="${i}" value="${escapeAttr(x)}" style="width:100%;border:none;padding:2px 0;font-family:Montserrat,sans-serif;font-size:13px;background:transparent;"/></li>`).join('')}
           </ul>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" data-strategy-add="asks" style="font-size:11px;margin-top:6px;">+ Add ask</button>
         </div>
 
-        <div class="hub-card" style="padding:16px;">
+        <div class="hub-card u-p-4">
           <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Competitor Threats</div>
           <input type="text" data-strategy-field="competitorThreats" value="${escapeAttr(s.competitorThreats)}" style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-family:Montserrat,sans-serif;font-size:13px;"/>
         </div>
@@ -1360,16 +1360,16 @@ function _scheduleStrategySave(dealId) {
 function renderCostModelButton(d) {
   if (!d?.isReal || !Array.isArray(d.models) || d.models.length === 0) {
     if (d?.isReal) {
-      return `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="create-cost-model" data-deal-id="${escapeAttr(d.id)}" style="text-align:left;">+ Create cost model for this deal</button>`;
+      return `<button class="hub-btn hub-btn-sm hub-btn-primary u-left" data-action="create-cost-model" data-deal-id="${escapeAttr(d.id)}">+ Create cost model for this deal</button>`;
     }
-    return `<button class="hub-btn hub-btn-sm" data-action="open-cost-model" style="text-align:left;">Open Cost Model Builder →</button>`;
+    return `<button class="hub-btn hub-btn-sm u-left" data-action="open-cost-model">Open Cost Model Builder →</button>`;
   }
   if (d.models.length === 1) {
     const m = d.models[0];
     const lbl = m.scenario_label ? `${m.name || 'Cost model'} — ${m.scenario_label}` : (m.name || 'Cost model');
-    return `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="open-cost-model-id" data-model-id="${m.id}" style="text-align:left;">Open ${escapeAttr(lbl)} →</button>`;
+    return `<button class="hub-btn hub-btn-sm hub-btn-primary u-left" data-action="open-cost-model-id" data-model-id="${m.id}">Open ${escapeAttr(lbl)} →</button>`;
   }
-  return `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="choose-cost-model" data-deal-id="${escapeAttr(d.id)}" style="text-align:left;">Choose from ${d.models.length} cost-model scenarios →</button>`;
+  return `<button class="hub-btn hub-btn-sm hub-btn-primary u-left" data-action="choose-cost-model" data-deal-id="${escapeAttr(d.id)}">Choose from ${d.models.length} cost-model scenarios →</button>`;
 }
 
 /**
@@ -1381,7 +1381,7 @@ function renderCostModelButton(d) {
 function renderCostBreakdownCard(d) {
   if (!d?.isReal) {
     return `
-      <div class="hub-card" style="padding:16px;">
+      <div class="hub-card u-p-4">
         <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Cost Breakdown (Placeholder)</div>
         <div style="text-align:center;padding:20px;color:var(--ies-gray-400);">
           <div style="font-size:12px;margin-bottom:8px;">Build a cost model to see detailed cost breakdown.</div>
@@ -1395,7 +1395,7 @@ function renderCostBreakdownCard(d) {
   const headerLabel = total === 0 ? 'Cost Models' : `Cost Models · ${total}`;
   if (total === 0) {
     return `
-      <div class="hub-card" style="padding:16px;">
+      <div class="hub-card u-p-4">
         <div style="font-size:13px;font-weight:700;margin-bottom:12px;">${headerLabel}</div>
         <div style="text-align:center;padding:20px;color:var(--ies-gray-400);">
           <div style="font-size:12px;margin-bottom:8px;">No cost models linked to this deal yet.</div>
@@ -1418,16 +1418,16 @@ function renderCostBreakdownCard(d) {
         <td style="padding:8px 6px;color:var(--ies-gray-500);">${sqft}</td>
         <td style="padding:8px 6px;color:var(--ies-gray-500);">${margin}</td>
         <td style="padding:8px 6px;text-align:right;">
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="open-cost-model-id" data-model-id="${m.id}" style="font-size:11px;">Open →</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary u-cap" data-action="open-cost-model-id" data-model-id="${m.id}">Open →</button>
         </td>
       </tr>
     `;
   }).join('');
   return `
-    <div class="hub-card" style="padding:16px;">
+    <div class="hub-card u-p-4">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div style="font-size:13px;font-weight:700;">${headerLabel}</div>
-        ${total > 1 ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="choose-cost-model" data-deal-id="${escapeAttr(d.id)}" style="font-size:11px;">Compare ${total} scenarios →</button>` : ''}
+        <div class="u-13 u-bold">${headerLabel}</div>
+        ${total > 1 ? `<button class="hub-btn hub-btn-sm hub-btn-secondary u-cap" data-action="choose-cost-model" data-deal-id="${escapeAttr(d.id)}">Compare ${total} scenarios →</button>` : ''}
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:12px;">
         <thead><tr style="background:var(--ies-gray-50);color:var(--ies-gray-400);font-size:10px;font-weight:700;">
@@ -1542,16 +1542,16 @@ function renderDealArtifacts() {
   return `
     <div class="hub-card" style="padding:0;overflow-x:auto;">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--ies-gray-100);">
-        <div style="font-size:13px;font-weight:700;">Linked Artifacts</div>
-        <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="add-artifact" style="font-size:11px;">+ Link Artifact</button>
+        <div class="u-13 u-bold">Linked Artifacts</div>
+        <button class="hub-btn hub-btn-sm hub-btn-primary u-cap" data-action="add-artifact">+ Link Artifact</button>
       </div>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <table class="u-table">
         <thead>
           <tr style="background:var(--ies-gray-50);">
             <th style="text-align:left;padding:10px 16px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Type</th>
-            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Name</th>
-            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Reference</th>
-            <th style="text-align:left;padding:10px 12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Updated</th>
+            <th class="dm-th">Name</th>
+            <th class="dm-th">Reference</th>
+            <th class="dm-th">Updated</th>
             <th style="text-align:right;padding:10px 16px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Actions</th>
           </tr>
         </thead>
@@ -1567,11 +1567,11 @@ function renderDealArtifacts() {
                 <td style="padding:10px 12px;color:var(--ies-gray-500);">${formatDate(a.updated)}</td>
                 <td style="padding:10px 16px;text-align:right;">
                   ${a.kind === 'cost_model' && a.modelId
-                    ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="open-cost-model-id" data-model-id="${a.modelId}" style="font-size:11px;">Open →</button>`
+                    ? `<button class="hub-btn hub-btn-sm hub-btn-secondary u-cap" data-action="open-cost-model-id" data-model-id="${a.modelId}">Open →</button>`
                     : (a.kind === 'cost_model'
-                        ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-artifact-open="${escapeAttr(kind.route)}" style="font-size:11px;" title="Demo artifact — opens Cost Model landing">Open →</button>`
-                        : `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-artifact-open="${escapeAttr(kind.route)}" style="font-size:11px;">Open →</button>`)}
-                  <button class="hub-btn hub-btn-sm hub-btn-secondary" data-artifact-unlink="${a.id}" style="font-size:11px;color:#dc2626;">Unlink</button>
+                        ? `<button class="hub-btn hub-btn-sm hub-btn-secondary u-cap" data-artifact-open="${escapeAttr(kind.route)}" title="Demo artifact — opens Cost Model landing">Open →</button>`
+                        : `<button class="hub-btn hub-btn-sm hub-btn-secondary u-cap" data-artifact-open="${escapeAttr(kind.route)}">Open →</button>`)}
+                  <button class="hub-btn hub-btn-sm hub-btn-secondary" data-artifact-unlink="${a.id}" style="font-size:11px;color:var(--c-danger);">Unlink</button>
                 </td>
               </tr>
             `;
@@ -1590,7 +1590,7 @@ function renderDealOverview() {
     ${renderWorkflowRail(d)}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       <!-- Timeline -->
-      <div class="hub-card" style="padding:16px;">
+      <div class="hub-card u-p-4">
         <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Deal Timeline</div>
         <div style="display:flex;gap:4px;margin-bottom:12px;">
           ${DOS_STAGES.map(s => `
@@ -1598,15 +1598,15 @@ function renderDealOverview() {
           `).join('')}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
-          <div><span style="color:var(--ies-gray-400);">Started:</span> ${formatDate(d.startDate)}</div>
-          <div><span style="color:var(--ies-gray-400);">Target Close:</span> ${formatDate(d.targetClose)}</div>
-          <div><span style="color:var(--ies-gray-400);">Current Stage:</span> <span style="font-weight:700;color:${stage.color};">${stage.name}</span></div>
-          <div><span style="color:var(--ies-gray-400);">Days in Stage:</span> <span style="font-weight:700;">${d.daysInStage}</span></div>
+          <div><span class="u-faint">Started:</span> ${formatDate(d.startDate)}</div>
+          <div><span class="u-faint">Target Close:</span> ${formatDate(d.targetClose)}</div>
+          <div><span class="u-faint">Current Stage:</span> <span style="font-weight:700;color:${stage.color};">${stage.name}</span></div>
+          <div><span class="u-faint">Days in Stage:</span> <span class="u-bold">${d.daysInStage}</span></div>
         </div>
       </div>
 
       <!-- Actions -->
-      <div class="hub-card" style="padding:16px;">
+      <div class="hub-card u-p-4">
         <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Quick Actions</div>
         <div style="display:flex;flex-direction:column;gap:8px;">
           ${renderCostModelButton(d)}
@@ -1640,11 +1640,11 @@ function renderWorkflowRail(d) {
   const dosPct = dosTotal > 0 ? Math.round((dosDone / dosTotal) * 100) : 0;
 
   const smartLabel = (n, noun) => n === 0 ? `Start ${noun} →` : (n === 1 ? `Open →` : `View ${n} →`);
-  const dot = (n) => `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:${n > 0 ? '#16a34a' : 'var(--ies-gray-200)'};"></span>`;
+  const dot = (n) => `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:${n > 0 ? 'var(--c-success)' : 'var(--ies-gray-200)'};"></span>`;
 
   const stages = [
     { key: 'scope',   name: 'Scope',   sub: 'Deal basics · DOS',   count: null,
-      dotHtml: `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:${dosPct >= 100 ? '#16a34a' : dosPct > 0 ? '#eab308' : 'var(--ies-gray-200)'};"></span>`,
+      dotHtml: `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:${dosPct >= 100 ? 'var(--c-success)' : dosPct > 0 ? '#eab308' : 'var(--ies-gray-200)'};"></span>`,
       countTxt: `DOS ${dosPct}%`,
       btn: `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-detail-tab="dos">Open DOS →</button>` },
     { key: 'size',    name: 'Size',    sub: 'Warehouse Sizing',    count: ds.wsc.length,
@@ -1666,8 +1666,8 @@ function renderWorkflowRail(d) {
   return `
     <div class="hub-card" style="padding:0;margin-bottom:16px;overflow:hidden;">
       <div style="padding:12px 16px;border-bottom:1px solid var(--ies-gray-100);display:flex;align-items:center;justify-content:space-between;">
-        <div style="font-size:13px;font-weight:700;">Workflow</div>
-        <div style="font-size:11px;color:var(--ies-gray-400);">Scenarios launched here open pre-bound to this deal</div>
+        <div class="u-13 u-bold">Workflow</div>
+        <div class="u-cap u-faint">Scenarios launched here open pre-bound to this deal</div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(6,1fr);">
         ${stages.map((st, i) => `
@@ -1806,8 +1806,8 @@ function renderDealFinancialsMsa() {
   return `
     <div class="hub-card" style="padding:16px;margin-bottom:16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div style="font-size:13px;font-weight:700;">Deal P&amp;L ${usingBid ? '<span style="color:#16a34a;font-size:11px;font-weight:700;">★ in-bid scenarios only</span>' : '<span style="color:var(--ies-gray-400);font-size:11px;">all linked scenarios — mark ★ in bid on Site Details to pin the bid set</span>'}</div>
-        <div style="font-size:11px;color:var(--ies-gray-400);">${sites.length} scenario${sites.length === 1 ? '' : 's'} · ${d.contractTermYears || 5}-yr term · engine: Multi-Site calc · pricing: CM-authoritative</div>
+        <div class="u-13 u-bold">Deal P&amp;L ${usingBid ? '<span style="color:var(--c-success);font-size:11px;font-weight:700;">★ in-bid scenarios only</span>' : '<span style="color:var(--ies-gray-400);font-size:11px;">all linked scenarios — mark ★ in bid on Site Details to pin the bid set</span>'}</div>
+        <div class="u-cap u-faint">${sites.length} scenario${sites.length === 1 ? '' : 's'} · ${d.contractTermYears || 5}-yr term · engine: Multi-Site calc · pricing: CM-authoritative</div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;">
         ${[['Revenue', money(fin.totalAnnualRevenue)], ['Cost', money(fin.totalAnnualCost)],
@@ -1819,7 +1819,7 @@ function renderDealFinancialsMsa() {
       </div>
     </div>
     <div class="hub-card" style="padding:0;overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <table class="u-table">
         <thead><tr style="background:var(--ies-gray-50);font-size:11px;color:var(--ies-gray-400);">
           <th style="text-align:left;padding:10px 16px;">Scenario</th>
           <th style="text-align:right;padding:10px 12px;">Revenue</th>
@@ -1831,8 +1831,8 @@ function renderDealFinancialsMsa() {
         <tbody>
           ${sites.map(sx => { const f = byId.get(sx.costModelId); return `
             <tr style="border-top:1px solid var(--ies-gray-100);">
-              <td style="padding:9px 16px;font-weight:600;">${sx.inBid ? '<span style="color:#16a34a;">★</span> ' : ''}${escapeHtml(sx.name)}</td>
-              <td style="padding:9px 12px;text-align:right;">${money(f.annualRevenue)}${f.revenueSource === 'estimate' ? ' <span title="Markup-heuristic estimate — this model has never been saved through the Cost Model engine. Save it in CM to replace this with engine pricing." style="font-size:10px;font-weight:700;color:#b45309;background:#fef3c7;border-radius:8px;padding:1px 6px;vertical-align:middle;">est</span>' : ''}</td>
+              <td style="padding:9px 16px;font-weight:600;">${sx.inBid ? '<span style="color:var(--c-success);">★</span> ' : ''}${escapeHtml(sx.name)}</td>
+              <td style="padding:9px 12px;text-align:right;">${money(f.annualRevenue)}${f.revenueSource === 'estimate' ? ' <span title="Markup-heuristic estimate — this model has never been saved through the Cost Model engine. Save it in CM to replace this with engine pricing." style="font-size:10px;font-weight:700;color:var(--c-warn-deep);background:var(--c-warn-bg);border-radius:8px;padding:1px 6px;vertical-align:middle;">est</span>' : ''}</td>
               <td style="padding:9px 12px;text-align:right;">${money(f.annualCost)}</td>
               <td style="padding:9px 12px;text-align:right;font-weight:600;">${f.grossMarginPct.toFixed(1)}%</td>
               <td style="padding:9px 12px;text-align:right;">${(sx.sqft || 0).toLocaleString()}</td>
@@ -1854,8 +1854,8 @@ function renderDealSensitivity() {
   const sens = msaCalc.calcDealSensitivity(sites, { years: d.contractTermYears || 5 });
   const cellColor = (e) => e >= 12 ? '#dcfce7' : e >= 8 ? '#fef9c3' : '#fee2e2';
   return `
-    <div class="hub-card" style="padding:16px;">
-      <div style="font-size:13px;font-weight:700;margin-bottom:4px;">EBITDA % sensitivity ${usingBid ? '<span style="color:#16a34a;font-size:11px;">★ in-bid set</span>' : ''}</div>
+    <div class="hub-card u-p-4">
+      <div style="font-size:13px;font-weight:700;margin-bottom:4px;">EBITDA % sensitivity ${usingBid ? '<span style="color:var(--c-success);font-size:11px;">★ in-bid set</span>' : ''}</div>
       <div style="font-size:11px;color:var(--ies-gray-400);margin-bottom:12px;">Rows: target margin shift (pts) · Columns: annual cost flex (%) · engine: Multi-Site calc</div>
       <table style="border-collapse:collapse;font-size:12.5px;">
         <thead><tr><th style="padding:6px 10px;"></th>${sens.xRange.map(x => `<th style="padding:6px 14px;font-size:11px;color:var(--ies-gray-500);">cost ${x > 0 ? '+' : ''}${x}%</th>`).join('')}</tr></thead>
@@ -1898,12 +1898,12 @@ function renderDealCompare() {
     </tr>`;
   };
   return `
-    <div class="hub-card" style="padding:16px;">
+    <div class="hub-card u-p-4">
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
-        <div style="font-size:13px;font-weight:700;">Compare scenarios</div>
-        ${pick(_cmpSiteA, 'a')} <span style="color:var(--ies-gray-400);">vs</span> ${pick(_cmpSiteB, 'b')}
+        <div class="u-13 u-bold">Compare scenarios</div>
+        ${pick(_cmpSiteA, 'a')} <span class="u-faint">vs</span> ${pick(_cmpSiteB, 'b')}
       </div>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <table class="u-table">
         <thead><tr style="background:var(--ies-gray-50);font-size:11px;color:var(--ies-gray-400);">
           <th style="text-align:left;padding:8px 16px;">Metric</th>
           <th style="text-align:right;padding:8px 12px;">${escapeHtml(A.name)}</th>
@@ -1945,14 +1945,14 @@ function renderDealSites() {
         </td></tr>` : '';
 
   return `
-    <div class="hub-card" style="padding:16px;">
+    <div class="hub-card u-p-4">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div style="font-size:13px;font-weight:700;">Site Details (${sites.length})</div>
+        <div class="u-13 u-bold">Site Details (${sites.length})</div>
         ${addBtn}
       </div>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <table class="u-table">
         <thead>
-          <tr style="border-bottom:2px solid var(--ies-gray-200);">
+          <tr class="u-th-rule">
             <th style="text-align:left;padding:8px;">Site Name</th>
             <th style="text-align:left;padding:8px;">Market</th>
             <th style="text-align:right;padding:8px;">Sq Ft</th>
@@ -1976,7 +1976,7 @@ function renderDealSites() {
             return `
             <tr style="border-bottom:1px solid var(--ies-gray-100);">
               <td style="padding:8px;font-weight:600;vertical-align:top;">${escapeHtml(s.name)}
-                <div style="margin-top:4px;">${chips || '<span style="font-size:11px;color:var(--ies-gray-400);">no scenarios</span>'}</div>
+                <div class="u-mt-1">${chips || '<span class="u-cap u-faint">no scenarios</span>'}</div>
               </td>
               <td style="padding:8px;color:var(--ies-gray-500);vertical-align:top;">${escapeHtml(s.market)}</td>
               <td style="padding:8px;text-align:right;font-weight:600;vertical-align:top;">${(s.sqft || 0).toLocaleString()}</td>
@@ -2002,13 +2002,13 @@ function renderDealDos() {
   const requiredOpen = currentTemplates.filter(t => t.required && _dosStatusFor(d.id, t) !== 'complete').length;
   const canAdvance = d.stage < 6 && requiredOpen === 0;
   const advanceBanner = canAdvance ? `
-    <div class="hub-card" style="padding:14px 16px;background:#f0fdf4;border:1px solid #86efac;display:flex;align-items:center;gap:12px;">
-      <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:#16a34a;color:#fff;font-weight:800;">✓</span>
+    <div class="hub-card" style="padding:14px 16px;background:var(--c-success-soft);border:1px solid #86efac;display:flex;align-items:center;gap:12px;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--c-success);color:#fff;font-weight:800;">✓</span>
       <div style="flex:1;">
-        <div style="font-size:13px;font-weight:700;color:#166534;">Stage ${d.stage} requirements met</div>
-        <div style="font-size:11px;color:#15803d;">All required activities for this stage are complete. You can advance to Stage ${d.stage + 1}.</div>
+        <div style="font-size:13px;font-weight:700;color:var(--c-success-ink);">Stage ${d.stage} requirements met</div>
+        <div style="font-size:11px;color:var(--c-success-strong);">All required activities for this stage are complete. You can advance to Stage ${d.stage + 1}.</div>
       </div>
-      <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="advance-stage" style="font-size:12px;">Advance to Stage ${d.stage + 1} →</button>
+      <button class="hub-btn hub-btn-sm hub-btn-primary u-12" data-action="advance-stage">Advance to Stage ${d.stage + 1} →</button>
     </div>
   ` : (d.stage < 6 ? `
     <div style="font-size:11px;color:var(--ies-gray-500);background:var(--ies-gray-50);padding:8px 12px;border-radius:6px;">${requiredOpen} required activit${requiredOpen === 1 ? 'y' : 'ies'} still open in Stage ${d.stage} — finish to unlock auto-advance.</div>
@@ -2026,7 +2026,7 @@ function renderDealDos() {
           <div class="hub-card" style="padding:16px;border-left:3px solid ${stage.color};">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
               <span style="font-size:13px;font-weight:700;flex:1;">Stage ${stage.id}: ${stage.name}</span>
-              <span style="font-size:12px;font-weight:700;color:${pct === 100 ? '#16a34a' : '#d97706'};">${completed}/${templates.length} (${pct}%)</span>
+              <span style="font-size:12px;font-weight:700;color:${pct === 100 ? 'var(--c-success)' : 'var(--c-warn-strong)'};">${completed}/${templates.length} (${pct}%)</span>
             </div>
             <div style="height:4px;background:var(--ies-gray-100);border-radius:2px;margin-bottom:10px;overflow:hidden;">
               <div style="width:${pct}%;height:100%;background:${stage.color};border-radius:2px;"></div>
@@ -2039,7 +2039,7 @@ function renderDealDos() {
                 <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--ies-gray-50);cursor:pointer;" data-dos-toggle="${t.id}">
                   <span style="font-size:14px;">${statusIcon}</span>
                   <span style="font-size:13px;flex:1;${status === 'complete' ? 'text-decoration:line-through;color:var(--ies-gray-400);' : ''}">${t.name}</span>
-                  ${t.required ? '<span style="font-size:9px;font-weight:700;color:#dc2626;padding:1px 6px;border-radius:10px;border:1px solid #dc2626;">REQ</span>' : ''}
+                  ${t.required ? '<span style="font-size:9px;font-weight:700;color:var(--c-danger);padding:1px 6px;border-radius:10px;border:1px solid var(--c-danger);">REQ</span>' : ''}
                   <span style="font-size:11px;font-weight:600;color:${statusColor};">${status}</span>
                 </div>
               `;
@@ -2061,28 +2061,28 @@ function renderDealFinancials() {
 
   return `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      <div class="hub-card" style="padding:16px;">
+      <div class="hub-card u-p-4">
         <div style="font-size:13px;font-weight:700;margin-bottom:12px;">Financial Summary</div>
         <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
           <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--ies-gray-100);">
-            <span style="color:var(--ies-gray-400);">Annual Revenue</span>
-            <span style="font-weight:700;">$${(d.revenue / 1e6).toFixed(1)}M</span>
+            <span class="u-faint">Annual Revenue</span>
+            <span class="u-bold">$${(d.revenue / 1e6).toFixed(1)}M</span>
           </div>
           <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--ies-gray-100);">
-            <span style="color:var(--ies-gray-400);">Target Margin</span>
-            <span style="font-weight:700;color:${d.margin >= 10 ? '#16a34a' : '#d97706'};">${d.margin > 0 ? d.margin + '%' : 'TBD'}</span>
+            <span class="u-faint">Target Margin</span>
+            <span style="font-weight:700;color:${d.margin >= 10 ? 'var(--c-success)' : 'var(--c-warn-strong)'};">${d.margin > 0 ? d.margin + '%' : 'TBD'}</span>
           </div>
           <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--ies-gray-100);">
-            <span style="color:var(--ies-gray-400);">Annual Profit (est.)</span>
-            <span style="font-weight:700;">${d.margin > 0 ? '$' + ((d.revenue * d.margin / 100) / 1e6).toFixed(2) + 'M' : 'TBD'}</span>
+            <span class="u-faint">Annual Profit (est.)</span>
+            <span class="u-bold">${d.margin > 0 ? '$' + ((d.revenue * d.margin / 100) / 1e6).toFixed(2) + 'M' : 'TBD'}</span>
           </div>
           <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--ies-gray-100);">
-            <span style="color:var(--ies-gray-400);">Contract Term (est.)</span>
-            <span style="font-weight:700;">5 years</span>
+            <span class="u-faint">Contract Term (est.)</span>
+            <span class="u-bold">5 years</span>
           </div>
           <div style="display:flex;justify-content:space-between;padding:6px 0;">
-            <span style="color:var(--ies-gray-400);">Lifetime Value (est.)</span>
-            <span style="font-weight:700;color:#2563eb;">$${(d.revenue * 5 / 1e6).toFixed(0)}M</span>
+            <span class="u-faint">Lifetime Value (est.)</span>
+            <span style="font-weight:700;color:var(--c-info);">$${(d.revenue * 5 / 1e6).toFixed(0)}M</span>
           </div>
         </div>
       </div>

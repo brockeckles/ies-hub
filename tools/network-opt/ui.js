@@ -20,6 +20,7 @@ import * as api from './api.js?v=20260702-sec2';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
+import { icon } from '../../shared/icons.js?v=20260705-u3e';
 
 // ============================================================
 // STATE
@@ -1407,7 +1408,7 @@ function renderComparePhase(el) {
             Max DCs
             <input type="number" id="netopt-max-dcs" min="1" max="20" value="${maxDCsToTest}" style="width:60px;padding:5px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;text-align:right;"/>
           </label>
-          <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="optimize-network" style="font-size:12px;padding:6px 12px;font-weight:700;">🎯 Optimize Network</button>
+          <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="optimize-network" style="font-size:12px;padding:6px 12px;font-weight:700;">${icon('target')} Optimize Network</button>
         </div>
       </div>
       <div id="np-phase-inner"></div>
@@ -1473,24 +1474,24 @@ function renderFacilities(el) {
   el.innerHTML = `
     <div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <h3 class="text-section" style="margin:0;">Facility Network</h3>
-        <div style="display:flex;gap:8px;">
+        <h3 class="text-section u-m0">Facility Network</h3>
+        <div class="u-flex">
           ${facilities.length === 0 && demands.length === 0 ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-load-sample" title="Seed 5 candidate DCs + 10 demand points so you can explore the optimizer without entering data.">Load Sample Network</button>` : ''}
           ${demands.length > 0
-            ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-find-optimal-header" title="Weighted k-means on your demand → recommended DC metros. Adds candidate facilities to the list without opening them.">🎯 Find Optimal Locations</button>`
-            : `<button class="hub-btn hub-btn-sm hub-btn-secondary" disabled title="Add demand points first — k-means needs demand to cluster against." style="opacity:0.55;cursor:not-allowed;">🎯 Find Optimal Locations</button>`}
+            ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-find-optimal-header" title="Weighted k-means on your demand → recommended DC metros. Adds candidate facilities to the list without opening them.">${icon('target')} Find Optimal Locations</button>`
+            : `<button class="hub-btn hub-btn-sm hub-btn-secondary" disabled title="Add demand points first — k-means needs demand to cluster against." style="opacity:0.55;cursor:not-allowed;">${icon('target')} Find Optimal Locations</button>`}
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-add-facility">+ Add Facility</button>
         </div>
       </div>
       ${facilities.length === 0 ? (demands.length > 0 ? `
-        <div class="hub-card" style="padding:24px;text-align:center;background:#f0fdf4;border:1px dashed #86efac;margin-bottom:16px;">
-          <div style="display:inline-flex;align-items:center;gap:6px;background:#dcfce7;color:#166534;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">
+        <div class="hub-card" style="padding:24px;text-align:center;background:var(--c-success-soft);border:1px dashed #86efac;margin-bottom:16px;">
+          <div style="display:inline-flex;align-items:center;gap:6px;background:var(--c-success-bg);color:var(--c-success-ink);padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">
             <span>✓</span><span>${demands.length} demand point${demands.length === 1 ? '' : 's'} loaded</span>
           </div>
           <div style="font-size:14px;font-weight:600;color:var(--ies-navy);margin-bottom:6px;">Step 2 of 3 — add candidate facilities</div>
           <div style="font-size:12px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:14px;">Demand is ready. Now seed candidate DC locations by clustering against your demand, or add them one at a time.</div>
           <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
-            <button class="hub-btn hub-btn-sm hub-btn-primary" id="no-find-optimal-empty" style="display:inline-flex;align-items:center;gap:6px;">🎯 Find Optimal Locations</button>
+            <button class="hub-btn hub-btn-sm hub-btn-primary u-inline-row" id="no-find-optimal-empty">${icon('target')} Find Optimal Locations</button>
             <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-add-facility-empty">+ Add Facility manually</button>
           </div>
         </div>
@@ -1501,17 +1502,17 @@ function renderFacilities(el) {
         </div>
       `) : ''}
 
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <table class="u-table">
         <thead>
-          <tr style="border-bottom:2px solid var(--ies-gray-200);">
-            <th style="text-align:left;padding:8px 6px;font-weight:700;">Active</th>
-            <th style="text-align:left;padding:8px 6px;font-weight:700;" title="Lock this facility's state — the optimizer respects locks during scenario sweeps.">Lock</th>
-            <th style="text-align:left;padding:8px 6px;font-weight:700;">Name</th>
-            <th style="text-align:left;padding:8px 6px;font-weight:700;">City</th>
-            <th style="text-align:left;padding:8px 6px;font-weight:700;">State</th>
-            <th style="text-align:right;padding:8px 6px;font-weight:700;">Capacity</th>
-            <th style="text-align:right;padding:8px 6px;font-weight:700;">Fixed Cost</th>
-            <th style="text-align:right;padding:8px 6px;font-weight:700;">$/Unit</th>
+          <tr class="u-th-rule">
+            <th class="no-th-txt">Active</th>
+            <th class="no-th-txt" title="Lock this facility's state — the optimizer respects locks during scenario sweeps.">Lock</th>
+            <th class="no-th-txt">Name</th>
+            <th class="no-th-txt">City</th>
+            <th class="no-th-txt">State</th>
+            <th class="no-th-num">Capacity</th>
+            <th class="no-th-num">Fixed Cost</th>
+            <th class="no-th-num">$/Unit</th>
             <th style="text-align:center;padding:8px 6px;font-weight:700;"></th>
           </tr>
         </thead>
@@ -1523,10 +1524,10 @@ function renderFacilities(el) {
             return `
             <tr style="border-bottom:1px solid var(--ies-gray-200);${f.isOpen ? '' : 'opacity:0.5;'}">
               <td style="padding:8px 6px;">
-                <input type="checkbox" ${f.isOpen ? 'checked' : ''} data-fac-toggle="${i}" ${lockState !== 'none' ? 'disabled' : ''} style="cursor:pointer;" title="${lockState !== 'none' ? 'Locked — clear lock to toggle' : ''}">
+                <input type="checkbox" ${f.isOpen ? 'checked' : ''} data-fac-toggle="${i}" ${lockState !== 'none' ? 'disabled' : ''} class="u-pointer" title="${lockState !== 'none' ? 'Locked — clear lock to toggle' : ''}">
               </td>
               <td style="padding:8px 6px;">
-                <select data-fac-lock="${f.id}" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:${lockState === 'open' ? '#dbeafe' : lockState === 'closed' ? '#fee2e2' : '#fff'};">
+                <select data-fac-lock="${f.id}" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:${lockState === 'open' ? 'var(--c-info-bg)' : lockState === 'closed' ? 'var(--c-danger-bg)' : '#fff'};">
                   <option value="none"${lockState === 'none' ? ' selected' : ''}>—</option>
                   <option value="open"${lockState === 'open' ? ' selected' : ''}>🔒 Open</option>
                   <option value="closed"${lockState === 'closed' ? ' selected' : ''}>🔒 Closed</option>
@@ -1535,9 +1536,9 @@ function renderFacilities(el) {
               <td style="padding:8px 6px;font-weight:600;">${f.name}</td>
               <td style="padding:8px 6px;">${f.city || ''}</td>
               <td style="padding:8px 6px;">${f.state || ''}</td>
-              <td style="padding:8px 6px;text-align:right;">${(f.capacity || 0).toLocaleString()}</td>
-              <td style="padding:8px 6px;text-align:right;">${calc.formatCurrency(f.fixedCost || 0, { compact: true })}</td>
-              <td style="padding:8px 6px;text-align:right;">$${(f.variableCost || 0).toFixed(2)}</td>
+              <td class="no-td-num">${(f.capacity || 0).toLocaleString()}</td>
+              <td class="no-td-num">${calc.formatCurrency(f.fixedCost || 0, { compact: true })}</td>
+              <td class="no-td-num">$${(f.variableCost || 0).toFixed(2)}</td>
               <td style="padding:8px 6px;text-align:center;">
                 <button class="hub-btn hub-btn-sm hub-btn-secondary" data-fac-delete="${i}" style="padding:4px 8px;">✕</button>
               </td>
@@ -1546,18 +1547,18 @@ function renderFacilities(el) {
         </tbody>
       </table>
 
-      <div class="hub-card" style="margin-top:20px;background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 20px;">
+      <div class="hub-card" style="margin-top:20px;background:linear-gradient(135deg,var(--c-ink-deep),#0d1f3c);color:#fff;padding:16px 20px;">
         <div style="display:flex;gap:32px;align-items:center;">
           <div>
-            <span style="font-size:11px;font-weight:700;text-transform:uppercase;opacity:0.6;">Open DCs</span>
+            <span class="no-kicker">Open DCs</span>
             <div style="font-size:32px;font-weight:800;">${facilities.filter(f => f.isOpen).length}</div>
           </div>
           <div style="border-left:1px solid rgba(255,255,255,.15);padding-left:32px;">
-            <span style="font-size:11px;font-weight:700;text-transform:uppercase;opacity:0.6;">Total Capacity</span>
+            <span class="no-kicker">Total Capacity</span>
             <div style="font-size:32px;font-weight:800;">${facilities.filter(f => f.isOpen).reduce((s, f) => s + (f.capacity || 0), 0).toLocaleString()}</div>
           </div>
           <div style="border-left:1px solid rgba(255,255,255,.15);padding-left:32px;">
-            <span style="font-size:11px;font-weight:700;text-transform:uppercase;opacity:0.6;">Annual Fixed Cost</span>
+            <span class="no-kicker">Annual Fixed Cost</span>
             <div style="font-size:32px;font-weight:800;">${calc.formatCurrency(facilities.filter(f => f.isOpen).reduce((s, f) => s + (f.fixedCost || 0), 0), { compact: true })}</div>
           </div>
         </div>
@@ -1665,8 +1666,8 @@ function renderDemand(el) {
   el.innerHTML = `
     <div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <h3 class="text-section" style="margin:0;">Demand Points</h3>
-        <div style="display:flex;gap:8px;">
+        <h3 class="text-section u-m0">Demand Points</h3>
+        <div class="u-flex">
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-upload-demand-csv" title="Upload demand points from CSV — columns: lat+lng, zip, or city/state, plus demand/volume (P2-3b)">⬆ Upload CSV</button>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-add-demand">+ Add Point</button>
         </div>
@@ -1681,20 +1682,20 @@ function renderDemand(el) {
       ` : ''}
 
       <div style="max-height:400px;overflow-y:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <table class="u-table">
           <thead style="position:sticky;top:0;background:#fff;z-index:1;">
-            <tr style="border-bottom:2px solid var(--ies-gray-200);">
-              <th style="text-align:left;padding:8px 6px;font-weight:700;">ZIP3</th>
-              <th style="text-align:left;padding:8px 6px;font-weight:700;" title="Channel binding (Phase 4 of volumes-as-nucleus). Free text — filter chips above auto-derive from distinct values. Match the Cost Model channel.key for downstream mode-mix routing.">Channel</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Lat</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Lng</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Annual Demand</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Max Days</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Avg Wt (lbs)</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;" title="NMFC freight class for LTL costing — drives the class multiplier (50 dense → 0.65×; 500 light → 2.60×). 100 is baseline.">NMFC</th>
-              <th style="text-align:left;padding:8px 6px;font-weight:700;" title="UN hazmat class (1.1 explosives → 9 misc). Blank = none. Drives ~12% TL premium and route restrictions.">Hazmat</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;" title="Annual demand distribution profile. Drives peak-month sizing.">Seasonality</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;" title="Order cadence. Drives LTL↔TL break-even — low frequency favors LTL even at higher per-mile rates.">Frequency</th>
+            <tr class="u-th-rule">
+              <th class="no-th-txt">ZIP3</th>
+              <th class="no-th-txt" title="Channel binding (Phase 4 of volumes-as-nucleus). Free text — filter chips above auto-derive from distinct values. Match the Cost Model channel.key for downstream mode-mix routing.">Channel</th>
+              <th class="no-th-num">Lat</th>
+              <th class="no-th-num">Lng</th>
+              <th class="no-th-num">Annual Demand</th>
+              <th class="no-th-num">Max Days</th>
+              <th class="no-th-num">Avg Wt (lbs)</th>
+              <th class="no-th-num" title="NMFC freight class for LTL costing — drives the class multiplier (50 dense → 0.65×; 500 light → 2.60×). 100 is baseline.">NMFC</th>
+              <th class="no-th-txt" title="UN hazmat class (1.1 explosives → 9 misc). Blank = none. Drives ~12% TL premium and route restrictions.">Hazmat</th>
+              <th class="no-th-num" title="Annual demand distribution profile. Drives peak-month sizing.">Seasonality</th>
+              <th class="no-th-num" title="Order cadence. Drives LTL↔TL break-even — low frequency favors LTL even at higher per-mile rates.">Frequency</th>
               <th style="text-align:center;padding:8px 6px;font-weight:700;"></th>
             </tr>
           </thead>
@@ -1707,12 +1708,12 @@ function renderDemand(el) {
                 <td style="padding:6px;">
                   <input type="text" data-dem-channel="${i}" value="${escapeAttr(d.channelKey || '')}" placeholder="(unmapped)" maxlength="32" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:#fff;width:90px;" title="Free-text channel binding — match a Cost Model channel.key (e.g. dtc, b2b) when present." />
                 </td>
-                <td style="padding:6px;text-align:right;">${Number.isFinite(Number(d.lat)) ? Number(d.lat).toFixed(2) : '<span style="color:#dc2626;" title="Missing — re-add this row or set the city to auto-resolve">—</span>'}</td>
-                <td style="padding:6px;text-align:right;">${Number.isFinite(Number(d.lng)) ? Number(d.lng).toFixed(2) : '<span style="color:#dc2626;" title="Missing — re-add this row or set the city to auto-resolve">—</span>'}</td>
-                <td style="padding:6px;text-align:right;">${Number.isFinite(Number(d.annualDemand)) ? Number(d.annualDemand).toLocaleString() : '0'}</td>
-                <td style="padding:6px;text-align:right;">${d.maxDays || 3}</td>
-                <td style="padding:6px;text-align:right;">${d.avgWeight || 25}</td>
-                <td style="padding:6px;text-align:right;">
+                <td class="u-td-num">${Number.isFinite(Number(d.lat)) ? Number(d.lat).toFixed(2) : '<span style="color:var(--c-danger);" title="Missing — re-add this row or set the city to auto-resolve">—</span>'}</td>
+                <td class="u-td-num">${Number.isFinite(Number(d.lng)) ? Number(d.lng).toFixed(2) : '<span style="color:var(--c-danger);" title="Missing — re-add this row or set the city to auto-resolve">—</span>'}</td>
+                <td class="u-td-num">${Number.isFinite(Number(d.annualDemand)) ? Number(d.annualDemand).toLocaleString() : '0'}</td>
+                <td class="u-td-num">${d.maxDays || 3}</td>
+                <td class="u-td-num">${d.avgWeight || 25}</td>
+                <td class="u-td-num">
                   <select data-dem-nmfc="${i}" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:#fff;">
                     ${calc.NMFC_CLASS_CODES.map(c => `<option value="${c}"${(d.nmfcClass || 100) === c ? ' selected' : ''}>${c}</option>`).join('')}
                   </select>
@@ -1723,12 +1724,12 @@ function renderDemand(el) {
                     ${calc.HAZMAT_CLASSES.map(c => `<option value="${c}"${(d.hazmatClass === c || (!d.hazmatClass && d.hazmat && c.startsWith('9 '))) ? ' selected' : ''}>${c}</option>`).join('')}
                   </select>
                 </td>
-                <td style="padding:6px;text-align:right;">
+                <td class="u-td-num">
                   <select data-dem-seasonality="${i}" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:#fff;">
                     ${['uniform','holiday','spring','summer','back_to_school','custom'].map(s => `<option value="${s}"${(d.seasonality || 'uniform') === s ? ' selected' : ''}>${s.replace('_',' ')}</option>`).join('')}
                   </select>
                 </td>
-                <td style="padding:6px;text-align:right;">
+                <td class="u-td-num">
                   <select data-dem-frequency="${i}" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:#fff;">
                     ${calc.FREQUENCY_OPTIONS.map(f => `<option value="${f}"${(d.frequency || 'weekly') === f ? ' selected' : ''}>${f}</option>`).join('')}
                   </select>
@@ -1743,18 +1744,18 @@ function renderDemand(el) {
         </table>
       </div>
 
-      <div class="hub-card" style="margin-top:20px;background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 20px;">
+      <div class="hub-card" style="margin-top:20px;background:linear-gradient(135deg,var(--c-ink-deep),#0d1f3c);color:#fff;padding:16px 20px;">
         <div style="display:flex;gap:32px;align-items:center;">
           <div>
-            <span style="font-size:11px;font-weight:700;text-transform:uppercase;opacity:0.6;">Demand Points</span>
+            <span class="no-kicker">Demand Points</span>
             <div style="font-size:32px;font-weight:800;">${demands.length}</div>
           </div>
           <div style="border-left:1px solid rgba(255,255,255,.15);padding-left:32px;">
-            <span style="font-size:11px;font-weight:700;text-transform:uppercase;opacity:0.6;">Total Annual Demand</span>
+            <span class="no-kicker">Total Annual Demand</span>
             <div style="font-size:32px;font-weight:800;">${totalDemand.toLocaleString()}</div>
           </div>
           <div style="border-left:1px solid rgba(255,255,255,.15);padding-left:32px;">
-            <span style="font-size:11px;font-weight:700;text-transform:uppercase;opacity:0.6;">Avg per Point</span>
+            <span class="no-kicker">Avg per Point</span>
             <div style="font-size:32px;font-weight:800;">${demands.length > 0 ? Math.round(totalDemand / demands.length).toLocaleString() : '0'}</div>
           </div>
         </div>
@@ -1895,7 +1896,7 @@ function renderModeMix(el) {
   el.innerHTML = `
     <div style="max-width:560px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;">
-        <h3 class="text-section" style="margin:0;">Transportation Mode Mix</h3>
+        <h3 class="text-section u-m0">Transportation Mode Mix</h3>
         <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="balance-mode-mix" title="Auto-balance TL/LTL/Parcel mix to match average demand weight" style="font-size:11px;padding:5px 10px;">⚖ Balance Mode Mix</button>
       </div>
 
@@ -1907,7 +1908,7 @@ function renderModeMix(el) {
         </div>
         <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--ies-gray-200);font-size:13px;font-weight:600;text-align:right;">
           Total: ${modeMix.tlPct + modeMix.ltlPct + modeMix.parcelPct}%
-          ${(modeMix.tlPct + modeMix.ltlPct + modeMix.parcelPct) !== 100 ? '<span style="color:var(--ies-orange);margin-left:8px;">Must equal 100%</span>' : '<span style="color:#22c55e;margin-left:8px;">✓</span>'}
+          ${(modeMix.tlPct + modeMix.ltlPct + modeMix.parcelPct) !== 100 ? '<span style="color:var(--ies-orange);margin-left:8px;">Must equal 100%</span>' : '<span style="color:var(--c-success-bright);margin-left:8px;">✓</span>'}
         </div>
       </div>
 
@@ -1948,21 +1949,21 @@ function renderModeMix(el) {
               </div>
               <div style="display:flex;flex-direction:column;gap:14px;">
                 <div>
-                  <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:13px;font-weight:600;">Truckload (TL)</span><span style="font-size:13px;font-weight:700;">${cm.tlPct}%</span></div>
+                  <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span class="u-13 u-semibold">Truckload (TL)</span><span class="u-13 u-bold">${cm.tlPct}%</span></div>
                   <input type="range" min="0" max="100" value="${cm.tlPct}" data-cm-key="${escapeAttr(k)}" data-cm-mode="tlPct" style="width:100%;accent-color:var(--ies-blue);">
                 </div>
                 <div>
-                  <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:13px;font-weight:600;">Less-Than-Truckload (LTL)</span><span style="font-size:13px;font-weight:700;">${cm.ltlPct}%</span></div>
+                  <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span class="u-13 u-semibold">Less-Than-Truckload (LTL)</span><span class="u-13 u-bold">${cm.ltlPct}%</span></div>
                   <input type="range" min="0" max="100" value="${cm.ltlPct}" data-cm-key="${escapeAttr(k)}" data-cm-mode="ltlPct" style="width:100%;accent-color:var(--ies-blue);">
                 </div>
                 <div>
-                  <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:13px;font-weight:600;">Parcel</span><span style="font-size:13px;font-weight:700;">${cm.parcelPct}%</span></div>
+                  <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span class="u-13 u-semibold">Parcel</span><span class="u-13 u-bold">${cm.parcelPct}%</span></div>
                   <input type="range" min="0" max="100" value="${cm.parcelPct}" data-cm-key="${escapeAttr(k)}" data-cm-mode="parcelPct" style="width:100%;accent-color:var(--ies-blue);">
                 </div>
               </div>
               <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--ies-gray-200);font-size:12px;font-weight:600;text-align:right;">
                 Total: ${total}%
-                ${total !== 100 ? '<span style="color:var(--ies-orange);margin-left:8px;">Must equal 100%</span>' : '<span style="color:#22c55e;margin-left:8px;">&#x2713;</span>'}
+                ${total !== 100 ? '<span style="color:var(--ies-orange);margin-left:8px;">Must equal 100%</span>' : '<span style="color:var(--c-success-bright);margin-left:8px;">&#x2713;</span>'}
               </div>
             </div>`;
         }).join('');
@@ -2048,12 +2049,12 @@ function renderRateCardEditor() {
   const tierNotes = ['min/short-zone', 'class-avg base', 'class-avg mid', 'LTL typical', 'heavy LTL', 'partial-TL crossover'];
 
   return `
-    <h3 class="text-section" style="margin-bottom:8px;">Rate Card
+    <h3 class="text-section u-mb-2">Rate Card
       <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="reset-rate-card" style="font-size:10px;padding:3px 8px;margin-left:10px;vertical-align:middle;">↻ Reset to defaults</button>
     </h3>
 
     <!-- Synthetic-tariff disclaimer banner -->
-    <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#78350f;line-height:1.5;">
+    <div style="background:var(--c-warn-bg);border:1px solid #fcd34d;border-radius:6px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#78350f;line-height:1.5;">
       <div style="font-weight:700;margin-bottom:4px;">⚠ Synthetic tariff — replace with contract rates before quoting</div>
       Defaults are calibrated to public LTL rate-base ranges (CzarLite-style: $20–$50/CWT class-100 base, 30–50% mid-shipper discount off published, 10–18% FSC). No real carrier rate base is freely published. Sources:
       <a href="https://hatfieldandassociates.com/which-ltl-rate-base-is-right-for-you-understanding-czarlite-carrier-tariffs-and-more/" target="_blank" rel="noopener" style="color:#78350f;text-decoration:underline;">Hatfield &amp; Associates</a> ·
@@ -2083,7 +2084,7 @@ function renderRateCardEditor() {
       <table class="cm-grid-table" style="width:100%;font-size:13px;">
         <thead>
           <tr>
-            <th style="text-align:left;">Weight Tier (lbs)</th>
+            <th class="u-left">Weight Tier (lbs)</th>
             <th style="text-align:right;width:110px;">$/CWT</th>
             <th style="text-align:left;color:var(--ies-gray-500);">Notes</th>
           </tr>
@@ -2093,7 +2094,7 @@ function renderRateCardEditor() {
             <tr>
               <td style="padding:6px 8px;"><strong>${breakLabels[i]}</strong></td>
               <td style="text-align:right;padding:6px 8px;">
-                <span style="color:var(--ies-gray-400);">$</span>
+                <span class="u-faint">$</span>
                 <input type="number" step="0.25" min="0" value="${baseRow[i]}" data-ltl-break-idx="${i}" style="width:75px;text-align:right;" />
               </td>
               <td style="color:var(--ies-gray-500);font-size:11px;">${tierNotes[i] || ''}</td>
@@ -2102,7 +2103,7 @@ function renderRateCardEditor() {
           <tr>
             <td style="padding:6px 8px;color:var(--ies-gray-500);">≥ ${breaks.slice(-1)[0].toLocaleString()}</td>
             <td style="text-align:right;padding:6px 8px;color:var(--ies-gray-400);">— top tier rate —</td>
-            <td style="color:var(--ies-gray-400);"></td>
+            <td class="u-faint"></td>
           </tr>
         </tbody>
       </table>
@@ -2130,19 +2131,19 @@ function renderRateCardEditor() {
               const row = derived[code] || [];
               const mult = calc.NMFC_CLASS_MULTIPLIERS[code] ?? 1.0;
               const isBaseline = code === 100;
-              return `<tr style="${isBaseline ? 'background:#eff6ff;font-weight:600;' : ''}">
+              return `<tr style="${isBaseline ? 'background:var(--c-info-soft);font-weight:600;' : ''}">
                 <td style="padding:4px 8px;border:1px solid var(--ies-gray-200);">${code}${isBaseline ? ' ★' : ''}</td>
                 <td style="padding:4px 6px;border:1px solid var(--ies-gray-200);text-align:right;color:var(--ies-gray-500);">${mult.toFixed(2)}×</td>
                 ${row.map((r, i) => {
                   const key = `${code}-${i}`;
                   const isOverride = Object.prototype.hasOwnProperty.call(overrides, key) && Number.isFinite(overrides[key]);
-                  return `<td style="padding:2px 4px;border:1px solid var(--ies-gray-200);text-align:right;${isOverride ? 'background:#fef3c7;' : ''}">
+                  return `<td style="padding:2px 4px;border:1px solid var(--ies-gray-200);text-align:right;${isOverride ? 'background:var(--c-warn-bg);' : ''}">
                     <span style="display:inline-flex;align-items:center;gap:3px;justify-content:flex-end;">
                       <span style="font-size:10px;color:var(--ies-gray-500);">$</span>
                       <input type="number" step="0.01" min="0" value="${r.toFixed(2)}"
                         data-class-code="${code}" data-break-idx="${i}"
                         title="${isOverride ? 'Override — click ↺ to revert to formula' : 'Click to override this cell ($/CWT)'}"
-                        style="width:54px;text-align:right;font-size:11px;padding:2px 4px;${isOverride ? 'font-weight:700;color:#92400e;' : ''}" />
+                        style="width:54px;text-align:right;font-size:11px;padding:2px 4px;${isOverride ? 'font-weight:700;color:var(--c-warn-ink);' : ''}" />
                       ${isOverride ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="reset-class-cell" data-class-code="${code}" data-break-idx="${i}" style="font-size:9px;padding:1px 4px;line-height:1;" title="Reset to formula">↺</button>` : ''}
                     </span>
                   </td>`;
@@ -2152,7 +2153,7 @@ function renderRateCardEditor() {
           </tbody>
         </table>
         <div style="margin-top:8px;font-size:11px;color:var(--ies-gray-500);">
-          ★ baseline (class 100). Per-class rate = class-100 rate × NMFC multiplier. Edit the base tariff above to recalculate every cell, or override an individual cell directly (overridden cells show in <span style="background:#fef3c7;padding:0 4px;border-radius:2px;">amber</span> and skip the class multiplier — the override IS the final $/CWT rate). Click ↺ to revert a cell to the formula.
+          ★ baseline (class 100). Per-class rate = class-100 rate × NMFC multiplier. Edit the base tariff above to recalculate every cell, or override an individual cell directly (overridden cells show in <span style="background:var(--c-warn-bg);padding:0 4px;border-radius:2px;">amber</span> and skip the class multiplier — the override IS the final $/CWT rate). Click ↺ to revert a cell to the formula.
         </div>
       </div>
     </details>
@@ -2177,7 +2178,7 @@ function renderRateCardEditor() {
               ${calc.REGION_CODES.map(d => {
                 const v = (regionMatrix[o] && Number.isFinite(regionMatrix[o][d])) ? regionMatrix[o][d] : 1.0;
                 const isDiag = o === d;
-                return `<td style="padding:4px 6px;border:1px solid var(--ies-gray-200);text-align:center;${isDiag ? 'background:#f0fdf4;' : ''}">
+                return `<td style="padding:4px 6px;border:1px solid var(--ies-gray-200);text-align:center;${isDiag ? 'background:var(--c-success-soft);' : ''}">
                   <input type="number" step="0.01" min="0" value="${v.toFixed(2)}" data-region-orig="${o}" data-region-dest="${d}" style="width:55px;text-align:right;font-size:11px;padding:2px 4px;" />
                 </td>`;
               }).join('')}
@@ -2281,12 +2282,12 @@ function renderRateCardPhase(el) {
     <div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
         <div>
-          <h3 class="text-section" style="margin:0;">Rate Card</h3>
+          <h3 class="text-section u-m0">Rate Card</h3>
           <div style="font-size:12px;color:var(--ies-gray-500);margin-top:4px;">TL per-mile · LTL class-100 tariff + multipliers + 5×5 region matrix · lane overrides · parcel zones.</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="apply-market-rates" title="Pull latest spot/contract rates from market data and apply to rate card" style="font-size:11px;padding:5px 10px;">💲 Apply Market Rates</button>
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="upload-rates-csv" title="Upload a rate-card CSV (TL/LTL columns)" style="font-size:11px;padding:5px 10px;">📤 Upload Rate Card CSV</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="upload-rates-csv" title="Upload a rate-card CSV (TL/LTL columns)" style="font-size:11px;padding:5px 10px;">${icon('upload')} Upload Rate Card CSV</button>
         </div>
       </div>
       ${renderRateCardEditor()}
@@ -2480,8 +2481,8 @@ function renderSlider(label, key, value) {
   return `
     <div>
       <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-        <span style="font-size:13px;font-weight:600;">${label}</span>
-        <span style="font-size:13px;font-weight:700;">${value}%</span>
+        <span class="u-13 u-semibold">${label}</span>
+        <span class="u-13 u-bold">${value}%</span>
       </div>
       <input type="range" min="0" max="100" value="${value}" data-key="${key}"
              style="width:100%;accent-color:var(--ies-blue);">
@@ -2494,10 +2495,10 @@ function renderInput(label, key, value, prefix) {
     <div style="display:flex;align-items:center;gap:12px;">
       <label style="font-size:13px;font-weight:600;flex:1;">${label}</label>
       <div style="display:flex;align-items:center;gap:4px;">
-        ${prefix === '$' ? '<span style="font-size:13px;font-weight:600;">$</span>' : ''}
+        ${prefix === '$' ? '<span class="u-13 u-semibold">$</span>' : ''}
         <input type="number" value="${value}" data-rate="${key}" step="0.01"
                style="width:100px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-        ${prefix === '%' ? '<span style="font-size:13px;font-weight:600;">%</span>' : ''}
+        ${prefix === '%' ? '<span class="u-13 u-semibold">%</span>' : ''}
       </div>
     </div>
   `;
@@ -2510,39 +2511,39 @@ function renderServiceConfig(el) {
       <div class="hub-card">
         <div style="display:flex;flex-direction:column;gap:16px;">
           <div style="display:flex;align-items:center;justify-content:space-between;">
-            <label style="font-size:13px;font-weight:600;">Target Service Level</label>
+            <label class="u-13 u-semibold">Target Service Level</label>
             <div style="display:flex;align-items:center;gap:4px;">
               <input type="number" value="${serviceConfig.targetServicePct}" data-svc="targetServicePct" min="0" max="100"
                      style="width:80px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <span style="font-size:13px;font-weight:600;">%</span>
+              <span class="u-13 u-semibold">%</span>
             </div>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;">
-            <label style="font-size:13px;font-weight:600;">Global Max Transit Days</label>
+            <label class="u-13 u-semibold">Global Max Transit Days</label>
             <input type="number" value="${serviceConfig.globalMaxDays}" data-svc="globalMaxDays" min="1" max="14"
                    style="width:80px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;">
-            <label style="font-size:13px;font-weight:600;">Average Truck Speed</label>
+            <label class="u-13 u-semibold">Average Truck Speed</label>
             <div style="display:flex;align-items:center;gap:4px;">
               <input type="number" value="${serviceConfig.truckSpeedMph}" data-svc="truckSpeedMph" min="20" max="80"
                      style="width:80px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <span style="font-size:13px;font-weight:600;">mph</span>
+              <span class="u-13 u-semibold">mph</span>
             </div>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;">
-            <label style="font-size:13px;font-weight:600;">Hard SLA Constraint</label>
+            <label class="u-13 u-semibold">Hard SLA Constraint</label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
               <input type="checkbox" ${serviceConfig.hardConstraint ? 'checked' : ''} data-svc="hardConstraint">
-              <span style="font-size:11px;color:var(--ies-gray-400);">${serviceConfig.hardConstraint ? 'Scenarios below target will fail' : 'Soft constraint (warn only)'}</span>
+              <span class="u-cap u-faint">${serviceConfig.hardConstraint ? 'Scenarios below target will fail' : 'Soft constraint (warn only)'}</span>
             </label>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--ies-gray-200);padding-top:14px;">
-            <label style="font-size:13px;font-weight:600;" title="Demands beyond this distance from any facility are flagged. 0 disables the constraint.">Max Lane Distance</label>
+            <label class="u-13 u-semibold" title="Demands beyond this distance from any facility are flagged. 0 disables the constraint.">Max Lane Distance</label>
             <div style="display:flex;align-items:center;gap:4px;">
               <input type="number" value="${serviceConfig.maxDistanceMiles ?? 0}" data-svc="maxDistanceMiles" min="0" step="50"
                      style="width:80px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <span style="font-size:13px;font-weight:600;">mi</span>
+              <span class="u-13 u-semibold">mi</span>
             </div>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--ies-gray-500);">
@@ -2553,9 +2554,9 @@ function renderServiceConfig(el) {
         </div>
       </div>
 
-      <div class="hub-card" style="margin-top:16px;background:#f0fdf4;border-color:#22c55e;">
-        <div style="font-size:13px;font-weight:600;color:#15803d;margin-bottom:8px;">Service Level Guide</div>
-        <div style="font-size:13px;color:#166534;line-height:1.6;">
+      <div class="hub-card" style="margin-top:16px;background:var(--c-success-soft);border-color:var(--c-success-bright);">
+        <div style="font-size:13px;font-weight:600;color:var(--c-success-strong);margin-bottom:8px;">Service Level Guide</div>
+        <div style="font-size:13px;color:var(--c-success-ink);line-height:1.6;">
           <strong>95%+</strong> — Premium service, typical for healthcare/pharma and DTC e-commerce.<br>
           <strong>90-95%</strong> — Standard for CPG big-box and industrial distribution.<br>
           <strong>85-90%</strong> — Acceptable for bulk/commodity, cost-optimized networks.<br>
@@ -2609,19 +2610,19 @@ function renderMap(el) {
   el.innerHTML = `
     <div style="display:flex;flex-direction:column;height:100%;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-        <h3 class="text-section" style="margin:0;">Network Map</h3>
-        <span style="font-size:11px;color:var(--ies-gray-400);">
+        <h3 class="text-section u-m0">Network Map</h3>
+        <span class="u-cap u-faint">
           ${facilities.filter(f => f.isOpen).length} facilities • ${demands.length} demand points • ${activeScenario?.assignments?.length || 0} lanes
         </span>
         <div style="margin-left:auto;display:flex;gap:6px;">
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
-            <input type="checkbox" data-map-toggle="heat" checked style="margin:0;"/> Heatmap
+            <input type="checkbox" data-map-toggle="heat" checked class="u-m0"/> Heatmap
           </label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
-            <input type="checkbox" data-map-toggle="zones" checked style="margin:0;"/> Service zones
+            <input type="checkbox" data-map-toggle="zones" checked class="u-m0"/> Service zones
           </label>
           <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
-            <input type="checkbox" data-map-toggle="flows" checked style="margin:0;"/> Flow lines
+            <input type="checkbox" data-map-toggle="flows" checked class="u-m0"/> Flow lines
           </label>
         </div>
       </div>
@@ -2658,7 +2659,7 @@ function initMap() {
   if (typeof L === 'undefined') {
     container.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:13px;color:var(--ies-gray-400);">
-        <div style="text-align:center;">
+        <div class="u-center">
           <div style="font-size:20px;margin-bottom:8px;">Map requires Leaflet.js</div>
           <div>Add Leaflet CSS + JS to index.html to enable the network map view.</div>
         </div>
@@ -2805,14 +2806,14 @@ function _renderShipmentSanityCard(s) {
   if (fallback > 0) warns.push(`${fallback} lane${fallback === 1 ? '' : 's'} priced at the 25-lb default weight — set Avg Wt on those demand rows`);
   if (heavy > 0) warns.push(`${heavy} lane${heavy === 1 ? '' : 's'} exceed${heavy === 1 ? 's' : ''} one dry-van payload (45K lbs) — priced as multi-truck shipments`);
   const warnHtml = warns.length
-    ? `<div style="margin-top:8px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:12px;color:#92400e;">${warns.map(w => '⚠ ' + w).join('<br/>')}</div>`
+    ? `<div style="margin-top:8px;padding:8px 10px;background:var(--c-warn-soft);border:1px solid #fde68a;border-radius:6px;font-size:12px;color:var(--c-warn-ink);">${warns.map(w => '⚠ ' + w).join('<br/>')}</div>`
     : '';
   const fmtW = (v) => v >= 1000 ? (v / 1000).toFixed(1) + 'K' : String(Math.round(v));
   return `
       <div class="hub-card" style="padding:14px 20px;margin-bottom:20px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <span style="font-size:13px;font-weight:700;color:var(--ies-navy);">Shipment profile sanity</span>
-          <span style="font-size:11px;color:var(--ies-gray-400);" title="Annual transport = Σ per-lane $/shipment × shipments/yr. Shipments/yr derive from each demand row's Frequency; shipment weight from its Avg Wt. Corrected 2026-06-10 — previously cost was blended $/shipment × annualDemand÷52, which is not a shipment count.">ⓘ how cost is built</span>
+          <span class="u-cap u-faint" title="Annual transport = Σ per-lane $/shipment × shipments/yr. Shipments/yr derive from each demand row's Frequency; shipment weight from its Avg Wt. Corrected 2026-06-10 — previously cost was blended $/shipment × annualDemand÷52, which is not a shipment count.">ⓘ how cost is built</span>
         </div>
         <div style="display:flex;gap:28px;flex-wrap:wrap;font-size:12px;color:var(--ies-gray-600);">
           <span><b>${Math.round(totShipments).toLocaleString()}</b> shipments/yr across ${asg.length} lanes</span>
@@ -2829,8 +2830,8 @@ function renderResults(el) {
     // Slice A: distinguish between "never run" and "run was blocked by missing inputs".
     if (runBlockReason === 'no-demand') {
       el.innerHTML = `
-        <div class="hub-card" style="padding:24px;background:#fef2f2;border:1px solid #fecaca;">
-          <div style="display:inline-flex;align-items:center;gap:6px;background:#fee2e2;color:#991b1b;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">
+        <div class="hub-card" style="padding:24px;background:var(--c-danger-soft);border:1px solid var(--c-danger-border);">
+          <div style="display:inline-flex;align-items:center;gap:6px;background:var(--c-danger-bg);color:var(--c-danger-ink);padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">
             <span>⚠</span><span>Run blocked</span>
           </div>
           <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:6px;">No demand to run against</div>
@@ -2853,14 +2854,14 @@ function renderResults(el) {
         ? 'You have no candidate facilities yet. Open <b>Inputs → Facilities</b> and click <b>🎯 Find Optimal Locations</b> to seed candidates from a k-means cluster of your demand, or add them manually.'
         : `You have ${total} facilit${total === 1 ? 'y' : 'ies'} on the list but none are <b>Active</b>. Tick the Active checkbox on at least one row in <b>Inputs → Facilities</b>, or click <b>🎯 Find Optimal Locations</b> in the Facilities header to add more candidates.`;
       el.innerHTML = `
-        <div class="hub-card" style="padding:24px;background:#fffbeb;border:1px solid #fde68a;">
-          <div style="display:inline-flex;align-items:center;gap:6px;background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">
+        <div class="hub-card" style="padding:24px;background:var(--c-warn-soft);border:1px solid #fde68a;">
+          <div style="display:inline-flex;align-items:center;gap:6px;background:var(--c-warn-bg);color:var(--c-warn-ink);padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">
             <span>⚠</span><span>Run blocked</span>
           </div>
           <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:6px;">No active facilities to evaluate</div>
           <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:14px;">${hint}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="hub-btn hub-btn-sm hub-btn-primary" id="no-results-go-facilities" style="display:inline-flex;align-items:center;gap:6px;">→ Open Inputs · Facilities</button>
+            <button class="hub-btn hub-btn-sm hub-btn-primary u-inline-row" id="no-results-go-facilities">→ Open Inputs · Facilities</button>
           </div>
         </div>`;
       el.querySelector('#no-results-go-facilities')?.addEventListener('click', () => {
@@ -2877,15 +2878,15 @@ function renderResults(el) {
       const errs = (runBlockDetail.errors || []).map(e => `<li>${e}</li>`).join('');
       const warns = (runBlockDetail.warnings || []).map(w => `<li>${w}</li>`).join('');
       el.innerHTML = `
-        <div class="hub-card" style="padding:24px;background:#fef2f2;border:1px solid #fecaca;">
-          <div style="display:inline-flex;align-items:center;gap:6px;background:#fee2e2;color:#991b1b;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">
+        <div class="hub-card" style="padding:24px;background:var(--c-danger-soft);border:1px solid var(--c-danger-border);">
+          <div style="display:inline-flex;align-items:center;gap:6px;background:var(--c-danger-bg);color:var(--c-danger-ink);padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">
             <span>⚠</span><span>Run blocked — invalid inputs</span>
           </div>
           <div style="font-size:14px;font-weight:700;color:var(--ies-navy);margin-bottom:6px;">Some rows are missing required values</div>
           <div style="font-size:13px;color:var(--ies-gray-600);line-height:1.5;margin-bottom:10px;">A facility with a blank lat/lng (or a demand without coordinates) would corrupt the optimizer math and silently produce <code>NaN</code> distance and \$0 cost results. Fix the rows below and re-run.</div>
-          ${errs ? `<div style="font-size:13px;color:#991b1b;margin-bottom:6px;"><b>Errors:</b><ul style="margin:6px 0 12px 18px;">${errs}</ul></div>` : ''}
-          ${warns ? `<div style="font-size:13px;color:#92400e;margin-bottom:6px;"><b>Warnings:</b><ul style="margin:6px 0 12px 18px;">${warns}</ul></div>` : ''}
-          <div style="display:flex;gap:8px;">
+          ${errs ? `<div style="font-size:13px;color:var(--c-danger-ink);margin-bottom:6px;"><b>Errors:</b><ul style="margin:6px 0 12px 18px;">${errs}</ul></div>` : ''}
+          ${warns ? `<div style="font-size:13px;color:var(--c-warn-ink);margin-bottom:6px;"><b>Warnings:</b><ul style="margin:6px 0 12px 18px;">${warns}</ul></div>` : ''}
+          <div class="u-flex">
             <button class="hub-btn hub-btn-sm hub-btn-primary" id="no-results-go-fix-fac">Open Facilities</button>
             <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-results-go-fix-dem">Open Demand</button>
           </div>
@@ -2914,7 +2915,7 @@ function renderResults(el) {
       <h3 class="text-section" style="margin-bottom:16px;">${s.name}</h3>
 
       <!-- KPI Bar -->
-      <div class="hub-card" style="background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 24px;margin-bottom:20px;">
+      <div class="hub-card" style="background:linear-gradient(135deg,var(--c-ink-deep),#0d1f3c);color:#fff;padding:16px 24px;margin-bottom:20px;">
         <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
           ${kpi('Total Cost', calc.formatCurrency(s.totalCost, { compact: true }))}
           ${kpi('Cost/Unit', calc.formatCurrency(s.avgCostPerUnit))}
@@ -2932,32 +2933,32 @@ function renderResults(el) {
 
       <!-- Primary Actions -->
       <div style="display:flex;gap:8px;margin-bottom:20px;">
-        <button class="hub-btn hub-btn-primary hub-btn-sm" id="no-push-fleet" style="display:flex;align-items:center;gap:6px;">
-          📊 Push to Fleet
+        <button class="hub-btn hub-btn-primary hub-btn-sm u-row-tight" id="no-push-fleet">
+          ${icon('truck')} Push to Fleet
         </button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" id="no-push-cm" title="Seed Cost Model with this scenario's annual demand + total transport cost so you can iterate downstream P&amp;L from a sized network." style="display:flex;align-items:center;gap:6px;">
-          💵 Push to Cost Model
+        <button class="hub-btn hub-btn-secondary hub-btn-sm u-row-tight" id="no-push-cm" title="Seed Cost Model with this scenario's annual demand + total transport cost so you can iterate downstream P&amp;L from a sized network.">
+          ${icon('dollar')} Push to Cost Model
         </button>
       </div>
 
       <!-- Assignment Table -->
-      <div class="hub-card" style="padding:16px;">
+      <div class="hub-card u-p-4">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
           <span style="font-size:14px;font-weight:700;">Lane Assignments</span>
-          <span style="font-size:11px;color:var(--ies-gray-400);">${s.assignments.length} lanes</span>
+          <span class="u-cap u-faint">${s.assignments.length} lanes</span>
         </div>
         <div style="max-height:300px;overflow-y:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <table class="u-table">
             <thead style="position:sticky;top:0;background:#fff;">
-              <tr style="border-bottom:2px solid var(--ies-gray-200);">
+              <tr class="u-th-rule">
                 <th style="text-align:left;padding:6px;">Facility</th>
                 <th style="text-align:left;padding:6px;">Demand</th>
-                <th style="text-align:right;padding:6px;">Distance</th>
-                <th style="text-align:right;padding:6px;">Transit</th>
-                <th style="text-align:right;padding:6px;">TL Cost</th>
-                <th style="text-align:right;padding:6px;">LTL Cost</th>
-                <th style="text-align:right;padding:6px;">Parcel</th>
-                <th style="text-align:right;padding:6px;">Blended</th>
+                <th class="u-td-num">Distance</th>
+                <th class="u-td-num">Transit</th>
+                <th class="u-td-num">TL Cost</th>
+                <th class="u-td-num">LTL Cost</th>
+                <th class="u-td-num">Parcel</th>
+                <th class="u-td-num">Blended</th>
                 <th style="text-align:center;padding:6px;">SLA</th>
               </tr>
             </thead>
@@ -2969,14 +2970,14 @@ function renderResults(el) {
                   <tr style="border-bottom:1px solid var(--ies-gray-200);">
                     <td style="padding:6px;font-weight:600;">${fac?.name || a.facilityId}</td>
                     <td style="padding:6px;">ZIP ${dem?.zip3 || a.demandId}</td>
-                    <td style="padding:6px;text-align:right;">${calc.formatMiles(a.distanceMiles)}</td>
-                    <td style="padding:6px;text-align:right;">${a.transitDays}d</td>
-                    <td style="padding:6px;text-align:right;">${calc.formatCurrency(a.tlCost)}</td>
-                    <td style="padding:6px;text-align:right;">${calc.formatCurrency(a.ltlCost)}</td>
-                    <td style="padding:6px;text-align:right;">${calc.formatCurrency(a.parcelCost)}</td>
+                    <td class="u-td-num">${calc.formatMiles(a.distanceMiles)}</td>
+                    <td class="u-td-num">${a.transitDays}d</td>
+                    <td class="u-td-num">${calc.formatCurrency(a.tlCost)}</td>
+                    <td class="u-td-num">${calc.formatCurrency(a.ltlCost)}</td>
+                    <td class="u-td-num">${calc.formatCurrency(a.parcelCost)}</td>
                     <td style="padding:6px;text-align:right;font-weight:600;">${calc.formatCurrency(a.blendedCost)}</td>
                     <td style="padding:6px;text-align:center;">
-                      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${a.meetsSlA ? '#22c55e' : '#ef4444'};"></span>
+                      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${a.meetsSlA ? 'var(--c-success-bright)' : '#ef4444'};"></span>
                     </td>
                   </tr>
                 `;
@@ -3068,7 +3069,7 @@ function pushToCostModel(scenario) {
 function kpi(label, value, color, tooltip) {
   return `
     <div ${tooltip ? `title="${tooltip.replace(/"/g, '&quot;')}"` : ''} style="border-right:1px solid rgba(255,255,255,.15);padding-right:24px;${tooltip ? 'cursor:help;' : ''}">
-      <span style="font-size:11px;font-weight:700;text-transform:uppercase;opacity:0.6;">${label}${tooltip ? ' <span style="opacity:0.5;">ⓘ</span>' : ''}</span>
+      <span class="no-kicker">${label}${tooltip ? ' <span style="opacity:0.5;">ⓘ</span>' : ''}</span>
       <div style="font-size:20px;font-weight:800;${color ? `color:${color};` : ''}">${value}</div>
     </div>
   `;
@@ -3188,15 +3189,15 @@ function renderMultiDCComparison(el) {
   el.innerHTML = `
     <div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-        <h3 class="text-section" style="margin:0;">DC Network Comparison (1-${_optimizationMeta?.kCap || comparisonResults.length} facilities)</h3>
-        <div style="display:flex;align-items:center;gap:8px;">
+        <h3 class="text-section u-m0">DC Network Comparison (1-${_optimizationMeta?.kCap || comparisonResults.length} facilities)</h3>
+        <div class="u-row">
           ${_optimizationMeta ? renderOptimizationChip(_optimizationMeta) : ''}
-          <span style="font-size:11px;color:var(--ies-gray-400);">${comparisonResults.length} scenario(s)</span>
+          <span class="u-cap u-faint">${comparisonResults.length} scenario(s)</span>
         </div>
       </div>
 
       <!-- Recommendation Panel -->
-      <div class="hub-card" style="margin-bottom:20px;background:linear-gradient(135deg,#f0fdf4,#f0f9ff);border:1px solid #22c55e;padding:16px 20px;">
+      <div class="hub-card" style="margin-bottom:20px;background:linear-gradient(135deg,var(--c-success-soft),#f0f9ff);border:1px solid var(--c-success-bright);padding:16px 20px;">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
           <span style="font-size:20px;">✓</span>
           <span style="font-size:14px;font-weight:700;color:#059669;">RECOMMENDED</span>
@@ -3205,7 +3206,7 @@ function renderMultiDCComparison(el) {
           <strong>${rec.recommendedIdx + 1} Distribution Centers:</strong> ${rec.recommendation}
         </div>
         <div style="display:flex;gap:20px;flex-wrap:wrap;">
-          <div style="background:#fff;padding:12px 16px;border-radius:6px;border:1px solid #22c55e;">
+          <div style="background:#fff;padding:12px 16px;border-radius:6px;border:1px solid var(--c-success-bright);">
             <div style="font-size:11px;color:var(--ies-gray-500);font-weight:600;text-transform:uppercase;">Annual Savings</div>
             <div style="font-size:18px;font-weight:800;color:#059669;">${calc.formatCurrency(rec.savings, { compact: true })}</div>
             <div style="font-size:10px;color:var(--ies-gray-500);">${calc.formatPct(rec.savingsPct)} vs 1 DC</div>
@@ -3247,9 +3248,9 @@ function renderMultiDCComparison(el) {
                   : (slLevel >= 95 ? '#22c55e' : slLevel >= 90 ? '#f59e0b' : '#ef4444');
                 let statusBadge = '';
                 if (isRecommended) {
-                  statusBadge = `<span style="display:inline-block;padding:4px 12px;background:#22c55e;color:#fff;border-radius:12px;font-size:11px;font-weight:700;">RECOMMENDED</span>`;
+                  statusBadge = `<span style="display:inline-block;padding:4px 12px;background:var(--c-success-bright);color:#fff;border-radius:12px;font-size:11px;font-weight:700;">RECOMMENDED</span>`;
                 } else if (failsSLA) {
-                  statusBadge = `<span title="Service level ${slLevel.toFixed(1)}% is below the ${slaTarget}% target — this network would not meet the SLA constraint and is excluded from the recommendation." style="display:inline-block;padding:4px 10px;background:#fee2e2;color:#991b1b;border-radius:12px;font-size:11px;font-weight:700;">✗ Below SLA</span>`;
+                  statusBadge = `<span title="Service level ${slLevel.toFixed(1)}% is below the ${slaTarget}% target — this network would not meet the SLA constraint and is excluded from the recommendation." style="display:inline-block;padding:4px 10px;background:var(--c-danger-bg);color:var(--c-danger-ink);border-radius:12px;font-size:11px;font-weight:700;">✗ Below SLA</span>`;
                 }
                 return `
                 <tr style="border-bottom:1px solid var(--ies-gray-200);background:${rowBg};opacity:${rowOpacity};">
@@ -3258,7 +3259,7 @@ function renderMultiDCComparison(el) {
                   <td style="padding:10px 8px;text-align:right;">${calc.formatCurrency(s.costBreakdown.transport, { compact: true })}</td>
                   <td style="padding:10px 8px;text-align:right;">${s.assignments.length > 0 ? (s.assignments.reduce((sum, a) => sum + a.transitDays, 0) / s.assignments.length).toFixed(1) : '—'} days</td>
                   <td style="padding:10px 8px;text-align:right;font-weight:600;color:${slColor};">${calc.formatPct(s.serviceLevel)}</td>
-                  <td style="padding:10px 8px;text-align:right;font-weight:700;${savings < 0 ? 'color:#ef4444;' : 'color:#22c55e;'}">${savings >= 0 ? '+' : ''}${calc.formatCurrency(savings, { compact: true })}</td>
+                  <td style="padding:10px 8px;text-align:right;font-weight:700;${savings < 0 ? 'color:#ef4444;' : 'color:var(--c-success-bright);'}">${savings >= 0 ? '+' : ''}${calc.formatCurrency(savings, { compact: true })}</td>
                   <td style="padding:10px 8px;text-align:center;">${statusBadge}</td>
                 </tr>
               `;
@@ -3272,8 +3273,8 @@ function renderMultiDCComparison(el) {
       <div class="hub-card" style="margin-top:20px;padding:20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
           <div style="font-size:14px;font-weight:700;">Total Cost vs. DC Count</div>
-          <div style="font-size:11px;color:var(--ies-gray-500);">
-            Inflection: <strong style="color:#16a34a;">${rec.recommendedIdx + 1} DC${rec.recommendedIdx === 0 ? '' : 's'}</strong> · detected via kneedle (Satopaa et al. 2011)
+          <div class="u-cap u-muted">
+            Inflection: <strong style="color:var(--c-success);">${rec.recommendedIdx + 1} DC${rec.recommendedIdx === 0 ? '' : 's'}</strong> · detected via kneedle (Satopaa et al. 2011)
           </div>
         </div>
         <div style="position:relative;height:280px;">
@@ -3380,23 +3381,23 @@ function renderScenarioComparison(el) {
   el.innerHTML = `
     <div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <h3 class="text-section" style="margin:0;">Scenario Comparison</h3>
-        <span style="font-size:11px;color:var(--ies-gray-400);">${scenarios.length} scenario(s)</span>
+        <h3 class="text-section u-m0">Scenario Comparison</h3>
+        <span class="u-cap u-faint">${scenarios.length} scenario(s)</span>
       </div>
 
       <div style="overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:900px;">
           <thead>
-            <tr style="border-bottom:2px solid var(--ies-gray-200);">
-              <th style="text-align:left;padding:8px 6px;font-weight:700;">Scenario</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Total Cost</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Δ Cost%</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Cost/Unit</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Facility</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Transport</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Handling</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Avg Dist</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Service</th>
+            <tr class="u-th-rule">
+              <th class="no-th-txt">Scenario</th>
+              <th class="no-th-num">Total Cost</th>
+              <th class="no-th-num">Δ Cost%</th>
+              <th class="no-th-num">Cost/Unit</th>
+              <th class="no-th-num">Facility</th>
+              <th class="no-th-num">Transport</th>
+              <th class="no-th-num">Handling</th>
+              <th class="no-th-num">Avg Dist</th>
+              <th class="no-th-num">Service</th>
               <th style="text-align:center;padding:8px 6px;font-weight:700;">Verdict</th>
             </tr>
           </thead>
@@ -3410,14 +3411,14 @@ function renderScenarioComparison(el) {
               return `
                 <tr style="border-bottom:1px solid var(--ies-gray-200);">
                   <td style="padding:8px 6px;font-weight:600;">${s.name}</td>
-                  <td style="padding:8px 6px;text-align:right;">${calc.formatCurrency(s.totalCost, { compact: true })}</td>
-                  <td style="padding:8px 6px;text-align:right;color:${s.deltaPct > 0 ? '#ef4444' : '#22c55e'};">${s.deltaPct > 0 ? '+' : ''}${s.deltaPct.toFixed(1)}%</td>
-                  <td style="padding:8px 6px;text-align:right;">${calc.formatCurrency(s.avgCostPerUnit)}</td>
-                  <td style="padding:8px 6px;text-align:right;">${calc.formatCurrency(s.costBreakdown.facility, { compact: true })}</td>
-                  <td style="padding:8px 6px;text-align:right;">${calc.formatCurrency(s.costBreakdown.transport, { compact: true })}</td>
-                  <td style="padding:8px 6px;text-align:right;">${calc.formatCurrency(s.costBreakdown.handling, { compact: true })}</td>
-                  <td style="padding:8px 6px;text-align:right;">${calc.formatMiles(s.avgDistance)}</td>
-                  <td style="padding:8px 6px;text-align:right;">${calc.formatPct(s.serviceLevel)}</td>
+                  <td class="no-td-num">${calc.formatCurrency(s.totalCost, { compact: true })}</td>
+                  <td style="padding:8px 6px;text-align:right;color:${s.deltaPct > 0 ? '#ef4444' : 'var(--c-success-bright)'};">${s.deltaPct > 0 ? '+' : ''}${s.deltaPct.toFixed(1)}%</td>
+                  <td class="no-td-num">${calc.formatCurrency(s.avgCostPerUnit)}</td>
+                  <td class="no-td-num">${calc.formatCurrency(s.costBreakdown.facility, { compact: true })}</td>
+                  <td class="no-td-num">${calc.formatCurrency(s.costBreakdown.transport, { compact: true })}</td>
+                  <td class="no-td-num">${calc.formatCurrency(s.costBreakdown.handling, { compact: true })}</td>
+                  <td class="no-td-num">${calc.formatMiles(s.avgDistance)}</td>
+                  <td class="no-td-num">${calc.formatPct(s.serviceLevel)}</td>
                   <td style="padding:8px 6px;text-align:center;">
                     <span style="display:inline-block;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;background:${verdictColor};color:#fff;">${s.verdict}</span>
                   </td>
@@ -3440,10 +3441,10 @@ function renderScenarioComparison(el) {
           }[s.verdict] || '#6b7280';
 
           return `
-            <div style="margin-bottom:12px;">
+            <div class="u-mb-3">
               <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                <span style="font-size:13px;font-weight:600;">${s.name}</span>
-                <span style="font-size:13px;font-weight:700;">${calc.formatCurrency(s.totalCost, { compact: true })}</span>
+                <span class="u-13 u-semibold">${s.name}</span>
+                <span class="u-13 u-bold">${calc.formatCurrency(s.totalCost, { compact: true })}</span>
               </div>
               <div style="height:24px;border-radius:6px;background:var(--ies-gray-200);overflow:hidden;position:relative;">
                 <div style="height:100%;width:${pct}%;background:${verdictColor};border-radius:6px;transition:width 0.3s;"></div>

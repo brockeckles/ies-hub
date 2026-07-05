@@ -21,14 +21,14 @@ import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { render3DView, disposeScene3d } from './ui-3d.js?v=20260705-u3b';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260705-u3a';
-import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260705-u3d';
+import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260705-u3e';
 import { renderDashboard } from './ui-dashboard.js?v=20260705-u3a';
-import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260705-u3d';
+import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260705-u3e';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260702-p1b';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
 import { wscExtraStyles } from './ui-styles.js?v=20260705-u3a';
-import { bindShellEvents } from './ui-shell-events.js?v=20260705-u3d';
+import { bindShellEvents } from './ui-shell-events.js?v=20260705-u3e';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================

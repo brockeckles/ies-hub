@@ -449,7 +449,7 @@ function renderHosFeasibilityChip() {
   const chip = document.createElement('div');
   chip.id = 'fm-hos-chip';
   chip.style.cssText = 'background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:8px 14px;font-size:12px;line-height:1.5;display:flex;align-items:center;gap:10px;';
-  chip.innerHTML = `<span style="font-weight:700;">⚠ HOS feasibility:</span> ${failing.length} of ${lanes.length} lane${failing.length===1?'':'s'} exceed${failing.length===1?'s':''} the ${budget.toFixed(0)}h weekly driving budget. The 3-way comparison will reflect this — open <b>Run · Feasibility</b> for details.`;
+  chip.innerHTML = `<span class="u-bold">⚠ HOS feasibility:</span> ${failing.length} of ${lanes.length} lane${failing.length===1?'':'s'} exceed${failing.length===1?'s':''} the ${budget.toFixed(0)}h weekly driving budget. The 3-way comparison will reflect this — open <b>Run · Feasibility</b> for details.`;
   stepperEl.parentNode.insertBefore(chip, stepperEl.nextSibling);
 }
 
@@ -586,8 +586,8 @@ function renderLanes(el) {
   el.innerHTML = `
     <div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <h3 class="text-section" style="margin:0;">Transportation Lanes</h3>
-        <div style="display:flex;gap:8px;">
+        <h3 class="text-section u-m0">Transportation Lanes</h3>
+        <div class="u-flex">
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-add-lane">+ Add Lane</button>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-load-demo">Load Demo Data</button>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-import-csv">⬆ Import CSV</button>
@@ -598,7 +598,7 @@ function renderLanes(el) {
       <div style="overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:800px;">
           <thead>
-            <tr style="border-bottom:2px solid var(--ies-gray-200);">
+            <tr class="u-th-rule">
               <th style="text-align:left;padding:8px 6px;font-weight:700;">Origin</th>
               <th style="text-align:left;padding:8px 6px;font-weight:700;">Destination</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;">Weekly Ships</th>
@@ -611,12 +611,12 @@ function renderLanes(el) {
           <tbody>
             ${lanes.map((l, i) => `
               <tr style="border-bottom:1px solid var(--ies-gray-200);">
-                <td style="padding:6px;font-weight:600;">${escapeHtml(l.origin)}</td>
+                <td class="u-td u-semibold">${escapeHtml(l.origin)}</td>
                 <td style="padding:6px;">${escapeHtml(l.destination)}</td>
-                <td style="padding:6px;text-align:right;">${l.weeklyShipments}</td>
-                <td style="padding:6px;text-align:right;">${l.avgWeightLbs.toLocaleString()}</td>
-                <td style="padding:6px;text-align:right;">${l.avgCubeFt3.toLocaleString()}</td>
-                <td style="padding:6px;text-align:right;">${l.distanceMiles}</td>
+                <td class="u-td-num">${l.weeklyShipments}</td>
+                <td class="u-td-num">${l.avgWeightLbs.toLocaleString()}</td>
+                <td class="u-td-num">${l.avgCubeFt3.toLocaleString()}</td>
+                <td class="u-td-num">${l.distanceMiles}</td>
                 <td style="padding:6px;text-align:center;">
                   <button class="hub-btn hub-btn-sm hub-btn-secondary" data-lane-del="${i}" style="padding:4px 8px;">✕</button>
                 </td>
@@ -628,7 +628,7 @@ function renderLanes(el) {
 
       <input type="file" id="fm-csv-input" accept=".csv" style="display:none;">
 
-      <div class="hub-card" style="margin-top:20px;background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 20px;">
+      <div class="hub-card" style="margin-top:20px;background:linear-gradient(135deg,var(--c-ink-deep),#0d1f3c);color:#fff;padding:16px 20px;">
         <div style="display:flex;gap:32px;align-items:center;">
           ${kpi('Total Lanes', String(lanes.length))}
           ${kpi('Weekly Shipments', lanes.reduce((s, l) => s + l.weeklyShipments, 0).toLocaleString())}
@@ -730,11 +730,11 @@ function renderVehiclesSubTab(el) {
         <div style="display:flex;gap:24px;margin-bottom:16px;">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
             <input type="radio" name="fm-financing" value="purchase" ${!config.leaseMode ? 'checked' : ''} id="fm-financing-purchase">
-            <span style="font-weight:600;">Purchase (Depreciation)</span>
+            <span class="u-semibold">Purchase (Depreciation)</span>
           </label>
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
             <input type="radio" name="fm-financing" value="lease" ${config.leaseMode ? 'checked' : ''} id="fm-financing-lease">
-            <span style="font-weight:600;">Lease (Monthly Payment)</span>
+            <span class="u-semibold">Lease (Monthly Payment)</span>
           </label>
         </div>
         <div style="padding:12px;background:var(--ies-gray-100);border-radius:6px;font-size:12px;color:var(--ies-gray-600);">
@@ -745,29 +745,29 @@ function renderVehiclesSubTab(el) {
       </div>
 
       <h3 class="text-section" style="margin-bottom:16px;">Vehicle Specifications</h3>
-      <div class="hub-card" style="padding:16px;">
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <div class="hub-card u-p-4">
+        <table class="u-table">
           <thead>
-            <tr style="border-bottom:2px solid var(--ies-gray-200);">
-              <th style="text-align:left;padding:6px;font-weight:700;">Enabled</th>
-              <th style="text-align:left;padding:6px;font-weight:700;">Vehicle</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">Payload (lbs)</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">Cube (ft³)</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">MPG</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">Capital</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">Insurance</th>
+            <tr class="u-th-rule">
+              <th class="u-td u-left u-bold">Enabled</th>
+              <th class="u-td u-left u-bold">Vehicle</th>
+              <th class="u-td-num u-bold">Payload (lbs)</th>
+              <th class="u-td-num u-bold">Cube (ft³)</th>
+              <th class="u-td-num u-bold">MPG</th>
+              <th class="u-td-num u-bold">Capital</th>
+              <th class="u-td-num u-bold">Insurance</th>
             </tr>
           </thead>
           <tbody>
             ${vehicles.map((v, i) => `
               <tr style="border-bottom:1px solid var(--ies-gray-200);${v.enabled ? '' : 'opacity:0.5;'}">
                 <td style="padding:6px;"><input type="checkbox" ${v.enabled ? 'checked' : ''} data-veh-toggle="${i}"></td>
-                <td style="padding:6px;font-weight:600;">${escapeHtml(v.name)}</td>
-                <td style="padding:6px;text-align:right;">${v.maxPayloadLbs.toLocaleString()}</td>
-                <td style="padding:6px;text-align:right;">${v.maxCubeFt3.toLocaleString()}</td>
-                <td style="padding:6px;text-align:right;">${v.mpg}</td>
-                <td style="padding:6px;text-align:right;">${calc.formatCurrency(v.capitalCost, { compact: true })}</td>
-                <td style="padding:6px;text-align:right;">${v.insuranceFactor}x</td>
+                <td class="u-td u-semibold">${escapeHtml(v.name)}</td>
+                <td class="u-td-num">${v.maxPayloadLbs.toLocaleString()}</td>
+                <td class="u-td-num">${v.maxCubeFt3.toLocaleString()}</td>
+                <td class="u-td-num">${v.mpg}</td>
+                <td class="u-td-num">${calc.formatCurrency(v.capitalCost, { compact: true })}</td>
+                <td class="u-td-num">${v.insuranceFactor}x</td>
               </tr>
             `).join('')}
           </tbody>
@@ -800,9 +800,9 @@ function renderVehiclesSubTab(el) {
 function renderOperatingSubTab(el) {
   el.innerHTML = `
     <div>
-      <h3 class="text-section" style="margin-bottom:12px;">Driver</h3>
+      <h3 class="text-section u-mb-3">Driver</h3>
       <div class="hub-card" style="padding:16px;margin-bottom:18px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;">
+        <div class="fm-grid-2">
           ${cfgInput('Driver Wage', 'driverCostPerHr', config.driverCostPerHr, '$/hr')}
           ${cfgInput('Driver Benefits %', 'driverBenefitPct', config.driverBenefitPct ?? 35, '%')}
           ${cfgInput('Detention Hrs/Trip', 'detentionHoursPerTrip', config.detentionHoursPerTrip ?? 2, 'hrs')}
@@ -817,20 +817,20 @@ function renderOperatingSubTab(el) {
           </label>
         </div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--ies-gray-200);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-          <label style="font-size:13px;font-weight:600;">Driver Pay Model:</label>
+          <label class="u-13 u-semibold">Driver Pay Model:</label>
           <select id="fm-driver-model" style="padding:6px 8px;border:1px solid var(--ies-gray-300);border-radius:6px;font-size:13px;font-weight:600;">
             <option value="hourly" ${(config.driverPayModel ?? 'hourly') === 'hourly' ? 'selected' : ''}>Hourly</option>
             <option value="perMile" ${(config.driverPayModel ?? 'hourly') === 'perMile' ? 'selected' : ''}>Per-Mile</option>
             <option value="percentage" ${(config.driverPayModel ?? 'hourly') === 'percentage' ? 'selected' : ''}>% of Revenue</option>
             <option value="hybrid" ${(config.driverPayModel ?? 'hourly') === 'hybrid' ? 'selected' : ''}>Hybrid</option>
           </select>
-          <span style="font-size:11px;color:var(--ies-gray-500);">Drives how driver-cost rolls up against trips, miles, or revenue.</span>
+          <span class="u-cap u-muted">Drives how driver-cost rolls up against trips, miles, or revenue.</span>
         </div>
       </div>
 
-      <h3 class="text-section" style="margin-bottom:12px;">Fuel &amp; Power</h3>
+      <h3 class="text-section u-mb-3">Fuel &amp; Power</h3>
       <div class="hub-card" style="padding:16px;margin-bottom:18px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;">
+        <div class="fm-grid-2">
           ${cfgInput('Diesel Price', 'dieselPricePerGal', config.dieselPricePerGal, '$/gal')}
           ${cfgInput('Tolls', 'tollsCostPerMi', config.tollsCostPerMi ?? 0.025, '$/mi')}
           ${cfgInput('Deadhead %', 'deadheadPct', config.deadheadPct ?? 15, '%')}
@@ -838,9 +838,9 @@ function renderOperatingSubTab(el) {
         </div>
       </div>
 
-      <h3 class="text-section" style="margin-bottom:12px;">Vehicle</h3>
+      <h3 class="text-section u-mb-3">Vehicle</h3>
       <div class="hub-card" style="padding:16px;margin-bottom:18px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;">
+        <div class="fm-grid-2">
           ${cfgInput('Maintenance', 'maintenanceCostPerMi', config.maintenanceCostPerMi, '$/mi')}
           ${cfgInput('Tires', 'tiresCostPerMi', config.tiresCostPerMi ?? 0.04, '$/mi')}
           ${cfgInput('Depreciation', 'depreciationYears', config.depreciationYears, 'yrs')}
@@ -848,20 +848,20 @@ function renderOperatingSubTab(el) {
         </div>
       </div>
 
-      <h3 class="text-section" style="margin-bottom:12px;">Overhead</h3>
+      <h3 class="text-section u-mb-3">Overhead</h3>
       <div class="hub-card" style="padding:16px;margin-bottom:18px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;">
+        <div class="fm-grid-2">
           ${cfgInput('Admin Overhead %', 'adminCostPct', config.adminCostPct ?? 8, '%')}
           ${cfgInput('Permits', 'permitsPerYear', config.permitsPerYear ?? 850, '$/yr')}
         </div>
       </div>
 
-      <h3 class="text-section" style="margin-bottom:12px;">Comparison Knobs</h3>
+      <h3 class="text-section u-mb-3">Comparison Knobs</h3>
       <div class="hub-card" style="padding:16px;border-left:3px solid var(--ies-blue);margin-bottom:18px;">
         <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:10px;line-height:1.5;">
           Tune the numbers used by the <b>3-way comparison</b> on the Run phase. These don't change vehicle costs — they re-weight the dedicated and common-carrier columns.
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;">
+        <div class="fm-grid-2">
           ${cfgInput('GXO Margin', 'gxoMarginPct', config.gxoMarginPct, '%')}
           ${cfgInput('Carrier Premium', 'carrierPremiumPct', config.carrierPremiumPct, '%')}
         </div>
@@ -896,7 +896,7 @@ function renderConfig(el) {
 
 function cfgInput(label, key, value, unit) {
   return `
-    <div style="display:flex;align-items:center;gap:8px;">
+    <div class="u-row">
       <label style="font-size:13px;font-weight:600;flex:1;">${label}</label>
       <input type="number" value="${value}" data-cfg="${key}" step="0.01"
              style="width:90px;padding:8px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
@@ -919,19 +919,19 @@ function renderRateDeck(el) {
         </div>
         <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-rd-add">+ Add Class</button>
       </div>
-      <div class="hub-card" style="padding:16px;">
+      <div class="hub-card u-p-4">
         ${carrierRateDeck.length === 0 ? `
           <div style="padding:14px;text-align:center;color:var(--ies-gray-400);font-size:12px;">Loading carrier rate deck…</div>
         ` : `
-          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <table class="u-table">
             <thead>
-              <tr style="border-bottom:2px solid var(--ies-gray-200);">
-                <th style="text-align:left;padding:6px;font-weight:700;">Vehicle Type</th>
-                <th style="text-align:right;padding:6px;font-weight:700;">Base Rate</th>
-                <th style="text-align:right;padding:6px;font-weight:700;">Fuel Surcharge</th>
-                <th style="text-align:right;padding:6px;font-weight:700;">Min Charge</th>
-                <th style="text-align:right;padding:6px;font-weight:700;">Effective</th>
-                <th style="text-align:left;padding:6px;font-weight:700;">Notes</th>
+              <tr class="u-th-rule">
+                <th class="u-td u-left u-bold">Vehicle Type</th>
+                <th class="u-td-num u-bold">Base Rate</th>
+                <th class="u-td-num u-bold">Fuel Surcharge</th>
+                <th class="u-td-num u-bold">Min Charge</th>
+                <th class="u-td-num u-bold">Effective</th>
+                <th class="u-td u-left u-bold">Notes</th>
               </tr>
             </thead>
             <tbody>
@@ -939,17 +939,17 @@ function renderRateDeck(el) {
                 const eff = (rate.base_rate_per_mile || 0) * (1 + (rate.fuel_surcharge_pct || 0));
                 return `
                   <tr style="border-bottom:1px solid var(--ies-gray-200);">
-                    <td style="padding:6px;font-weight:600;">${rate.display_name}<div style="font-size:10px;color:var(--ies-gray-400);font-weight:400;">${rate.vehicle_type}</div></td>
-                    <td style="padding:6px;text-align:right;">
+                    <td class="u-td u-semibold">${rate.display_name}<div style="font-size:10px;color:var(--ies-gray-400);font-weight:400;">${rate.vehicle_type}</div></td>
+                    <td class="u-td-num">
                       <input type="number" step="0.01" value="${rate.base_rate_per_mile}" data-rate-id="${rate.id}" data-rate-field="base_rate_per_mile"
                              style="width:80px;padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;text-align:right;">
                       <span style="font-size:10px;color:var(--ies-gray-400);">/mi</span>
                     </td>
-                    <td style="padding:6px;text-align:right;">
+                    <td class="u-td-num">
                       <input type="number" step="0.01" value="${rate.fuel_surcharge_pct}" data-rate-id="${rate.id}" data-rate-field="fuel_surcharge_pct"
                              style="width:70px;padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;text-align:right;">
                     </td>
-                    <td style="padding:6px;text-align:right;">
+                    <td class="u-td-num">
                       <input type="number" step="5" value="${rate.min_charge}" data-rate-id="${rate.id}" data-rate-field="min_charge"
                              style="width:70px;padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:12px;text-align:right;">
                     </td>
@@ -1061,7 +1061,7 @@ function renderFeasibilitySubTab(el) {
     const card = document.createElement('div');
     card.className = 'hub-card';
     card.style.cssText = 'padding:16px;background:#f0fdf4;border-left:4px solid #22c55e;margin-top:8px;';
-    card.innerHTML = '<div style="font-size:13px;font-weight:700;color:#15803d;">✓ HOS Feasibility — all lanes within driving budget</div>';
+    card.innerHTML = '<div style="font-size:13px;font-weight:700;color:var(--c-success-strong);">✓ HOS Feasibility — all lanes within driving budget</div>';
     inner.appendChild(card);
   }
 }
@@ -1078,14 +1078,14 @@ function renderResults(el) {
   el.innerHTML = `
     <div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <h3 class="text-section" style="margin:0;">Results</h3>
-        <div style="display:flex;gap:8px;">
+        <h3 class="text-section u-m0">Results</h3>
+        <div class="u-flex">
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-results-export">⬇ Export XLSX</button>
           <button class="hub-btn hub-btn-sm hub-btn-primary" id="fm-results-push-cm" title="Stash fleet costs on the active cost-model scenario">→ Push to Cost Model</button>
         </div>
       </div>
       <!-- KPI Bar -->
-      <div class="hub-card" style="background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 24px;margin-bottom:20px;">
+      <div class="hub-card" style="background:linear-gradient(135deg,var(--c-ink-deep),#0d1f3c);color:#fff;padding:16px 24px;margin-bottom:20px;">
         <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
           ${kpi('Total Vehicles', String(r.totalVehicles))}
           ${kpi('Annual Miles', calc.formatMiles(r.totalAnnualMiles))}
@@ -1098,36 +1098,36 @@ function renderResults(el) {
       <!-- Fleet Composition -->
       <div class="hub-card" data-fm-section="cost" style="padding:16px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:12px;">Fleet Composition</div>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <table class="u-table">
           <thead>
-            <tr style="border-bottom:2px solid var(--ies-gray-200);">
-              <th style="text-align:left;padding:6px;font-weight:700;">Vehicle</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">Units</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">Annual Miles</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">Fuel</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">Driver</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">Maint</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">Depr</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">Insurance</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">Admin</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">Total</th>
-              <th style="text-align:right;padding:6px;font-weight:700;">$/Mile</th>
+            <tr class="u-th-rule">
+              <th class="u-td u-left u-bold">Vehicle</th>
+              <th class="u-td-num u-bold">Units</th>
+              <th class="u-td-num u-bold">Annual Miles</th>
+              <th class="u-td-num u-bold">Fuel</th>
+              <th class="u-td-num u-bold">Driver</th>
+              <th class="u-td-num u-bold">Maint</th>
+              <th class="u-td-num u-bold">Depr</th>
+              <th class="u-td-num u-bold">Insurance</th>
+              <th class="u-td-num u-bold">Admin</th>
+              <th class="u-td-num u-bold">Total</th>
+              <th class="u-td-num u-bold">$/Mile</th>
             </tr>
           </thead>
           <tbody>
             ${r.fleetComposition.map(f => `
               <tr style="border-bottom:1px solid var(--ies-gray-200);">
-                <td style="padding:6px;font-weight:600;">${f.vehicleName}</td>
-                <td style="padding:6px;text-align:right;">${f.unitsNeeded}</td>
-                <td style="padding:6px;text-align:right;">${Math.round(f.annualMiles).toLocaleString()}</td>
-                <td style="padding:6px;text-align:right;">${calc.formatCurrency(f.annualFuelCost, { compact: true })}</td>
-                <td style="padding:6px;text-align:right;">${calc.formatCurrency(f.annualDriverCost, { compact: true })}</td>
-                <td style="padding:6px;text-align:right;">${calc.formatCurrency(f.annualMaintenanceCost, { compact: true })}</td>
-                <td style="padding:6px;text-align:right;">${calc.formatCurrency(f.annualDepreciation, { compact: true })}</td>
-                <td style="padding:6px;text-align:right;">${calc.formatCurrency(f.annualInsurance, { compact: true })}</td>
-                <td style="padding:6px;text-align:right;">${calc.formatCurrency(f.annualAdminCost || 0, { compact: true })}</td>
-                <td style="padding:6px;text-align:right;font-weight:700;">${calc.formatCurrency(f.totalAnnualCost, { compact: true })}</td>
-                <td style="padding:6px;text-align:right;">${calc.formatCpm(f.costPerMile)}</td>
+                <td class="u-td u-semibold">${f.vehicleName}</td>
+                <td class="u-td-num">${f.unitsNeeded}</td>
+                <td class="u-td-num">${Math.round(f.annualMiles).toLocaleString()}</td>
+                <td class="u-td-num">${calc.formatCurrency(f.annualFuelCost, { compact: true })}</td>
+                <td class="u-td-num">${calc.formatCurrency(f.annualDriverCost, { compact: true })}</td>
+                <td class="u-td-num">${calc.formatCurrency(f.annualMaintenanceCost, { compact: true })}</td>
+                <td class="u-td-num">${calc.formatCurrency(f.annualDepreciation, { compact: true })}</td>
+                <td class="u-td-num">${calc.formatCurrency(f.annualInsurance, { compact: true })}</td>
+                <td class="u-td-num">${calc.formatCurrency(f.annualAdminCost || 0, { compact: true })}</td>
+                <td class="u-td-num u-bold">${calc.formatCurrency(f.totalAnnualCost, { compact: true })}</td>
+                <td class="u-td-num">${calc.formatCpm(f.costPerMile)}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -1135,13 +1135,13 @@ function renderResults(el) {
       </div>
 
       <!-- Cost Waterfall (fixed → variable → total) -->
-      <div class="hub-card" data-fm-section="cost" style="padding:20px;margin-bottom:20px;">
+      <div class="hub-card fm-card" data-fm-section="cost">
         <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Annual Cost Waterfall</div>
         ${renderCostWaterfall(r.fleetComposition)}
       </div>
 
       <!-- 3-Way Comparison Cards -->
-      <div class="hub-card" data-fm-section="comparison" style="padding:20px;margin-bottom:20px;">
+      <div class="hub-card fm-card" data-fm-section="comparison">
         <div style="font-size:14px;font-weight:700;margin-bottom:16px;">3-Way Cost Comparison</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;">
           ${renderComparisonCard('Private Fleet', r.comparison.private, r.comparison, 'var(--ies-blue)')}
@@ -1154,7 +1154,7 @@ function renderResults(el) {
       ${renderCostBuildupCard(r)}
 
       <!-- ATRI Benchmark Table -->
-      <div class="hub-card" data-fm-section="comparison" style="padding:20px;margin-bottom:20px;">
+      <div class="hub-card fm-card" data-fm-section="comparison">
         <div style="font-size:14px;font-weight:700;margin-bottom:16px;">ATRI 2024 Benchmark Comparison</div>
         <div style="overflow-x:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -1195,15 +1195,15 @@ function renderResults(el) {
       <div class="hub-card" data-fm-section="cost" style="padding:16px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:12px;">Lane Assignments</div>
         <div style="max-height:300px;overflow-y:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <table class="u-table">
             <thead style="position:sticky;top:0;background:#fff;">
-              <tr style="border-bottom:2px solid var(--ies-gray-200);">
-                <th style="text-align:left;padding:6px;font-weight:700;">Lane</th>
-                <th style="text-align:left;padding:6px;font-weight:700;">Vehicle</th>
-                <th style="text-align:right;padding:6px;font-weight:700;">Trips/Wk</th>
-                <th style="text-align:right;padding:6px;font-weight:700;">RT Miles</th>
-                <th style="text-align:right;padding:6px;font-weight:700;">Annual Miles</th>
-                <th style="text-align:right;padding:6px;font-weight:700;">Per Trip</th>
+              <tr class="u-th-rule">
+                <th class="u-td u-left u-bold">Lane</th>
+                <th class="u-td u-left u-bold">Vehicle</th>
+                <th class="u-td-num u-bold">Trips/Wk</th>
+                <th class="u-td-num u-bold">RT Miles</th>
+                <th class="u-td-num u-bold">Annual Miles</th>
+                <th class="u-td-num u-bold">Per Trip</th>
               </tr>
             </thead>
             <tbody>
@@ -1211,12 +1211,12 @@ function renderResults(el) {
                 const lane = lanes.find(l => l.id === a.laneId);
                 return `
                   <tr style="border-bottom:1px solid var(--ies-gray-200);">
-                    <td style="padding:6px;font-weight:600;">${escapeHtml(lane ? lane.origin + ' → ' + lane.destination : a.laneId)}</td>
+                    <td class="u-td u-semibold">${escapeHtml(lane ? lane.origin + ' → ' + lane.destination : a.laneId)}</td>
                     <td style="padding:6px;">${escapeHtml(a.vehicleName)}</td>
-                    <td style="padding:6px;text-align:right;">${a.tripsPerWeek}</td>
-                    <td style="padding:6px;text-align:right;">${a.roundTripMiles.toLocaleString()}</td>
-                    <td style="padding:6px;text-align:right;">${Math.round(a.annualMiles).toLocaleString()}</td>
-                    <td style="padding:6px;text-align:right;">${calc.formatCurrency(a.perTripCost)}</td>
+                    <td class="u-td-num">${a.tripsPerWeek}</td>
+                    <td class="u-td-num">${a.roundTripMiles.toLocaleString()}</td>
+                    <td class="u-td-num">${Math.round(a.annualMiles).toLocaleString()}</td>
+                    <td class="u-td-num">${calc.formatCurrency(a.perTripCost)}</td>
                   </tr>
                 `;
               }).join('')}
@@ -1271,10 +1271,10 @@ function renderResults(el) {
 function comparisonBar(label, amount, maxAmount, color) {
   const pct = maxAmount > 0 ? (amount / maxAmount) * 100 : 0;
   return `
-    <div style="margin-bottom:12px;">
+    <div class="u-mb-3">
       <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-        <span style="font-size:13px;font-weight:600;">${label}</span>
-        <span style="font-size:13px;font-weight:700;">${calc.formatCurrency(amount, { compact: true })}</span>
+        <span class="u-13 u-semibold">${label}</span>
+        <span class="u-13 u-bold">${calc.formatCurrency(amount, { compact: true })}</span>
       </div>
       <div style="height:24px;border-radius:6px;background:var(--ies-gray-200);overflow:hidden;">
         <div style="height:100%;width:${pct}%;background:${color};border-radius:6px;"></div>
@@ -1331,8 +1331,8 @@ function renderCostWaterfall(fleetComposition) {
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding-top:12px;border-top:1px solid var(--ies-gray-200);">
-      <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Fixed Cost</div><div style="font-size:18px;font-weight:800;color:#7c3aed;">${calc.formatCurrency(totalFixed, { compact: true })}</div></div>
-      <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Variable Cost</div><div style="font-size:18px;font-weight:800;color:#dc2626;">${calc.formatCurrency(totalVariable, { compact: true })}</div></div>
+      <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Fixed Cost</div><div style="font-size:18px;font-weight:800;color:var(--c-purple);">${calc.formatCurrency(totalFixed, { compact: true })}</div></div>
+      <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Variable Cost</div><div style="font-size:18px;font-weight:800;color:var(--c-danger);">${calc.formatCurrency(totalVariable, { compact: true })}</div></div>
       <div><div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Total Cost</div><div style="font-size:18px;font-weight:800;color:var(--ies-navy);">${calc.formatCurrency(grand, { compact: true })}</div></div>
     </div>
   `;
@@ -1357,17 +1357,17 @@ function renderCostBuildupCard(r) {
     </tr>`;
 
   return `
-    <div class="hub-card" data-fm-section="cost" style="padding:20px;margin-bottom:20px;">
+    <div class="hub-card fm-card" data-fm-section="cost">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <div style="font-size:14px;font-weight:700;">Annual Cost Build-Up — All Three Models</div>
-        <div style="font-size:11px;color:var(--ies-gray-500);">Side-by-side. — = not applicable for that model.</div>
+        <div class="u-cap u-muted">Side-by-side. — = not applicable for that model.</div>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
         <thead>
           <tr style="border-bottom:2px solid var(--ies-gray-200);background:var(--ies-gray-50);">
             <th style="padding:8px;text-align:left;font-weight:700;color:var(--ies-gray-500);">Cost Component</th>
             <th style="padding:8px;text-align:right;font-weight:700;color:var(--ies-blue);">Private</th>
-            <th style="padding:8px;text-align:right;font-weight:700;color:#8b5cf6;">Dedicated (GXO)</th>
+            <th style="padding:8px;text-align:right;font-weight:700;color:var(--c-purple-bright);">Dedicated (GXO)</th>
             <th style="padding:8px;text-align:right;font-weight:700;color:#ef4444;">Common Carrier</th>
           </tr>
         </thead>
@@ -1389,7 +1389,7 @@ function renderCostBuildupCard(r) {
           <tr style="border-top:2px solid var(--ies-gray-300);background:var(--ies-gray-50);font-weight:700;">
             <td style="padding:8px;">Total Annual</td>
             <td style="padding:8px;text-align:right;color:var(--ies-blue);">${fmt(r.comparison.private)}</td>
-            <td style="padding:8px;text-align:right;color:#8b5cf6;">${fmt(r.comparison.dedicated)}</td>
+            <td style="padding:8px;text-align:right;color:var(--c-purple-bright);">${fmt(r.comparison.dedicated)}</td>
             <td style="padding:8px;text-align:right;color:#ef4444;">${fmt(r.comparison.carrier)}</td>
           </tr>
         </tbody>
@@ -1404,7 +1404,7 @@ function renderComparisonCard(label, amount, comparison, color) {
   return `
     <div style="border:1px solid var(--ies-gray-200);border-radius:8px;padding:16px;${isLowest ? `background:linear-gradient(135deg,${color}08,${color}04);border-color:${color};` : ''} ">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div style="font-size:13px;font-weight:700;">${label}</div>
+        <div class="u-13 u-bold">${label}</div>
         ${isLowest ? `<div style="background:${color};color:#fff;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;">✓ LOWEST</div>` : ''}
       </div>
       <div style="font-size:20px;font-weight:800;color:${color};margin-bottom:12px;">${calc.formatCurrency(amount, { compact: true })}</div>
@@ -1453,7 +1453,7 @@ function renderSensitivityMatrixCard() {
 
     const rngInput = (key, val, step, min, max) => `<input type="number" data-sens-range="${key}" value="${val}" step="${step}" min="${min}" max="${max}" style="width:60px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;font-size:11px;text-align:right;">`;
     let tableHtml = `
-      <div class="hub-card" data-fm-section="sensitivity" style="padding:20px;margin-bottom:20px;">
+      <div class="hub-card fm-card" data-fm-section="sensitivity">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
           <div style="font-size:14px;font-weight:700;">Sensitivity Analysis: Driver Rate × Diesel Price</div>
           <div style="display:flex;gap:14px;font-size:11px;color:var(--ies-gray-600);align-items:center;flex-wrap:wrap;">
@@ -1489,12 +1489,12 @@ function renderSensitivityMatrixCard() {
     tableHtml += `</tbody></table></div>
       <div style="margin-top:12px;font-size:11px;color:var(--ies-gray-600);">
         <div style="display:flex;gap:16px;flex-wrap:wrap;">
-          <span><span style="display:inline-block;width:12px;height:12px;background:#22c55e;margin-right:4px;"></span>Excellent &lt;$2.00/mi</span>
+          <span><span style="display:inline-block;width:12px;height:12px;background:var(--c-success-bright);margin-right:4px;"></span>Excellent &lt;$2.00/mi</span>
           <span><span style="display:inline-block;width:12px;height:12px;background:#fbbf24;margin-right:4px;"></span>Good $2.00-2.50/mi</span>
           <span><span style="display:inline-block;width:12px;height:12px;background:#f97316;margin-right:4px;"></span>Fair $2.50-3.00/mi</span>
           <span><span style="display:inline-block;width:12px;height:12px;background:#ef4444;margin-right:4px;"></span>High &gt;$3.00/mi</span>
         </div>
-        <div style="margin-top:8px;"><strong>Current scenario</strong> shown with navy border.</div>
+        <div class="u-mt-2"><strong>Current scenario</strong> shown with navy border.</div>
       </div>
     </div>`;
     return tableHtml;
@@ -1508,7 +1508,7 @@ function renderVolumeSensitivityCard() {
   try {
     const scenarios = calc.calcVolumeSensitivity(lanes, vehicles, config);
     return `
-      <div class="hub-card" data-fm-section="sensitivity" style="padding:20px;margin-bottom:20px;">
+      <div class="hub-card fm-card" data-fm-section="sensitivity">
         <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Volume Sensitivity Analysis</div>
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
           <thead>
@@ -1527,7 +1527,7 @@ function renderVolumeSensitivityCard() {
                 <td style="padding:8px;text-align:right;">${s.totalVehicles}</td>
                 <td style="padding:8px;text-align:right;">${calc.formatCurrency(s.totalAnnualCost, { compact: true })}</td>
                 <td style="padding:8px;text-align:right;">${calc.formatCpm(s.costPerMile)}</td>
-                <td style="padding:8px;text-align:right;${s.variance.cost < 0 ? 'color:#22c55e;' : 'color:#ef4444;'}">${s.variance.cost > 0 ? '+' : ''}${calc.formatCurrency(s.variance.cost, { compact: true })}</td>
+                <td style="padding:8px;text-align:right;${s.variance.cost < 0 ? 'color:var(--c-success-bright);' : 'color:#ef4444;'}">${s.variance.cost > 0 ? '+' : ''}${calc.formatCurrency(s.variance.cost, { compact: true })}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -1546,8 +1546,8 @@ function renderHosWarnings(r) {
   const v = (r && r.hosViolations) || [];
   if (v.length === 0) return '';
   return `
-    <div class="hub-card" data-fm-section="feasibility" style="padding:14px;margin-bottom:20px;border-left:4px solid #ef4444;background:#fef2f2;">
-      <div style="font-size:13px;font-weight:700;color:#991b1b;margin-bottom:8px;">⚠ HOS Feasibility Warnings (${v.length})</div>
+    <div class="hub-card" data-fm-section="feasibility" style="padding:14px;margin-bottom:20px;border-left:4px solid #ef4444;background:var(--c-danger-soft);">
+      <div style="font-size:13px;font-weight:700;color:var(--c-danger-ink);margin-bottom:8px;">⚠ HOS Feasibility Warnings (${v.length})</div>
       <ul style="margin:0;padding-left:18px;font-size:12px;color:#7f1d1d;">
         ${v.map(x => {
           const lane = lanes.find(l => l.id === x.laneId);
@@ -1584,7 +1584,7 @@ function renderBreakEvenCard(r) {
   const carrY = yToPx(be.carrierCpm);
   const curX = xToPx(be.currentMiles);
   return `
-    <div class="hub-card" data-fm-section="comparison" style="padding:20px;margin-bottom:20px;">
+    <div class="hub-card fm-card" data-fm-section="comparison">
       <div style="font-size:14px;font-weight:700;margin-bottom:8px;">Break-Even Miles — Private vs Dedicated vs Carrier</div>
       <div style="font-size:12px;color:var(--ies-gray-500);margin-bottom:12px;">Below break-even, Private's fixed costs dominate. Above break-even, Private wins on $/mi.</div>
       <svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" style="background:var(--ies-gray-50);border-radius:6px;">
@@ -1604,9 +1604,9 @@ function renderBreakEvenCard(r) {
         <text x="${PADL + 6}" y="${PADT + 14}" font-size="10" fill="var(--ies-blue)" font-weight="700">Private (curve) — fixed ÷ miles + variable</text>
       </svg>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px;font-size:12px;">
-        <div><div style="color:var(--ies-gray-500);font-size:11px;font-weight:700;text-transform:uppercase;">Current Miles</div><div style="font-weight:700;">${Math.round(be.currentMiles).toLocaleString()}/yr</div></div>
-        <div><div style="color:#8b5cf6;font-size:11px;font-weight:700;text-transform:uppercase;">Vs Dedicated Crossover</div><div style="font-weight:700;">${fmt(be.dedicatedCrossoverMiles)}</div></div>
-        <div><div style="color:#ef4444;font-size:11px;font-weight:700;text-transform:uppercase;">Vs Carrier Crossover</div><div style="font-weight:700;">${fmt(be.carrierCrossoverMiles)}</div></div>
+        <div><div style="color:var(--ies-gray-500);font-size:11px;font-weight:700;text-transform:uppercase;">Current Miles</div><div class="u-bold">${Math.round(be.currentMiles).toLocaleString()}/yr</div></div>
+        <div><div style="color:var(--c-purple-bright);font-size:11px;font-weight:700;text-transform:uppercase;">Vs Dedicated Crossover</div><div class="u-bold">${fmt(be.dedicatedCrossoverMiles)}</div></div>
+        <div><div style="color:#ef4444;font-size:11px;font-weight:700;text-transform:uppercase;">Vs Carrier Crossover</div><div class="u-bold">${fmt(be.carrierCrossoverMiles)}</div></div>
       </div>
     </div>
   `;
@@ -1732,15 +1732,15 @@ function renderMap(el) {
   el.innerHTML = `
     <div style="display:flex;flex-direction:column;height:100%;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-        <h3 class="text-section" style="margin:0;">Route Map</h3>
-        <span style="font-size:11px;color:var(--ies-gray-400);">${lanes.length} lanes • ${result.totalVehicles} vehicles</span>
+        <h3 class="text-section u-m0">Route Map</h3>
+        <span class="u-cap u-faint">${lanes.length} lanes • ${result.totalVehicles} vehicles</span>
       </div>
       <div id="fm-map-container" style="flex:1;min-height:500px;border-radius:10px;border:1px solid var(--ies-gray-200);overflow:hidden;"></div>
       <div style="display:flex;gap:16px;margin-top:12px;font-size:11px;color:var(--ies-gray-400);">
         <span><span style="display:inline-block;width:20px;height:3px;background:var(--ies-blue);vertical-align:middle;"></span> Dry Van</span>
-        <span><span style="display:inline-block;width:20px;height:3px;background:#22c55e;vertical-align:middle;"></span> Reefer</span>
-        <span><span style="display:inline-block;width:20px;height:3px;background:#f59e0b;vertical-align:middle;"></span> Flatbed</span>
-        <span><span style="display:inline-block;width:20px;height:3px;background:#8b5cf6;vertical-align:middle;"></span> Straight Truck</span>
+        <span><span style="display:inline-block;width:20px;height:3px;background:var(--c-success-bright);vertical-align:middle;"></span> Reefer</span>
+        <span><span style="display:inline-block;width:20px;height:3px;background:var(--c-warn);vertical-align:middle;"></span> Flatbed</span>
+        <span><span style="display:inline-block;width:20px;height:3px;background:var(--c-purple-bright);vertical-align:middle;"></span> Straight Truck</span>
         <span><span style="display:inline-block;width:20px;height:3px;background:#ec4899;vertical-align:middle;"></span> Sprinter</span>
       </div>
     </div>
