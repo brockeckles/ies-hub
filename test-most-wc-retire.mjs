@@ -46,8 +46,14 @@ t('api.saveWorkflow retired', () =>
   assert(!api.includes('saveWorkflow') && !api.includes('serializeWorkflow'),
     'api.js still carries the composer save path'));
 
-t('router pin bumped for the retirement commit', () =>
-  assert(index.includes('most-standards/ui.js?v=20260704-wcr1'), 'index.html pin not bumped'));
+t('router pin present and post-retirement', () => {
+  // Genericized 2026-07-05 (U2): hardcoded pin literal went stale on the next
+  // bump — same lesson as test-ux2-wsc-quick's N1 genericization. Durable
+  // invariant: index.html pins most-standards/ui.js at 20260704-wcr1 or later.
+  const m = index.match(/most-standards\/ui\.js\?v=(\d{8})-/);
+  assert(m, 'index.html carries no most-standards/ui.js pin');
+  assert(Number(m[1]) >= 20260704, `pin ${m[1]} predates the retirement commit`);
+});
 
 // ── 2. legacy rows quarantined ───────────────────────────────────────────
 t('workflow-kind rows still excluded from savedScenarios', () =>
