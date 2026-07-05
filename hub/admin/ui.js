@@ -92,7 +92,6 @@ function render() {
         <div style="display:flex;align-items:center;gap:10px;">
           <h2 class="text-page u-m0">Admin</h2>
           ${renderEnvChip()}
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="admin-theme-toggle" title="U4c dark-mode spike — experimental, admin-only. Canvas surfaces (WSC plan, COG map) stay light.">${document.documentElement.dataset.theme === 'dark' ? 'Light mode' : 'Dark mode (beta)'}</button>
         </div>
         <div class="u-flex" id="admin-tabs">
           ${['tables', 'activity', 'escalations', 'audit'].map(t => `
@@ -112,14 +111,6 @@ function render() {
       <div id="admin-content"></div>
     </div>
   `;
-
-  rootEl.querySelector('#admin-theme-toggle')?.addEventListener('click', () => {
-    const root = document.documentElement;
-    const next = root.dataset.theme === 'dark' ? '' : 'dark';
-    if (next) { root.dataset.theme = next; } else { delete root.dataset.theme; }
-    try { localStorage.setItem('hub-theme', next); } catch { /* private mode */ }
-    render();
-  });
 
   rootEl.querySelector('#admin-tabs')?.addEventListener('click', (e) => {
     const btn = /** @type {HTMLElement} */ (e.target).closest('[data-tab]');

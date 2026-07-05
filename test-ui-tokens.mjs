@@ -18,13 +18,9 @@ const css = readFileSync('./css/hub.css', 'utf8');
 
 // ── token definitions ──
 {
-  // U4c: theme override blocks (:root[data-theme="..."]) legitimately
-  // redefine tokens — strip them before the duplicate check.
-  const cssNoThemes = css.replace(/:root\[data-theme="[^"]*"\]\s*{[^}]*}/g, '');
-  const defs = [...cssNoThemes.matchAll(/^\s*(--[a-z][a-z0-9-]*)\s*:/gm)].map(m => m[1]);
+  const defs = [...css.matchAll(/^\s*(--[a-z][a-z0-9-]*)\s*:/gm)].map(m => m[1]);
   const dupes = defs.filter((d, i) => defs.indexOf(d) !== i);
   t('no duplicate token definitions', dupes.length === 0, dupes.join(','));
-  t('dark theme block exists (U4c spike)', /:root\[data-theme="dark"\]/.test(css));
 
   const required = [
     '--c-success', '--c-success-strong', '--c-success-bright', '--c-success-bg', '--c-success-ink',
