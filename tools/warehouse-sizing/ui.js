@@ -23,7 +23,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260704-wq1';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260703-ux0';
 import { renderDashboard } from './ui-dashboard.js?v=20260703-ux0';
-import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260704-n4a';
+import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260704-n5a';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260702-p1b';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
@@ -107,6 +107,11 @@ let mediaPlan = null;
  *  docks, staging, MHE/aisles. Persisted on Apply.
  *  @type {Object|null} */
 let dynamicsPlan = null;
+
+/** N5 (2026-07-04) — layout synthesis + compliance plan (layout-calc.js):
+ *  grid-fit, standards checklist, flow pattern. Persisted on Apply.
+ *  @type {Object|null} */
+let layoutPlan = null;
 
 /** @type {boolean} */
 let isDirty = false;
@@ -311,6 +316,7 @@ function openEditor(savedRow) {
     pinnedFactors = data.pinnedFactors || null;  // N2 — legacy scenarios pin on next save
     mediaPlan = data.mediaPlan || null;           // N3 — engineered media plan
     dynamicsPlan = data.dynamicsPlan || null;     // N4 — dynamics plan
+    layoutPlan = data.layoutPlan || null;         // N5 — layout/compliance plan
     resetBasisState();
     zones = { ...createDefaultZones(), ...(data.zones || {}) };
     volumes = { ...createDefaultVolumes(), ...(data.volumes || {}) };
@@ -327,6 +333,7 @@ function openEditor(savedRow) {
     pinnedFactors = null;             // N2 — pins at first save
     mediaPlan = null;                 // N3 — no engineered plan yet
     dynamicsPlan = null;              // N4 — no dynamics plan yet
+    layoutPlan = null;                // N5 — no layout plan yet
     resetBasisState();
     zones = createDefaultZones();
     volumes = createDefaultVolumes();
@@ -579,7 +586,7 @@ async function handleSaveWsc() {
         if (live.length > 0) pinnedFactors = pinWscFactors(live);
       } catch (_) { /* pin on a later save instead */ }
     }
-    const saved = await api.saveConfig({ ...facility, zones, volumes, profile, pinnedFactors, mediaPlan, dynamicsPlan });
+    const saved = await api.saveConfig({ ...facility, zones, volumes, profile, pinnedFactors, mediaPlan, dynamicsPlan, layoutPlan });
     facility.id = saved.id || saved[0]?.id || facility.id;
     _clearDirty();
     showToast(`Saved "${facility.name || 'Untitled'}"`, 'success');
@@ -885,6 +892,7 @@ function renderContentView() {
       getDynamicsPlan: () => dynamicsPlan,
       getVolumes: () => volumes,
       getFacility: () => facility,
+      getZones: () => zones,
       applyDynamicsPlan: (plan) => {
         dynamicsPlan = plan;
         if (plan?.docks) {
@@ -900,6 +908,20 @@ function renderContentView() {
           zones.shipStagingSqft = plan.staging.outbound.sqft;
         }
         if (plan?.mhe?.governingAisleFt > 0) facility.aisleWidth = plan.mhe.governingAisleFt;
+        _markDirty();
+        renderConfigPanel();
+        _refreshWscKpis();
+      },
+      // N5 — layout/compliance plan: Apply writes the recommended grid and
+      // conservatively raises flue space to the governing standard's minimum.
+      getLayoutPlan: () => layoutPlan,
+      applyLayoutPlan: (plan) => {
+        layoutPlan = plan;
+        if (plan?.gridFit?.recommended?.spanFt > 0 && plan.gridFit.recommended.spanFt !== plan.gridFit.spanXFt) {
+          facility.columnSpacingX = plan.gridFit.recommended.spanFt;
+        }
+        const flueMin = plan?.flueStandard === 'NFPA' ? 6 : 3;
+        facility.flueSpace = Math.max(Number(facility.flueSpace) || 0, flueMin);
         _markDirty();
         renderConfigPanel();
         _refreshWscKpis();

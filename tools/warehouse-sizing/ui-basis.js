@@ -23,6 +23,7 @@ import {
 import { wscFactorsDrift } from './factors-calc.js?v=20260704-n2a';
 import { selectMedia } from './media-calc.js?v=20260704-n3a';
 import { computeDynamics } from './dynamics-calc.js?v=20260704-n4a';
+import { synthesizeLayout } from './layout-calc.js?v=20260704-n5a';
 
 // ── Module state (session-scoped; raw rows never persisted) ──
 /** Parsed datasets awaiting/backing the profile. */
@@ -37,6 +38,8 @@ let _liveFactors = null;
 let _rotationPolicy = 'none';
 /** N4 — dynamics policy inputs (persisted on Apply). */
 let _dynPolicy = { arrivalWindowHrs: 8, dwellDaysIn: 1, dwellDaysOut: 0.5 };
+/** N5 — flue standard toggle (null = catalog default, currently FM). */
+let _flueStd = null;
 
 const SLOTS = [
   { key: 'skuMaster', label: 'SKU Master',         roles: SKU_MASTER_ROLES, hint: 'Item #, units/case, Ti×Hi, case dims' },
@@ -85,6 +88,7 @@ export function renderBasisView(container, ctx) {
       ${profile ? _renderProfileSummary(profile) : _renderEmptyState()}
       ${profile ? _renderMediaCard(profile, ctx) : ''}
       ${profile ? _renderDynamicsCard(profile, ctx) : ''}
+      ${_renderLayoutCard(ctx)}
       <div id="wsc-basis-factors"></div>
     </div>
   `;
@@ -623,6 +627,94 @@ function _bindDynamicsEvents(container, ctx) {
 }
 
 // ============================================================
+// LAYOUT & COMPLIANCE (N5) — grid-fit + standards checklist
+// ============================================================
+
+const _STATUS_CHIP = {
+  PASS: ['#dcfce7', '#15803d'], FAIL: ['#fee2e2', '#b91c1c'], 'N/A': ['#f3f4f6', '#6b7280'],
+};
+function _statusChip(status) {
+  const [bg, fg] = _STATUS_CHIP[status] || _STATUS_CHIP['N/A'];
+  return `<span style="display:inline-block;padding:1px 8px;border-radius:8px;font-size:9px;font-weight:700;letter-spacing:0.4px;background:${bg};color:${fg};">${status}</span>`;
+}
+
+function _computeLayoutPreview(ctx) {
+  return synthesizeLayout({
+    facility: ctx.getFacility?.() || {},
+    zones: ctx.getZones?.() || {},
+    dynamicsPlan: ctx.getDynamicsPlan?.(),
+    flueStandard: _flueStd,
+    pinnedFactors: ctx.getPinnedFactors?.(),
+  });
+}
+
+function _renderLayoutCard(ctx) {
+  const applied = ctx.getLayoutPlan?.();
+  if (applied?.flueStandard && _flueStd === null) _flueStd = applied.flueStandard;
+  const plan = _computeLayoutPreview(ctx);
+  const isApplied = !!applied;
+  const g = plan.gridFit;
+  return `
+    <div class="hub-card" style="padding:14px 16px;margin-top:14px;border-left:3px solid #16a34a;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+        <div style="font-size:12px;font-weight:700;">Layout & Compliance
+          <span style="font-weight:400;color:var(--ies-gray-500);font-size:11px;">· ${esc(plan.flow.pattern)}</span>
+          ${plan.compliance.failCount > 0 ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:#fee2e2;color:#b91c1c;">${plan.compliance.failCount} FAILING</span>` : '<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:#dcfce7;color:#15803d;">ALL CLEAR</span>'}
+          ${isApplied ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:#dcfce7;color:#166534;">APPLIED ${esc(applied.createdAt)}</span>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label style="font-size:11px;font-weight:600;color:var(--ies-gray-600);display:flex;align-items:center;gap:5px;">
+            Flue standard
+            <select id="wsc-layout-flue" style="padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:5px;font-size:11px;">
+              <option value=""${_flueStd === null ? ' selected' : ''}>Catalog default (FM)</option>
+              <option value="FM"${_flueStd === 'FM' ? ' selected' : ''}>FM Global DS 8-9</option>
+              <option value="NFPA"${_flueStd === 'NFPA' ? ' selected' : ''}>NFPA 13</option>
+            </select>
+          </label>
+          <button class="hub-btn hub-btn-sm hub-btn-primary" id="wsc-layout-apply"
+                  title="Persist this plan; writes the recommended column grid and raises flue space to the standard's minimum (never shrinks it).">
+            ${isApplied ? 'Re-apply to design' : 'Apply to design'}</button>
+        </div>
+      </div>
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:3px;">Column grid ↔ rack-bay fit</div>
+      <div style="font-size:11.5px;" title="${esc(g.rationale)}">
+        ${g.spanXFt} ft span → <b>${g.baysPerModule} bays/module</b>, ${g.slackIn}" slack
+        ${g.flueConflict ? '<span style="color:#b91c1c;font-weight:700;"> — flue conflict at column line</span>' : ''}
+        ${g.recommended && g.recommended.spanFt !== g.spanXFt ? ` · <span style="color:#166534;font-weight:600;">recommend ${g.recommended.spanFt} ft (${g.recommended.baysPerModule} bays, ${g.recommended.slackIn}" slack)</span>` : ''}
+      </div>
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin:10px 0 3px;">Standards checklist — ${esc(plan.flueStandard)} governing</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+        ${plan.compliance.checks.map(c => `
+          <tr style="border-top:1px solid var(--ies-gray-100);"${c.note ? ` title="${esc(c.note)}"` : ''}>
+            <td style="padding:4px 0;">${esc(c.label)}</td>
+            <td style="text-align:right;color:var(--ies-gray-600);white-space:nowrap;padding:0 10px;">${esc(c.required)}</td>
+            <td style="text-align:right;font-weight:600;white-space:nowrap;padding-right:10px;">${esc(c.actual)}</td>
+            <td style="text-align:right;width:52px;">${_statusChip(c.status)}</td>
+            <td style="text-align:right;color:var(--ies-gray-500);font-size:10px;white-space:nowrap;padding-left:10px;">${esc(c.citation)}</td>
+          </tr>`).join('')}
+      </table>
+      <div style="font-size:10.5px;color:var(--ies-gray-500);margin-top:6px;">${esc(plan.flow.advisory)}</div>
+      ${plan.gaps.map(gp => `
+        <div style="font-size:10.5px;color:${gp.severity === 'warn' ? '#b45309' : 'var(--ies-gray-500)'};margin-top:4px;">
+          ${gp.severity === 'warn' ? '⚠' : 'ℹ'} ${esc(gp.message)}</div>`).join('')}
+    </div>
+  `;
+}
+
+function _bindLayoutEvents(container, ctx) {
+  container.querySelector('#wsc-layout-flue')?.addEventListener('change', (e) => {
+    _flueStd = e.target.value || null;
+    ctx.rerender();
+  });
+  container.querySelector('#wsc-layout-apply')?.addEventListener('click', () => {
+    const plan = _computeLayoutPreview(ctx);
+    ctx.applyLayoutPlan(plan);
+    ctx.rerender();
+    ctx.toast?.(`Layout applied — ${plan.flueStandard} flues, ${plan.gridFit.recommended && plan.gridFit.recommended.spanFt !== plan.gridFit.spanXFt ? plan.gridFit.recommended.spanFt : plan.gridFit.spanXFt} ft grid, ${plan.compliance.failCount} check(s) failing.`, plan.compliance.failCount > 0 ? 'info' : 'success');
+  });
+}
+
+// ============================================================
 // HOUSE FACTORS (N2) — pinned catalog + drift badge + explicit adopt
 // ============================================================
 
@@ -708,6 +800,7 @@ function _bindEvents(container, ctx) {
   const fileInput = container.querySelector('#wsc-basis-file');
   _bindMediaEvents(container, ctx);   // N3 — rotation select + Apply
   _bindDynamicsEvents(container, ctx);   // N4 — policy inputs + Apply
+  _bindLayoutEvents(container, ctx);   // N5 — flue toggle + Apply
 
   container.querySelectorAll('[data-basis-upload]').forEach(btn => {
     btn.addEventListener('click', () => {
