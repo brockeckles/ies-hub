@@ -528,6 +528,14 @@ function renderShell() {
  *  <style> block (got dropped when chrome was extracted). */
 function _mostExtraStyles() {
   return `    <style>
+      /* U2 migration classes (2026-07-05) — extracted repeated inline styles.
+         Values byte-identical to the inline originals. */
+      .most-input-sm { width: 100%; font-size: 11px; padding: 4px 6px; }
+      .most-microlabel { display: block; font-size: 10px; font-weight: 700; color: var(--ies-gray-500); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 2px; }
+      .most-tile { border: 1px solid var(--ies-gray-200); border-radius: 10px; padding: 12px; text-align: center; }
+      .most-kpi-num { font-size: 20px; font-weight: 700; color: var(--ies-navy); }
+      .most-row-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+      .most-val { font-weight: 700; margin-left: 4px; }
       .most-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
       .most-tpl-card {
         border: 1px solid var(--ies-gray-200);
@@ -565,7 +573,7 @@ function _mostExtraStyles() {
         background: rgba(255, 149, 0, 0.04);
       }
       .most-row-variable td:first-child {
-        box-shadow: inset 3px 0 0 var(--ies-orange, #ff3a00);
+        box-shadow: inset 3px 0 0 var(--ies-orange, var(--ies-orange));
       }
 
       .most-detail-panel {
@@ -735,7 +743,7 @@ function _mostExtraStyles() {
       /* MOS-F2: Drag-reorder visuals for editor element rows */
       .most-elem-row[draggable="true"] { transition: background 0.12s ease, opacity 0.12s ease; }
       .most-elem-row--dragging { opacity: 0.45; background: var(--ies-gray-50); }
-      .most-elem-row--drop-target { box-shadow: inset 0 -3px 0 0 var(--ies-blue, #0047ab); }
+      .most-elem-row--drop-target { box-shadow: inset 0 -3px 0 0 var(--ies-blue, var(--ies-blue)); }
       .most-elem-row--variable { background: rgba(249, 115, 22, 0.04); }
 
             /* Empty state for the editor list */
@@ -1007,7 +1015,7 @@ function renderTemplateDetail() {
             ${t.process_area} · <span class="most-cat-badge most-cat-${t.labor_category}">${(t.labor_category || 'manual').toUpperCase()}</span> · ${t.uom || 'each'}
           </div>
         </div>
-        <div style="display:flex; gap:8px; align-items:center;">
+        <div class="u-row">
           ${_quickDetail ? `<button class="hub-btn hub-btn-primary hub-btn-sm" data-action="use-in-staffing" data-id="${t.id}" title="Add this activity as a line in the Staffing Analysis — set a daily volume there to get FTEs + cost">→ Use in staffing analysis</button>` : ''}
           <button class="hub-btn hub-btn-sm" data-action="seq-add" data-id="${t.id}" title="Chain this activity onto the Sequence Preview to spot the bottleneck across steps">+ Add to sequence</button>
           <button class="cm-delete-btn" data-action="close-detail" style="font-size:16px;">✕</button>
@@ -1028,7 +1036,7 @@ function renderTemplateDetail() {
       <!-- Element Sequence Table -->
       ${selectedElements.length > 0 ? `
         <div style="font-size:13px; font-weight:700; margin-bottom:8px;">Element Sequence</div>
-        <table class="cm-grid-table" style="font-size:12px;">
+        <table class="cm-grid-table u-12">
           <thead>
             <tr><th>#</th><th>Description</th>${_quickDetail ? '' : '<th>MOST Sequence</th><th class="cm-num">TMU</th>'}<th class="cm-num">Time</th><th>Type</th></tr>
           </thead>
@@ -1181,35 +1189,35 @@ function renderEditor() {
           <input class="hub-input" id="edit-tpl-wms" value="${escapeAttr(t.wms_transaction || '')}" placeholder="e.g., PICK, PUTAWAY" />
         </div>
       </div>
-      <div style="margin-top:16px;">
+      <div class="u-mt-4">
         <label class="cm-form-label">Description</label>
         <textarea class="hub-input" id="edit-tpl-desc" placeholder="Describe the operation..." style="height:60px;">${t.description || ''}</textarea>
       </div>
 
       <!-- Live Metrics -->
       <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-top:16px;">
-        <div style="border:1px solid var(--ies-gray-200); border-radius: 10px; padding:12px; text-align:center;">
-          <div style="font-size:11px; color:var(--ies-gray-500); font-weight:600;">Base UPH</div>
+        <div class="most-tile">
+          <div class="u-cap u-muted u-semibold">Base UPH</div>
           <div style="font-size:20px; font-weight:700; color:var(--ies-blue);" id="edit-live-uph">${calc.formatUph(baseUph)}</div>
         </div>
-        <div style="border:1px solid var(--ies-gray-200); border-radius: 10px; padding:12px; text-align:center;">
-          <div style="font-size:11px; color:var(--ies-gray-500); font-weight:600;">Total TMU</div>
-          <div style="font-size:20px; font-weight:700; color:var(--ies-navy);" id="edit-live-tmu">${totalTmu}</div>
+        <div class="most-tile">
+          <div class="u-cap u-muted u-semibold">Total TMU</div>
+          <div class="most-kpi-num" id="edit-live-tmu">${totalTmu}</div>
         </div>
-        <div style="border:1px solid var(--ies-gray-200); border-radius: 10px; padding:12px; text-align:center;">
-          <div style="font-size:11px; color:var(--ies-gray-500); font-weight:600;">Cycle Time</div>
+        <div class="most-tile">
+          <div class="u-cap u-muted u-semibold">Cycle Time</div>
           <div style="font-size:18px; font-weight:700; color:var(--ies-navy);" id="edit-live-cycle">${calc.formatTmu(totalTmu)}</div>
         </div>
-        <div style="border:1px solid var(--ies-gray-200); border-radius: 10px; padding:12px; text-align:center;">
-          <div style="font-size:11px; color:var(--ies-gray-500); font-weight:600;">Elements</div>
-          <div style="font-size:20px; font-weight:700; color:var(--ies-navy);" id="edit-live-count">${editorElements.length}</div>
+        <div class="most-tile">
+          <div class="u-cap u-muted u-semibold">Elements</div>
+          <div class="most-kpi-num" id="edit-live-count">${editorElements.length}</div>
         </div>
       </div>
     </div>
 
     <!-- Element Sequence Editor -->
     <div class="hub-card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div class="most-row-head">
         <div class="text-subtitle">Element Sequence</div>
         <button class="hub-btn hub-btn-sm hub-btn-secondary hub-btn-icon" data-action="add-element">${ICON.plus} Add Element</button>
       </div>
@@ -1221,9 +1229,9 @@ function renderEditor() {
         const warns = issues.filter(i => i.severity === 'warning');
         return `
           <div style="margin-bottom:12px;padding:10px 12px;border-radius: 10px;
-                      background:${errors.length ? '#fee2e2' : '#fef3c7'};
+                      background:${errors.length ? 'var(--c-danger-bg)' : 'var(--c-warn-bg)'};
                       border:1px solid ${errors.length ? '#fca5a5' : '#fcd34d'};
-                      color:${errors.length ? '#991b1b' : '#92400e'};font-size:12px;">
+                      color:${errors.length ? 'var(--c-danger-ink)' : 'var(--c-warn-ink)'};font-size:12px;">
             <div style="font-weight:700;margin-bottom:4px;">
               ${errors.length ? `⚠ ${errors.length} error${errors.length > 1 ? 's' : ''}` : ''}${errors.length && warns.length ? ' · ' : ''}${warns.length ? `${warns.length} warning${warns.length > 1 ? 's' : ''}` : ''} in sequence
             </div>
@@ -1236,7 +1244,7 @@ function renderEditor() {
       })()}
 
       ${editorElements.length > 0 ? `
-        <table class="cm-grid-table" style="font-size:12px;">
+        <table class="cm-grid-table u-12">
           <thead>
             <tr>
               <th style="width:24px;" title="Drag to reorder"></th>
@@ -1262,7 +1270,7 @@ function renderEditor() {
               <tr class="most-elem-row${isVar ? ' most-elem-row--variable' : ''}" draggable="true" data-elem-row="${i}">
                 <td style="text-align:center;cursor:grab;color:var(--ies-gray-400);user-select:none;font-size:14px;line-height:1;" title="Drag to reorder">⠿</td>
                 <td>${i + 1}</td>
-                <td><input class="hub-input" type="text" value="${escapeAttr(getMostElName(el) || '')}" data-elem-idx="${i}" data-elem-field="element_name" style="width:100%; font-size:11px; padding:4px 6px;" /></td>
+                <td><input class="hub-input" type="text" value="${escapeAttr(getMostElName(el) || '')}" data-elem-idx="${i}" data-elem-field="element_name" class="most-input-sm" /></td>
                 <td>
                   <input class="hub-input" type="text" value="${el.most_sequence || ''}" data-elem-idx="${i}" data-elem-field="most_sequence" style="width:100%; font-size:11px; padding:4px 6px; font-family:monospace;" />
                   ${(() => {
@@ -1273,10 +1281,10 @@ function renderEditor() {
                     if (!seq.trim()) return '';
                     const r = calc.parseMostSequence(seq);
                     if (!r.valid) {
-                      return `<div style="font-size:10px;color:#b91c1c;margin-top:2px;font-family:monospace;" title="${escapeAttr((r.errors || []).join(' | '))}">err</div>`;
+                      return `<div style="font-size:10px;color:var(--c-danger-strong);margin-top:2px;font-family:monospace;" title="${escapeAttr((r.errors || []).join(' | '))}">err</div>`;
                     }
                     const warn = (r.warnings || []).length > 0;
-                    const color = warn ? '#92400e' : 'var(--ies-gray-500)';
+                    const color = warn ? 'var(--c-warn-ink)' : 'var(--ies-gray-500)';
                     const tip = warn ? r.warnings.join(' | ') : `Σ index=${r.indexSum}, model TMU=${r.modelTmu} (sum × 10).`;
                     return `<div style="font-size:10px;color:${color};margin-top:2px;font-family:monospace;" title="${escapeAttr(tip)}">Σ${r.indexSum} → ${r.modelTmu} TMU${warn ? ' ⚠' : ''}</div>`;
                   })()}
@@ -1288,7 +1296,7 @@ function renderEditor() {
                     const seq = (el.sequence_type || '').toString().toLowerCase();
                     const opt = (val, label) => `<option value="${val}"${seq === val ? ' selected' : ''}>${label}</option>`;
                     return `
-                      <select data-elem-idx="${i}" data-elem-field="sequence_type" style="width:100%; font-size:11px; padding:4px 6px;">
+                      <select data-elem-idx="${i}" data-elem-field="sequence_type" class="most-input-sm">
                         ${opt('get', 'Get')}
                         ${opt('put', 'Put')}
                         ${opt('move', 'Move')}
@@ -1303,35 +1311,35 @@ function renderEditor() {
                     `;
                   })()}
                 </td>
-                <td><input class="hub-input" type="number" value="${getMostElTmu(el) || 0}" data-elem-idx="${i}" data-elem-field="tmu_value" style="width:100%; font-size:11px; padding:4px 6px;" title="${isVar ? 'TMU at the default factor (midpoint between min/max unless overridden below)' : 'Fixed TMU for this element'}" /></td>
-                <td><input class="hub-input" type="number" step="0.01" min="0" value="${el.freq_per_cycle == null ? 1 : el.freq_per_cycle}" data-elem-idx="${i}" data-elem-field="freq_per_cycle" style="width:100%; font-size:11px; padding:4px 6px;" title="Occurrences per cycle (1 = every cycle)" /></td>
-                <td style="text-align:center;"><input type="checkbox" ${isVar ? 'checked' : ''} data-elem-idx="${i}" data-elem-field="is_variable" style="cursor:pointer;" title="Mark this element as variable (TMU scales with a workload driver)" /></td>
+                <td><input class="hub-input" type="number" value="${getMostElTmu(el) || 0}" data-elem-idx="${i}" data-elem-field="tmu_value" class="most-input-sm" title="${isVar ? 'TMU at the default factor (midpoint between min/max unless overridden below)' : 'Fixed TMU for this element'}" /></td>
+                <td><input class="hub-input" type="number" step="0.01" min="0" value="${el.freq_per_cycle == null ? 1 : el.freq_per_cycle}" data-elem-idx="${i}" data-elem-field="freq_per_cycle" class="most-input-sm" title="Occurrences per cycle (1 = every cycle)" /></td>
+                <td class="u-center"><input type="checkbox" ${isVar ? 'checked' : ''} data-elem-idx="${i}" data-elem-field="is_variable" style="cursor:pointer;" title="Mark this element as variable (TMU scales with a workload driver)" /></td>
                 <td><button class="most-icon-btn most-icon-btn-danger" data-action="delete-element" data-idx="${i}" title="Remove element">${ICON.trash}</button></td>
               </tr>
               ${isVar ? `
               <tr class="most-elem-variable-detail">
                 <td></td>
                 <td colspan="8">
-                  <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; padding:6px 0 4px 4px; border-left:2px solid var(--ies-orange, #ff3a00); padding-left:8px;">
+                  <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; padding:6px 0 4px 4px; border-left:2px solid var(--ies-orange, var(--ies-orange)); padding-left:8px;">
                     <div style="flex:0 0 140px;">
-                      <label style="display:block;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;">Driver</label>
-                      <input class="hub-input" type="text" value="${el.variable_driver || ''}" data-elem-idx="${i}" data-elem-field="variable_driver" placeholder="e.g. walk distance (ft)" style="width:100%;font-size:11px;padding:4px 6px;" />
+                      <label class="most-microlabel">Driver</label>
+                      <input class="hub-input" type="text" value="${el.variable_driver || ''}" data-elem-idx="${i}" data-elem-field="variable_driver" placeholder="e.g. walk distance (ft)" class="most-input-sm" />
                     </div>
                     <div style="flex:0 0 80px;">
-                      <label style="display:block;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;" title="TMU at driver = low / short / simple">Min TMU</label>
-                      <input class="hub-input" type="number" step="0.1" min="0" value="${el.variable_min == null ? '' : el.variable_min}" data-elem-idx="${i}" data-elem-field="variable_min" placeholder="${(getMostElTmu(el) * 0.5).toFixed(1)}" style="width:100%;font-size:11px;padding:4px 6px;" />
+                      <label class="most-microlabel" title="TMU at driver = low / short / simple">Min TMU</label>
+                      <input class="hub-input" type="number" step="0.1" min="0" value="${el.variable_min == null ? '' : el.variable_min}" data-elem-idx="${i}" data-elem-field="variable_min" placeholder="${(getMostElTmu(el) * 0.5).toFixed(1)}" class="most-input-sm" />
                     </div>
                     <div style="flex:0 0 80px;">
-                      <label style="display:block;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;" title="TMU at driver = high / long / complex">Max TMU</label>
-                      <input class="hub-input" type="number" step="0.1" min="0" value="${el.variable_max == null ? '' : el.variable_max}" data-elem-idx="${i}" data-elem-field="variable_max" placeholder="${(getMostElTmu(el) * 1.5).toFixed(1)}" style="width:100%;font-size:11px;padding:4px 6px;" />
+                      <label class="most-microlabel" title="TMU at driver = high / long / complex">Max TMU</label>
+                      <input class="hub-input" type="number" step="0.1" min="0" value="${el.variable_max == null ? '' : el.variable_max}" data-elem-idx="${i}" data-elem-field="variable_max" placeholder="${(getMostElTmu(el) * 1.5).toFixed(1)}" class="most-input-sm" />
                     </div>
                     <div style="flex:0 0 130px;">
-                      <label style="display:block;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;" title="Default interpolation between min (0) and max (1). 0.5 = midpoint.">Default Factor (0-1)</label>
-                      <input class="hub-input" type="number" step="0.05" min="0" max="1" value="${el.variable_default_factor == null ? 0.5 : el.variable_default_factor}" data-elem-idx="${i}" data-elem-field="variable_default_factor" style="width:100%;font-size:11px;padding:4px 6px;" />
+                      <label class="most-microlabel" title="Default interpolation between min (0) and max (1). 0.5 = midpoint.">Default Factor (0-1)</label>
+                      <input class="hub-input" type="number" step="0.05" min="0" max="1" value="${el.variable_default_factor == null ? 0.5 : el.variable_default_factor}" data-elem-idx="${i}" data-elem-field="variable_default_factor" class="most-input-sm" />
                     </div>
                     <div style="flex:1 1 220px; min-width:180px;">
-                      <label style="display:block;font-size:10px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;" title="Optional reference formula — descriptive only, not evaluated yet">Formula (optional reference)</label>
-                      <input class="hub-input" type="text" value="${el.variable_formula || ''}" data-elem-idx="${i}" data-elem-field="variable_formula" placeholder="e.g. 3 TMU + 0.5 × distance_ft" style="width:100%;font-size:11px;padding:4px 6px;" />
+                      <label class="most-microlabel" title="Optional reference formula — descriptive only, not evaluated yet">Formula (optional reference)</label>
+                      <input class="hub-input" type="text" value="${el.variable_formula || ''}" data-elem-idx="${i}" data-elem-field="variable_formula" placeholder="e.g. 3 TMU + 0.5 × distance_ft" class="most-input-sm" />
                     </div>
                   </div>
                 </td>
@@ -1396,7 +1404,7 @@ function renderAnalysis() {
     <div style="display:grid; grid-template-columns: repeat(6, 1fr); gap:12px; margin-bottom:14px;">
       <div>
         <div style="display:flex;align-items:center;gap:6px;justify-content:space-between;">
-          <label class="cm-form-label" style="margin:0;">PFD Allowance</label>
+          <label class="cm-form-label u-m0">PFD Allowance</label>
           <button type="button" class="hub-btn hub-btn-sm hub-btn-secondary" data-action="manage-allowance-profiles" title="Create / edit / delete allowance profiles" style="font-size:10px;padding:2px 8px;line-height:1.3;">Manage…</button>
         </div>
         <select class="hub-select" id="most-pfd-select">
@@ -1480,11 +1488,11 @@ function renderAnalysis() {
                 ).join('')}
               </select>
             </td>
-            <td style="font-size:12px;">${line.process_area || '—'}</td>
+            <td class="u-12">${line.process_area || '—'}</td>
             <td><span class="most-cat-badge most-cat-${line.labor_category || 'manual'}">${(line.labor_category || 'manual').toUpperCase()}</span></td>
             <td><input type="number" value="${line.base_uph || 0}" style="width:60px;" data-line="${i}" data-field="base_uph" data-type="number" /></td>
             <td class="cm-num">${calc.formatUph(line.adjusted_uph)}</td>
-            <td style="text-align:center;"><input type="checkbox" data-line="${i}" data-field="is_variable" data-type="checkbox"${line.is_variable ? ' checked' : ''} title="Variable element — driver scales TMU per cycle" /></td>
+            <td class="u-center"><input type="checkbox" data-line="${i}" data-field="is_variable" data-type="checkbox"${line.is_variable ? ' checked' : ''} title="Variable element — driver scales TMU per cycle" /></td>
             <td><input type="text" value="${escapeAttr(line.variable_driver || '')}" style="width:100px;font-size:12px;" data-line="${i}" data-field="variable_driver" data-type="text" placeholder="${line.is_variable ? 'e.g. pallets/order' : '—'}"${!line.is_variable ? ' disabled' : ''} /></td>
             <td><input type="text" value="${escapeAttr(line.variable_formula || '')}" style="width:140px;font-size:12px;" data-line="${i}" data-field="variable_formula" data-type="text" placeholder="${line.is_variable ? 'e.g. 3 + 0.5 × dist' : '—'}"${!line.is_variable ? ' disabled' : ''} /></td>
             <td><input type="number" value="${line.daily_volume || 0}" style="width:70px;" data-line="${i}" data-field="daily_volume" data-type="number" /></td>
@@ -1524,17 +1532,17 @@ function renderAnalysisSummary(summary) {
       <div class="hub-card">
         <div class="text-subtitle mb-4">Daily Cost</div>
         <div style="font-size:32px; font-weight:700; color:var(--ies-blue); margin-bottom:8px;">${formatDollar(summary.dailyCost)}</div>
-        <div style="font-size:12px; color:var(--ies-gray-500);">per day</div>
+        <div class="u-12 u-muted">per day</div>
       </div>
 
       <div class="hub-card">
         <div class="text-subtitle mb-4">Annual Cost</div>
         <div style="font-size:32px; font-weight:700; color:var(--ies-green); margin-bottom:8px;">${formatDollar(annualCost)}</div>
-        <div style="font-size:12px; color:var(--ies-gray-500);">@ ${summary.operatingDays} days/yr</div>
+        <div class="u-12 u-muted">@ ${summary.operatingDays} days/yr</div>
       </div>
     </div>
 
-    <div class="hub-card" style="margin-top:16px;">
+    <div class="hub-card u-mt-4">
       <div class="text-subtitle mb-4">FTEs by Category</div>
       <div style="display:flex; height:24px; border-radius:4px; overflow:hidden; margin-bottom:12px;">
         ${cats.manual > 0 ? `<div style="width:${(cats.manual / totalFte * 100).toFixed(0)}%; background:var(--ies-blue);" title="Manual"></div>` : ''}
@@ -1542,9 +1550,9 @@ function renderAnalysisSummary(summary) {
         ${cats.hybrid > 0 ? `<div style="width:${(cats.hybrid / totalFte * 100).toFixed(0)}%; background:#ff9500;" title="Hybrid"></div>` : ''}
       </div>
       <div style="display:flex; gap:24px;">
-        <div><span class="most-cat-badge most-cat-manual">MANUAL</span> <span style="font-weight:700; margin-left:4px;">${calc.formatFte(cats.manual)}</span></div>
-        <div><span class="most-cat-badge most-cat-mhe">MHE</span> <span style="font-weight:700; margin-left:4px;">${calc.formatFte(cats.mhe)}</span></div>
-        <div><span class="most-cat-badge most-cat-hybrid">HYBRID</span> <span style="font-weight:700; margin-left:4px;">${calc.formatFte(cats.hybrid)}</span></div>
+        <div><span class="most-cat-badge most-cat-manual">MANUAL</span> <span class="most-val">${calc.formatFte(cats.manual)}</span></div>
+        <div><span class="most-cat-badge most-cat-mhe">MHE</span> <span class="most-val">${calc.formatFte(cats.mhe)}</span></div>
+        <div><span class="most-cat-badge most-cat-hybrid">HYBRID</span> <span class="most-val">${calc.formatFte(cats.hybrid)}</span></div>
       </div>
     </div>
 
@@ -1556,7 +1564,7 @@ function renderAnalysisSummary(summary) {
 function renderSavedScenarios() {
   return `
     <div style="margin-top:24px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div class="most-row-head">
         <div class="text-subtitle">Saved Scenarios</div>
         <button class="cm-add-row-btn" data-action="save-scenario" style="font-size:12px; padding:6px 12px;">+ Save Current</button>
         <button class="cm-add-row-btn" data-action="most-export-xlsx" style="font-size:12px; padding:6px 12px; margin-left:8px;" title="Export current Quick Analysis to Excel (.xlsx)">⬇ Export Excel</button>
@@ -1570,8 +1578,8 @@ function renderSavedScenarios() {
               ${scenario.lines} line${scenario.lines !== 1 ? 's' : ''} · ${scenario.pfd}% PFD
             </div>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:11px; margin-bottom:8px;">
-              <div><span style="color:var(--ies-gray-500);">FTE:</span> <strong>${scenario.ftes.toFixed(1)}</strong></div>
-              <div><span style="color:var(--ies-gray-500);">HC:</span> <strong>${scenario.headcount}</strong></div>
+              <div><span class="u-muted">FTE:</span> <strong>${scenario.ftes.toFixed(1)}</strong></div>
+              <div><span class="u-muted">HC:</span> <strong>${scenario.headcount}</strong></div>
             </div>
             <div style="display:flex; gap:4px;">
               <button class="cm-edit-btn" data-action="load-scenario" data-idx="${idx}" style="flex:1; font-size:11px; padding:4px 6px;">Load</button>
@@ -1626,10 +1634,10 @@ function renderSequenceTray() {
       <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
         <div>
           <div style="font-size:16px; font-weight:800; color:var(--ies-navy);">Sequence Preview</div>
-          <div style="font-size:12px; color:var(--ies-gray-500);">Chained flow at shared defaults — the red step caps throughput. Session-only; send to staffing for FTEs + cost.</div>
+          <div class="u-12 u-muted">Chained flow at shared defaults — the red step caps throughput. Session-only; send to staffing for FTEs + cost.</div>
         </div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <label style="font-size:12px; color:var(--ies-gray-500);">Volume/day
+        <div class="u-row">
+          <label class="u-12 u-muted">Volume/day
             <input class="hub-input" type="number" value="${vol}" data-seq-vol style="width:90px; margin-left:6px;" />
           </label>
           <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="seq-send" title="Add every step as a line in the staffing analysis at this volume">→ Send to staffing analysis</button>
