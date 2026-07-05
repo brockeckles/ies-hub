@@ -276,6 +276,11 @@ async function openEditor(savedRow) {
   vehicles = (d.vehicles && d.vehicles.length) ? d.vehicles.map(v => ({ ...v })) : calc.DEFAULT_VEHICLES.map(v => ({ ...v }));
   config = { ...calc.DEFAULT_CONFIG, leaseMode: false, ...(d.config || {}) };
   result = d.result || null;
+  // Legacy rows can carry stub/stale results (the April demo saved
+  // {placeholder:...}; older engine shapes lack atriBenchmark/comparison).
+  // A result the renderer can't draw is worse than none — drop it and let
+  // the user re-run (caught live 2026-07-05: 'reading verdict' crash).
+  if (result && !(result.atriBenchmark && result.comparison && result.fleet)) result = null;
   activeScenarioId = savedRow?.id || null;
   activeScenarioName = savedRow?.name || null;
   activeParentCmId = savedRow?.parent_cost_model_id || null;
