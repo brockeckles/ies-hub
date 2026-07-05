@@ -28,7 +28,7 @@ import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260702-p1b';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
 import { wscExtraStyles } from './ui-styles.js?v=20260705-u3a';
-import { bindShellEvents } from './ui-shell-events.js?v=20260704-wq1';
+import { bindShellEvents } from './ui-shell-events.js?v=20260705-u3b';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================
