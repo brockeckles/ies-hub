@@ -40,10 +40,12 @@ export async function getScenario(id) {
  */
 export async function saveScenario(scenario) {
   const payload = {
-    name: scenario.name,
     config: scenario.config,
-    results: scenario.results,
+    results: scenario.results ?? null,
   };
+  // Only touch name when the caller supplies one — updates without a name
+  // must not clobber the existing scenario name (2026-07-05 fleet-load fix).
+  if (scenario.name != null && scenario.name !== '') payload.name = scenario.name;
   if (scenario.id) {
     const updated = await db.update('fleet_scenarios', scenario.id, payload);
     recordAudit({ table: 'fleet_scenarios', id: scenario.id, action: 'update', fields: { name: payload.name } });
@@ -91,7 +93,17 @@ export async function duplicateScenario(id) {
   const scenario = await getScenario(id);
   if (!scenario) throw new Error('Scenario not found');
   const { id: _, created_at, ...rest } = scenario;
-  return db.insert('fleet_scenarios', { ...rest, name: (rest.name || 'Fleet') + ' (Copy)' });
+  const copy = await db.insert('fleet_scenarios', { ...rest, name: (rest.name || 'Fleet') + ' (Copy)' });
+  // Legacy scenarios keep lanes in fleet_lanes — copy them so the duplicate
+  // doesn't open empty (2026-07-05 fleet-load fix).
+  try {
+    const srcLanes = await listLanes(id);
+    for (const l of srcLanes) {
+      const { id: _lid, created_at: _lc, ...laneRest } = l;
+      await db.insert('fleet_lanes', { ...laneRest, scenario_id: copy.id });
+    }
+  } catch (e) { console.warn('[Fleet] lane copy on duplicate failed:', e); }
+  return copy;
 }
 
 // ============================================================

@@ -14,8 +14,8 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260702-p1m1';
 import { splitCsvLine } from '../../shared/export.js?v=20260702-p1m1';
-import * as api from './api.js?v=20260504-auth1';
-import { showConfirm } from '../../shared/confirm-modal.js?v=20260705-u1a';
+import * as api from './api.js?v=20260705-r1';
+import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 
 // ============================================================
@@ -70,7 +70,7 @@ let mapInstance = null;
  * Carrier rate deck loaded from ref_fleet_carrier_rates.
  * Stays as the raw row array; calc.indexCarrierDeck materialises a
  * vehicleType→rate map at run time.
- * @type {Array<import('./api.js?v=20260504-auth1').CarrierRate>}
+ * @type {Array<import('./api.js?v=20260705-r1').CarrierRate>}
  */
 let carrierRateDeck = [];
 
@@ -88,6 +88,7 @@ let sensRange = { driverMin: 25, driverMax: 38, dieselMin: 3.25, dieselMax: 4.50
  */
 let activeScenarioId = null;
 let activeParentCmId = null;
+let activeScenarioName = null;
 
 // Run-state tracker — flips the "Calculate Fleet" button between orange and
 // the muted "✓ Results current" state based on whether inputs have changed
@@ -199,11 +200,11 @@ async function renderLanding() {
     accent: 'var(--ies-teal)',
     list: () => api.listScenarios(),
     getId: (r) => r.id,
-    getName: (r) => r.name || r.scenario_data?.name || 'Untitled fleet',
+    getName: (r) => r.name || 'Untitled fleet',
     getUpdated: (r) => r.updated_at || r.created_at,
     getParent: (r) => ({ cmId: r.parent_cost_model_id, dealId: r.parent_deal_id || r.deal_id }),
     getSubtitle: (r) => {
-      const d = r.scenario_data || {};
+      const d = _unpackScenarioRow(r);
       const nLanes = (d.lanes || []).length;
       const nVeh = (d.vehicles || []).length;
       return nLanes ? `${nLanes} lanes · ${nVeh} vehicle types` : '';
@@ -218,9 +219,46 @@ async function renderLanding() {
   });
 }
 
-function openEditor(savedRow) {
+/** Normalize a fleet_scenarios row into editor state pieces.
+ *  New shape (2026-07-05, '__shape: fm2'): config = { params, lanes, vehicles },
+ *  results column = engine result. Legacy shape (pre-fix rows, e.g. the April
+ *  demo): config = params only, lanes normalized into the fleet_lanes table
+ *  (fetched separately), vehicles not persisted.
+ *  Root cause of the Modified+empty-lanes bug: this loader used to read
+ *  savedRow.scenario_data — a field that never existed on fleet_scenarios. */
+function _unpackScenarioRow(row) {
+  if (!row) return {};
+  const cfg = row.config || {};
+  if (cfg.__shape === 'fm2') {
+    return { lanes: cfg.lanes, vehicles: cfg.vehicles, config: cfg.params, result: row.results || null, legacy: false };
+  }
+  return { lanes: null, vehicles: null, config: cfg, result: row.results || null, legacy: true };
+}
+
+function _mapDbLane(l) {
+  return {
+    origin: l.origin,
+    destination: l.destination,
+    weeklyShipments: Number(l.weekly_shipments) || 0,
+    avgWeightLbs: Number(l.avg_weight_lbs) || 0,
+    avgCubeFt3: Number(l.avg_cube_ft3) || 0,
+    distanceMiles: Number(l.distance_miles) || 0,
+    deliveryWindow: l.delivery_window || null,
+  };
+}
+
+async function openEditor(savedRow) {
   if (!rootEl) return;
-  const d = savedRow?.scenario_data || {};
+  const d = _unpackScenarioRow(savedRow);
+  // Legacy rows keep lanes in the fleet_lanes table — fetch before first render
+  // so a saved scenario never opens with an empty lane list.
+  if (savedRow && d.legacy && !(d.lanes && d.lanes.length)) {
+    try {
+      d.lanes = (await api.listLanes(savedRow.id)).map(_mapDbLane);
+    } catch (e) {
+      console.warn('[Fleet] legacy lane fetch failed:', e);
+    }
+  }
   activePhase = 'inputs';
   paramsSubTab = 'vehicles';
   runSubTab = 'cost';
@@ -239,6 +277,7 @@ function openEditor(savedRow) {
   config = { ...calc.DEFAULT_CONFIG, leaseMode: false, ...(d.config || {}) };
   result = d.result || null;
   activeScenarioId = savedRow?.id || null;
+  activeScenarioName = savedRow?.name || null;
   activeParentCmId = savedRow?.parent_cost_model_id || null;
   // New editor session — reset run-state. If the saved row already has a
   // result, treat the loaded inputs as the clean baseline (saved result was
@@ -527,9 +566,22 @@ function runFleetAnalysis() {
 /** Save scenario via the chrome's onAction handler. */
 async function handleSaveFleet() {
   try {
-    const payload = { id: activeScenarioId || undefined, lanes, vehicles, config, result };
+    let name = activeScenarioName;
+    if (!activeScenarioId) {
+      const defaultName = lanes.length > 1 ? `Fleet — ${lanes[0].origin} + ${lanes.length - 1} more lanes` : lanes.length === 1 ? `Fleet — ${lanes[0].origin}` : 'Fleet scenario';
+      const entered = await showPrompt('Name this scenario:', name || defaultName);
+      if (entered === null) return; // cancelled
+      name = (entered || '').trim() || defaultName;
+    }
+    const payload = {
+      id: activeScenarioId || undefined,
+      name,
+      config: { __shape: 'fm2', params: config, lanes, vehicles },
+      results: result,
+    };
     const saved = await api.saveScenario(payload);
     activeScenarioId = saved?.id || activeScenarioId;
+    activeScenarioName = saved?.name || name || activeScenarioName;
     if (typeof showToast === 'function') showToast('Saved.', 'success');
     refreshToolChrome(rootEl, _buildFleetChromeOpts());
   } catch (err) {
