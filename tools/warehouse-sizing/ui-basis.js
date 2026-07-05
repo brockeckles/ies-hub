@@ -24,6 +24,7 @@ import { wscFactorsDrift } from './factors-calc.js?v=20260704-n2a';
 import { selectMedia } from './media-calc.js?v=20260704-n3a';
 import { computeDynamics } from './dynamics-calc.js?v=20260704-n4a';
 import { synthesizeLayout } from './layout-calc.js?v=20260704-n5a';
+import { buildDesignBasisModel, renderDesignBasisHtml } from './basis-doc.js?v=20260704-n6a';
 
 // ── Module state (session-scoped; raw rows never persisted) ──
 /** Parsed datasets awaiting/backing the profile. */
@@ -107,6 +108,9 @@ function _renderHeader(profile, readiness) {
           Every defendable number starts here — load customer data, or assert RFP-level aggregates and upgrade later.
         </div>
       </div>
+      <button class="hub-btn hub-btn-sm hub-btn-secondary" id="wsc-basis-doc"
+              title="Assemble the 12-section Basis of Design document — profile provenance, assumptions register, media rationale, dynamics math, compliance checklist, reconciliation — as a print/PDF page.">
+        📄 Design Basis Doc</button>
       <div style="min-width:200px;">
         <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:600;margin-bottom:3px;">
           <span>Profile readiness</span><span style="color:${barColor};">${readiness.label} · ${readiness.score}%</span>
@@ -801,6 +805,24 @@ function _bindEvents(container, ctx) {
   _bindMediaEvents(container, ctx);   // N3 — rotation select + Apply
   _bindDynamicsEvents(container, ctx);   // N4 — policy inputs + Apply
   _bindLayoutEvents(container, ctx);   // N5 — flue toggle + Apply
+  // N6 — Design Basis document (print popup → browser Save-as-PDF, COG F4 pattern)
+  container.querySelector('#wsc-basis-doc')?.addEventListener('click', () => {
+    const model = buildDesignBasisModel({
+      facility: ctx.getFacility?.() || {},
+      zones: ctx.getZones?.() || {},
+      volumes: ctx.getVolumes?.() || {},
+      profile: ctx.getProfile(),
+      pinnedFactors: ctx.getPinnedFactors?.(),
+      mediaPlan: ctx.getMediaPlan?.(),
+      dynamicsPlan: ctx.getDynamicsPlan?.(),
+      layoutPlan: ctx.getLayoutPlan?.(),
+      sized: ctx.computeSized?.(),
+    });
+    const win = window.open('', '_blank');
+    if (!win) { ctx.toast?.('Popup blocked — allow popups for this site to generate the document.', 'error'); return; }
+    win.document.write(renderDesignBasisHtml(model));
+    win.document.close();
+  });
 
   container.querySelectorAll('[data-basis-upload]').forEach(btn => {
     btn.addEventListener('click', () => {

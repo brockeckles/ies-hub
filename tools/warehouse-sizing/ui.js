@@ -23,7 +23,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260704-wq1';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260703-ux0';
 import { renderDashboard } from './ui-dashboard.js?v=20260703-ux0';
-import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260704-n5a';
+import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260704-n6a';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260702-p1b';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
@@ -915,6 +915,8 @@ function renderContentView() {
       // N5 — layout/compliance plan: Apply writes the recommended grid and
       // conservatively raises flue space to the governing standard's minimum.
       getLayoutPlan: () => layoutPlan,
+      // N6 — sized snapshot for the Design Basis doc's reconciliation table.
+      computeSized: () => { try { return calc.sizeFacility(toSizingInputs()); } catch (_) { return null; } },
       applyLayoutPlan: (plan) => {
         layoutPlan = plan;
         if (plan?.gridFit?.recommended?.spanFt > 0 && plan.gridFit.recommended.spanFt !== plan.gridFit.spanXFt) {
