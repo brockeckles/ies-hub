@@ -13,7 +13,7 @@ import { getEnv, getEnvLabel, getProjectRef } from '../../shared/supabase.js?v=2
 import { getBuildInfo, getBuildInfoSync } from '../../shared/build-info.js?v=20260424-A2';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
-import { icon } from '../../shared/icons.js?v=20260705-u4a';
+import { icon } from '../../shared/icons.js?v=20260705-r1';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;

@@ -11,7 +11,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260702-p1m1';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
-import ofpStyles from './operational-flow-styles.js?v=20260705-u3d';
+import ofpStyles from './operational-flow-styles.js?v=20260705-r1';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
 import * as calc from './calc.js?v=20260704-ebr1';
 import * as api from './api.js?v=20260704-cmp1';
@@ -32,7 +32,7 @@ import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-dril
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
-import { icon } from '../../shared/icons.js?v=20260705-u4a';
+import { icon } from '../../shared/icons.js?v=20260705-r1';
 import {
   OFP_MHE_OPTIONS as _OFP_MHE_OPTIONS,
   OFP_IT_OPTIONS as _OFP_IT_OPTIONS,
@@ -100,7 +100,7 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260705-u3d';
+} from './operational-flow-render.js?v=20260705-r1';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
 import { computeHeaderKpis } from './header-kpis.js?v=20260704-ebr1';
@@ -3848,7 +3848,7 @@ function renderHouseAssumptionsCard() {
   if (!pinned) {
     return `
     <div class="cm-card" style="margin-top:16px;padding:14px 16px;">
-      <div style="font-weight:700;color:var(--ies-blue);font-size:13px;">🏛 House Assumptions (corporate out-year guidance)</div>
+      <div style="font-weight:700;color:var(--ies-blue);font-size:13px;">${icon('bank')} House Assumptions (corporate out-year guidance)</div>
       <div style="font-size:12px;color:var(--ies-gray-500);margin-top:6px;">
         Current corporate guidance will be <b>pinned to this project on first save</b> —
         after that, later guidance changes never alter this project's assumptions.
@@ -3873,7 +3873,7 @@ function renderHouseAssumptionsCard() {
     <div class="cm-card" style="margin-top:16px;padding:14px 16px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
         <div>
-          <div style="font-weight:700;color:var(--ies-blue);font-size:13px;">🏛 House Assumptions (corporate out-year guidance)</div>
+          <div style="font-weight:700;color:var(--ies-blue);font-size:13px;">${icon('bank')} House Assumptions (corporate out-year guidance)</div>
           <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">
             Pinned to this project <b>${escapeAttr(pinned.pinnedAt || '')}</b> — read-only.
             Later corporate guidance changes never alter this project.
@@ -4810,7 +4810,7 @@ function renderShifts() {
       ? (noteText.length > previewLen ? noteText.slice(0, previewLen) + '…' : noteText)
       : '+ Add note';
     const noteBtnLabel = hasNote
-      ? `<span style="font-size:13px;line-height:1;">📝</span> <span class="cm-pos-note-preview">${_esc(preview)}</span>`
+      ? `${icon('edit')} <span class="cm-pos-note-preview">${_esc(preview)}</span>`
       : `<span class="cm-pos-note-empty">${_esc(preview)}</span>`;
     const chevron = isExpanded ? '▾' : '▸';
     const noteBtnTitle = hasNote
@@ -5408,7 +5408,7 @@ function renderLaborV1() {
             <td class="cm-num">${calc.formatCurrency(calc.directLineAnnualSimple(l, lc))}</td>
             <td>
               <button class="hub-btn" style="padding:2px 6px;font-size:11px;" data-cm-action="edit-labor-seasonality" data-idx="${i}" title="Edit monthly OT/absence seasonality">
-                ${(Array.isArray(l.monthly_overtime_profile) || Array.isArray(l.monthly_absence_profile)) ? '📊*' : '📊'}
+                ${(Array.isArray(l.monthly_overtime_profile) || Array.isArray(l.monthly_absence_profile)) ? icon('chart') + '*' : icon('chart')}
               </button>
             </td>
             <td><button class="cm-delete-btn" data-action="delete-labor" data-idx="${i}">Del</button></td>
@@ -6027,7 +6027,7 @@ function renderLaborMasterPane(lines, opHrs, lc) {
       </div>
       <div class="hub-master-detail__master-body">
         ${lines.length === 0
-          ? `<div class="hub-master-detail__empty"><div style="font-size:28px;margin-bottom:8px;">👥</div>No direct labor lines yet.<br/><span class="u-muted">Click <strong>+ Add</strong> to create one.</span></div>`
+          ? `<div class="hub-master-detail__empty"><div style="margin-bottom:8px;">${icon('users', {size:28})}</div>No direct labor lines yet.<br/><span class="u-muted">Click <strong>+ Add</strong> to create one.</span></div>`
           : lines.map((l, i) => renderLaborMasterItem(l, i, opHrs, lc, totalDirectCost)).join('')}
       </div>
     </div>
@@ -6089,7 +6089,7 @@ function renderLaborMasterItem(l, i, opHrs, lc, totalDirectCost = 0) {
   // Bucket chip — shows which pricing bucket this line feeds
   const bucket = (model.pricingBuckets || []).find(b => b.id === l.pricing_bucket);
   const bucketChip = bucket
-    ? `<span class="hub-chip hub-chip--neutral" title="Routes to pricing bucket: ${escapeAttr(bucket.name)}">📦 ${escapeHtml(bucket.name)}</span>`
+    ? `<span class="hub-chip hub-chip--neutral" title="Routes to pricing bucket: ${escapeAttr(bucket.name)}">${icon('package')} ${escapeHtml(bucket.name)}</span>`
     : `<span class="hub-chip hub-chip--danger" title="No pricing bucket assigned — this line's cost will orphan to Management Fee">⚠ no bucket</span>`;
 
   // Shift chip (2026-04-22 Brock) — surfaces how this line relates to the
@@ -6117,7 +6117,7 @@ function renderLaborMasterItem(l, i, opHrs, lc, totalDirectCost = 0) {
         ${shiftChip}
         <span>${fte.toFixed(1)} FTE · ${(l.base_uph || 0).toLocaleString()} UPH</span>
         ${mixChip}
-        ${hasSeasonality ? `<span class="hub-chip hub-chip--info" title="Has monthly OT/absence seasonality">📊</span>` : ''}
+        ${hasSeasonality ? `<span class="hub-chip hub-chip--info" title="Has monthly OT/absence seasonality">${icon('chart')}</span>` : ''}
         ${hasVariance ? `<span class="hub-chip hub-chip--warn" title="Variance ±${l.performance_variance_pct}%">±${l.performance_variance_pct}%</span>` : ''}
       </div>
       <div class="cm-labor-share-bar" aria-hidden="true" title="${shareStr} of total direct labor">
@@ -6397,7 +6397,7 @@ function renderEquipment() {
 • Security — 1 camera system per 30K sqft (for ≥50K sqft facilities) + Access Control
 • Conveyor — Belt conveyor linear ft (for ≥500K orders/yr)
 All lines are editable after generation.">${(model.equipmentLines || []).length > 0 ? '↻ Regenerate Equipment' : icon('bolt') + ' Auto-Generate Equipment'}</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="open-equipment-catalog" title="Browse the GXO equipment reference catalog (33 items with specs, pricing, vendors)">📖 Browse Catalog</button>
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="open-equipment-catalog" title="Browse the GXO equipment reference catalog (33 items with specs, pricing, vendors)">${icon('book')} Browse Catalog</button>
       <span class="cm-section-toolbar__hint">${(model.equipmentLines || []).length > 0 ? `<b>${(model.equipmentLines || []).length} rows auto-generated</b> — click Regenerate to replace. ` : ''}Covers MHE · IT · Racking · Dock · Charging · Office · Security · Conveyor. Hover for sizing rules.</span>
     </div>
 
@@ -6635,7 +6635,7 @@ Owned Facility — racking/dock/charging/office/security/conveyor">Line Type</th
             <tbody>
               ${roi.perLine.map(({ line, roi: lr }) => {
                 if (!lr) return '';
-                const verdictPretty = lr.verdict === 'always_own' ? '🟢 Always Own' : lr.verdict === 'always_rent' ? '🟠 Always Rent' : lr.verdict === 'buy_to_peak' ? '🔵 Buy-to-Peak' : '⚪ Tied';
+                const verdictPretty = lr.verdict === 'always_own' ? '<span style="color:var(--c-success-strong)">' + icon('circle') + '</span> Always Own' : lr.verdict === 'always_rent' ? '<span style="color:var(--ies-orange)">' + icon('circle') + '</span> Always Rent' : lr.verdict === 'buy_to_peak' ? '<span style="color:var(--c-info-strong)">' + icon('circle') + '</span> Buy-to-Peak' : '<span style="color:var(--ies-gray-400)">' + icon('circle') + '</span> Tied';
                 const beStr = lr.breakEvenPeakMonths >= 12 ? '> 12' : lr.breakEvenPeakMonths < 0.5 ? '< 0.5' : lr.breakEvenPeakMonths.toFixed(1);
                 return `
                   <tr>
@@ -7319,7 +7319,7 @@ function renderPricingBuckets() {
 
     ${empty ? `
       <div class="hub-card" style="margin-bottom:20px;padding:24px;background:var(--ies-gray-50);text-align:center;">
-        <div style="font-size:32px;margin-bottom:8px;">🧱</div>
+        <div style="margin-bottom:8px;">${icon('package', {size:32})}</div>
         <h3 style="margin:0 0 6px;font-size:16px;font-weight:700;">No pricing buckets yet</h3>
         <div style="color:var(--ies-gray-500);font-size:13px;margin-bottom:16px;max-width:560px;margin-left:auto;margin-right:auto;line-height:1.5;">
           Start with the standard 5-bucket template (Management Fee, Storage, Inbound, Pick &amp; Pack, VAS) — typical for most 3PL deals — or define your own from scratch. You can edit, rename, or add buckets at any time.
@@ -7543,7 +7543,7 @@ function renderPricing() {
 
     ${buckets.length === 0 ? `
       <div class="hub-card" style="padding:24px;text-align:center;background:var(--ies-gray-50);margin-bottom:16px;">
-        <div style="font-size:28px;margin-bottom:6px;">🧱</div>
+        <div style="margin-bottom:6px;">${icon('package', {size:28})}</div>
         <h3 style="margin:0 0 6px;font-size:16px;">No pricing buckets defined</h3>
         <div style="color:var(--ies-gray-500);font-size:13px;margin-bottom:14px;">Buckets are defined in <strong>Structure → Pricing Buckets</strong>. Without them the cost lines can't be allocated to a rate card.</div>
         <button class="hub-btn hub-btn-primary hub-btn-sm" data-action="jump-to-buckets">Open Pricing Buckets →</button>
@@ -9729,7 +9729,7 @@ async function openCompareModal(opts = {}) {
         ${dealScenarios.map(sc => `
           <label style="display:flex;align-items:center;gap:8px;padding:4px 0;">
             <input type="checkbox" data-compare-id="${sc.id}" data-project-id="${sc.project_id}" ${sc.is_baseline ? 'checked' : ''} />
-            <span style="flex:1;font-size:13px;">${sc.scenario_label}${sc.is_baseline ? ' ⭐' : ''}</span>
+            <span style="flex:1;font-size:13px;">${sc.scenario_label}${sc.is_baseline ? ' ' + icon('star') : ''}</span>
             <span class="hub-status-chip" style="background:${STATUS_COLORS[sc.status] || 'var(--c-muted)'};color:white;font-size:10px;">${sc.status}</span>
           </label>
         `).join('')}
@@ -9911,7 +9911,7 @@ async function openCompareModal(opts = {}) {
 
     const colHeaders = bundles.map((b, i) => `
       <th style="text-align:right;padding:8px;${i === 0 ? 'background:var(--c-warn-bg);' : ''}width:${colWidthPct}%;">
-        <div style="font-weight:600;font-size:13px;">${b.label}${b.is_baseline ? ' ⭐' : ''}</div>
+        <div style="font-weight:600;font-size:13px;">${b.label}${b.is_baseline ? ' ' + icon('star') : ''}</div>
         <div style="font-size:10px;color:var(--ies-gray-500);font-weight:400;margin-top:2px;">
           <span class="hub-status-chip" style="background:${STATUS_COLORS[b.status] || 'var(--c-muted)'};color:white;font-size:9px;padding:1px 4px;">${b.status}</span>
           ${i === 0 ? '<span style="margin-left:6px;color:var(--c-warn-ink);">baseline</span>' : ''}
@@ -10862,10 +10862,10 @@ function renderLinkedDesigns() {
     ensureScenarioFamilyLoaded().then(() => renderSection());
   }
   const groups = [
-    { key: 'wsc',    label: 'Warehouse Sizing',   icon: '🏭', route: 'designtools/warehouse-sizing' },
-    { key: 'cog',    label: 'Center of Gravity',  icon: '📍', route: 'designtools/center-of-gravity' },
-    { key: 'netopt', label: 'Network Optimizer',  icon: '🕸',  route: 'designtools/network-opt' },
-    { key: 'fleet',  label: 'Fleet Modeler',      icon: '🚚', route: 'designtools/fleet-modeler' },
+    { key: 'wsc',    label: 'Warehouse Sizing',   icon: icon('warehouse'), route: 'designtools/warehouse-sizing' },
+    { key: 'cog',    label: 'Center of Gravity',  icon: icon('pin'), route: 'designtools/center-of-gravity' },
+    { key: 'netopt', label: 'Network Optimizer',  icon: icon('network'),  route: 'designtools/network-opt' },
+    { key: 'fleet',  label: 'Fleet Modeler',      icon: icon('truck'), route: 'designtools/fleet-modeler' },
   ];
   const totalLinked = groups.reduce((s, g) => s + (linkedDesigns[g.key] || []).length, 0);
 
@@ -11450,7 +11450,7 @@ function _launchToTool(target) {
       // state. Invisible to the cache-bust guard because the './tools/...'
       // path resolves module-relative in the scanner but page-relative at
       // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260705-u4a',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260705-r1',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {
@@ -13141,7 +13141,7 @@ function renderLanding() {
 
       ${count === 0 ? `
         <div class="hub-card" style="padding:48px;text-align:center;border:2px dashed var(--ies-gray-200);">
-          <div style="font-size:36px;margin-bottom:12px;">📊</div>
+          <div style="margin-bottom:12px;">${icon('chart', {size:36})}</div>
           <div style="font-size:16px;font-weight:700;margin-bottom:6px;">No saved models yet</div>
           <div style="font-size:13px;color:var(--ies-gray-400);margin-bottom:20px;">Start a pricing model to compute labor, equipment, overhead, and P&amp;L for a facility.</div>
           <button class="hub-btn hub-btn-primary" id="cm-create-new-alt" onclick="document.getElementById('cm-create-new').click()">+ Create New Model</button>
@@ -16549,7 +16549,7 @@ function renderScenarios() {
               <label class="u-cap u-muted">DESCRIPTION</label>
               <textarea class="hub-input" data-scenario-field="description" rows="2" style="margin-top:2px;width:100%;" ${s.status === 'approved' ? 'disabled' : ''}>${s.scenario_description || ''}</textarea>
             </div>
-            ${s.is_baseline ? '<div style="margin-top:6px;font-size:11px;color:var(--ies-green);">⭐ Baseline scenario</div>' : ''}
+            ${s.is_baseline ? '<div style="margin-top:6px;font-size:11px;color:var(--ies-green);">' + icon('star') + ' Baseline scenario</div>' : ''}
             ${s.parent_scenario_id ? `<div class="u-cap u-muted">Child of scenario #${s.parent_scenario_id}</div>` : ''}
             ${s.approved_at ? `<div class="u-cap u-muted u-mt-1">Approved ${new Date(s.approved_at).toLocaleString()} · by ${s.approved_by || 'system'}</div>` : ''}
           </div>
@@ -16606,7 +16606,7 @@ function renderScenarios() {
           <tbody>
             ${dealScenarios.map(sc => `
               <tr>
-                <td style="padding:6px 8px;">${sc.scenario_label}${sc.is_baseline ? ' ⭐' : ''}${s && sc.id === s.id ? ' <em class="u-muted">(current)</em>' : ''}</td>
+                <td style="padding:6px 8px;">${sc.scenario_label}${sc.is_baseline ? ' ' + icon('star') : ''}${s && sc.id === s.id ? ' <em class="u-muted">(current)</em>' : ''}</td>
                 <td><span class="hub-status-chip" style="background:${STATUS_COLORS[sc.status] || 'var(--c-muted)'};color:white;">${sc.status}</span></td>
                 <td class="u-cap u-muted">${sc.approved_at ? new Date(sc.approved_at).toLocaleDateString() : '—'}</td>
                 <td class="cm-num">${sc.project_id || '—'}</td>

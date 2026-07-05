@@ -221,12 +221,12 @@ export function ofpStyles() {
       /* v0.2 — area header actions row (count + add button) */
       .ofp-area__header-actions { display: flex; align-items: center; gap: 6px; }
       .ofp-add-btn {
-        background: var(--ies-blue); color: #fff; border: none; border-radius: 4px;
+        background: var(--accent-primary); color: #fff; border: none; border-radius: 4px;
         width: 22px; height: 22px; line-height: 1; font-size: 16px; font-weight: 700;
         cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center;
         transition: background 0.12s;
       }
-      .ofp-add-btn:hover { background: var(--ies-navy, #1c1c1c); }
+      .ofp-add-btn:hover { background: var(--accent-primary-strong); }
 
       /* v0.2 — node card top row (name + del/chip), delete button, validation chip */
       .ofp-node { position: relative; }
@@ -786,7 +786,7 @@ export function ofpStyles() {
       }
       .ofp-subarea__fte { font-weight: 600; }
       .ofp-subarea__add {
-        background: var(--ies-blue); color: #fff;
+        background: var(--accent-primary); color: #fff;
         border: none; border-radius: 3px;
         width: 18px; height: 18px; padding: 0;
         line-height: 1; font-size: 12px; font-weight: 700;
@@ -795,7 +795,7 @@ export function ofpStyles() {
         display: inline-flex; align-items: center; justify-content: center;
         transition: background 0.12s;
       }
-      .ofp-subarea__add:hover { background: var(--ies-navy, #1c1c1c); }
+      .ofp-subarea__add:hover { background: var(--accent-primary-strong); }
       .ofp-subarea__nodes {
         display: flex; flex-direction: column; gap: 6px;
         padding: 8px;

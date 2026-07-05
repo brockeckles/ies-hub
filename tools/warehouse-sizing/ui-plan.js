@@ -20,7 +20,7 @@
  */
 
 import * as calc from './calc.js?v=20260703-ux0';
-import { icon } from '../../shared/icons.js?v=20260705-u4a';
+import { icon } from '../../shared/icons.js?v=20260705-r1';
 
 // Phase A.A6 (2026-05-26) — Foot-snap grid overlay state. Module-level
 // because it's a UI preference (not part of the persisted facility model).

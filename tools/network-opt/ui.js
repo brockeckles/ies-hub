@@ -20,7 +20,7 @@ import * as api from './api.js?v=20260702-sec2';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
-import { icon } from '../../shared/icons.js?v=20260705-u4a';
+import { icon } from '../../shared/icons.js?v=20260705-r1';
 
 // ============================================================
 // STATE
@@ -2286,7 +2286,7 @@ function renderRateCardPhase(el) {
           <div style="font-size:12px;color:var(--ies-gray-500);margin-top:4px;">TL per-mile · LTL class-100 tariff + multipliers + 5×5 region matrix · lane overrides · parcel zones.</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="apply-market-rates" title="Pull latest spot/contract rates from market data and apply to rate card" style="font-size:11px;padding:5px 10px;">💲 Apply Market Rates</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="apply-market-rates" title="Pull latest spot/contract rates from market data and apply to rate card" style="font-size:11px;padding:5px 10px;">${icon('dollar')} Apply Market Rates</button>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="upload-rates-csv" title="Upload a rate-card CSV (TL/LTL columns)" style="font-size:11px;padding:5px 10px;">${icon('upload')} Upload Rate Card CSV</button>
         </div>
       </div>
@@ -2851,8 +2851,8 @@ function renderResults(el) {
     if (runBlockReason === 'no-open-facilities') {
       const total = facilities.length;
       const hint = total === 0
-        ? 'You have no candidate facilities yet. Open <b>Inputs → Facilities</b> and click <b>🎯 Find Optimal Locations</b> to seed candidates from a k-means cluster of your demand, or add them manually.'
-        : `You have ${total} facilit${total === 1 ? 'y' : 'ies'} on the list but none are <b>Active</b>. Tick the Active checkbox on at least one row in <b>Inputs → Facilities</b>, or click <b>🎯 Find Optimal Locations</b> in the Facilities header to add more candidates.`;
+        ? 'You have no candidate facilities yet. Open <b>Inputs → Facilities</b> and click <b>Find Optimal Locations</b> to seed candidates from a k-means cluster of your demand, or add them manually.'
+        : `You have ${total} facilit${total === 1 ? 'y' : 'ies'} on the list but none are <b>Active</b>. Tick the Active checkbox on at least one row in <b>Inputs → Facilities</b>, or click <b>Find Optimal Locations</b> in the Facilities header to add more candidates.`;
       el.innerHTML = `
         <div class="hub-card" style="padding:24px;background:var(--c-warn-soft);border:1px solid #fde68a;">
           <div style="display:inline-flex;align-items:center;gap:6px;background:var(--c-warn-bg);color:var(--c-warn-ink);padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-bottom:12px;">

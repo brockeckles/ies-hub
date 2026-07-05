@@ -19,7 +19,7 @@ import * as cmApi from '../cost-model/api.js?v=20260704-cmp1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
-import { icon } from '../../shared/icons.js?v=20260705-u4a';
+import { icon } from '../../shared/icons.js?v=20260705-r1';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -5519,7 +5519,7 @@ function openPrintView() {
 </head><body>
 <div class="toolbar">
   <strong>Print preview — use your browser's Print menu to Save as PDF.</strong>
-  <button onclick="window.print()" style="margin-left:auto;">🖨️ Print now</button>
+  <button onclick="window.print()" style="margin-left:auto;">${icon('printer')} Print now</button>
   <button onclick="window.close()">Close</button>
 </div>
 <div class="doc">

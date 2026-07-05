@@ -37,8 +37,9 @@ import {
   ofpUomOut as _ofpUomOut,
 } from './ofp-helpers.js?v=20260702-sec2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
+import { icon } from '../../shared/icons.js?v=20260705-r1';
 import * as calc from './calc.js?v=20260704-ebr1';
-import ofpStyles from './operational-flow-styles.js?v=20260705-u3d';
+import ofpStyles from './operational-flow-styles.js?v=20260705-r1';
 
 // v0.10 — Helper extracted from _renderOfpArea so we can reuse it for
 // both top-level area bodies AND sub-area bodies (when an area has
@@ -460,7 +461,7 @@ export function renderOperationalFlow() {
           <span class="ofp-hidden-chip__dot" style="background:${a.color};"></span>
           <span class="ofp-hidden-chip__name">${escapeHtml(a.label)}</span>
           <span class="ofp-hidden-chip__type">area</span>
-          <span class="ofp-hidden-chip__icon">👁</span>
+          <span class="ofp-hidden-chip__icon">${icon('eye')}</span>
         </button>
       `).join('')}
       ${hiddenFlows.map(f => `
@@ -468,7 +469,7 @@ export function renderOperationalFlow() {
           <span class="ofp-hidden-chip__dot" style="background:${_flowColor(f.tag)};"></span>
           <span class="ofp-hidden-chip__name">${escapeHtml(f.label)}</span>
           <span class="ofp-hidden-chip__type">flow</span>
-          <span class="ofp-hidden-chip__icon">👁</span>
+          <span class="ofp-hidden-chip__icon">${icon('eye')}</span>
         </button>
       `).join('')}
       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-ofp-action="show-all-hidden" style="margin-left:auto;" title="Restore all hidden areas and flows">Show all</button>
@@ -640,7 +641,7 @@ export function renderManageAreasModal() {
           </select>
         </td>
         <td class="ofp-mgr-row__visible-cell">
-          <button class="ofp-mgr-row__visible ${a.hidden ? 'ofp-mgr-row__visible--off' : ''}" data-area-key="${escapeAttr(a.key)}" data-toggle="visible" title="${a.hidden ? 'Hidden on canvas — click to show' : 'Visible — click to hide on canvas'}">${a.hidden ? '🚫' : '👁'}</button>
+          <button class="ofp-mgr-row__visible ${a.hidden ? 'ofp-mgr-row__visible--off' : ''}" data-area-key="${escapeAttr(a.key)}" data-toggle="visible" title="${a.hidden ? 'Hidden on canvas — click to show' : 'Visible — click to hide on canvas'}">${a.hidden ? icon('eye-off') : icon('eye')}</button>
         </td>
         <td class="ofp-area-mgr__count-cell">${counts[a.key] || 0}</td>
         <td class="ofp-mgr-row__move-cell">
@@ -676,7 +677,7 @@ export function renderManageAreasModal() {
               </td>
               <td class="ofp-area-mgr__display-cell"><span class="ofp-area-mgr__muted" title="Sub-areas always render stacked under their parent">— stacked under ${escapeHtml(a.label)} —</span></td>
               <td class="ofp-mgr-row__visible-cell">
-                <button class="ofp-mgr-row__visible ${sa.hidden ? 'ofp-mgr-row__visible--off' : ''}" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-toggle="sub-visible" title="${sa.hidden ? 'Hidden — click to show' : 'Visible — click to hide'}">${sa.hidden ? '🚫' : '👁'}</button>
+                <button class="ofp-mgr-row__visible ${sa.hidden ? 'ofp-mgr-row__visible--off' : ''}" data-area-key="${escapeAttr(a.key)}" data-subarea-key="${escapeAttr(sa.key)}" data-toggle="sub-visible" title="${sa.hidden ? 'Hidden — click to show' : 'Visible — click to hide'}">${sa.hidden ? icon('eye-off') : icon('eye')}</button>
               </td>
               <td class="ofp-area-mgr__count-cell">${subCounts[`${a.key}|${sa.key}`] || 0}</td>
               <td class="ofp-mgr-row__move-cell">
@@ -783,7 +784,7 @@ export function renderManageFlowsModal() {
           </select>
         </td>
         <td class="ofp-mgr-row__visible-cell">
-          <button class="ofp-mgr-row__visible ${f.hidden ? 'ofp-mgr-row__visible--off' : ''}" data-flow-tag="${escapeAttr(f.tag)}" data-toggle="visible" title="${f.hidden ? 'Hidden on canvas — click to show' : 'Visible — click to hide on canvas'}">${f.hidden ? '🚫' : '👁'}</button>
+          <button class="ofp-mgr-row__visible ${f.hidden ? 'ofp-mgr-row__visible--off' : ''}" data-flow-tag="${escapeAttr(f.tag)}" data-toggle="visible" title="${f.hidden ? 'Hidden on canvas — click to show' : 'Visible — click to hide on canvas'}">${f.hidden ? icon('eye-off') : icon('eye')}</button>
         </td>
         <td class="ofp-area-mgr__count-cell">${counts[f.tag] || 0}</td>
         <td class="ofp-mgr-row__move-cell">

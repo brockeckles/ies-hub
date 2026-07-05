@@ -11,7 +11,7 @@ import * as api from './api.js?v=20260703-dc5';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260703-dc1';
-import { icon } from '../../shared/icons.js?v=20260705-u4a';
+import { icon } from '../../shared/icons.js?v=20260705-r1';
 // UX-1 D1p2 (2026-07-03): the MSA merge — deal tabs reuse the Multi-Site
 // Analyzer's pure calc + site mapping instead of duplicating the math.
 import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260704-cmp1';
