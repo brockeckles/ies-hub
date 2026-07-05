@@ -22,6 +22,7 @@ import {
 } from './profile-calc.js?v=20260704-n1a';
 import { wscFactorsDrift } from './factors-calc.js?v=20260704-n2a';
 import { selectMedia } from './media-calc.js?v=20260704-n3a';
+import { computeDynamics } from './dynamics-calc.js?v=20260704-n4a';
 
 // ── Module state (session-scoped; raw rows never persisted) ──
 /** Parsed datasets awaiting/backing the profile. */
@@ -34,6 +35,8 @@ let _pending = null;
 let _liveFactors = null;
 /** N3 — rotation policy for the media plan preview (persisted on Apply). */
 let _rotationPolicy = 'none';
+/** N4 — dynamics policy inputs (persisted on Apply). */
+let _dynPolicy = { arrivalWindowHrs: 8, dwellDaysIn: 1, dwellDaysOut: 0.5 };
 
 const SLOTS = [
   { key: 'skuMaster', label: 'SKU Master',         roles: SKU_MASTER_ROLES, hint: 'Item #, units/case, Ti×Hi, case dims' },
@@ -81,6 +84,7 @@ export function renderBasisView(container, ctx) {
       <div id="wsc-basis-wizard" style="display:none;"></div>
       ${profile ? _renderProfileSummary(profile) : _renderEmptyState()}
       ${profile ? _renderMediaCard(profile, ctx) : ''}
+      ${profile ? _renderDynamicsCard(profile, ctx) : ''}
       <div id="wsc-basis-factors"></div>
     </div>
   `;
@@ -516,6 +520,109 @@ function _bindMediaEvents(container, ctx) {
 }
 
 // ============================================================
+// DYNAMICS (N4) — docks / staging / MHE from throughput
+// ============================================================
+
+function _computeDynPreview(ctx) {
+  return computeDynamics({
+    profile: ctx.getProfile(),
+    mediaPlan: ctx.getMediaPlan?.(),
+    volumes: ctx.getVolumes?.() || {},
+    facility: ctx.getFacility?.() || {},
+    pinnedFactors: ctx.getPinnedFactors?.(),
+    policy: _dynPolicy,
+  });
+}
+
+function _renderDynamicsCard(profile, ctx) {
+  const applied = ctx.getDynamicsPlan?.();
+  const plan = _computeDynPreview(ctx);
+  if (!plan) {
+    return `
+      <div class="hub-card" style="padding:14px 16px;margin-top:14px;">
+        <div style="font-size:12px;font-weight:700;margin-bottom:4px;">Dynamics — Docks · Staging · MHE</div>
+        <div style="font-size:12px;color:var(--ies-gray-500);">Needs a flow signal — enter daily inbound/outbound pallets in Configure, or provide on-hand pallets so flow can be estimated.</div>
+      </div>`;
+  }
+  const isApplied = !!applied;
+  const d = plan.docks; const s = plan.staging;
+  const polInput = (id, label, value, step) => `
+    <label style="font-size:11px;font-weight:600;color:var(--ies-gray-600);display:flex;align-items:center;gap:5px;">
+      ${label}
+      <input type="number" id="${id}" value="${value}" min="0" step="${step}" style="width:58px;padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:5px;font-size:11px;">
+    </label>`;
+  return `
+    <div class="hub-card" style="padding:14px 16px;margin-top:14px;border-left:3px solid #0ea5e9;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+        <div style="font-size:12px;font-weight:700;">Dynamics — Docks · Staging · MHE ${provChip(plan.provenance)}
+          ${isApplied ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:#e0f2fe;color:#0369a1;">APPLIED ${esc(applied.createdAt)}</span>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          ${polInput('wsc-dyn-window', 'Arrival window (hr)', _dynPolicy.arrivalWindowHrs, 1)}
+          ${polInput('wsc-dyn-dwell-in', 'Dwell in (days)', _dynPolicy.dwellDaysIn, 0.5)}
+          ${polInput('wsc-dyn-dwell-out', 'Dwell out (days)', _dynPolicy.dwellDaysOut, 0.5)}
+          <button class="hub-btn hub-btn-sm hub-btn-primary" id="wsc-dyn-apply"
+                  title="Persist this plan and write dock doors, staging SF, and the governing storage aisle into the design.">
+            ${isApplied ? 'Re-apply to design' : 'Apply to design'}</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">
+        <div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:4px;">Dock doors — rate method</div>
+          <div style="font-size:12px;" title="${esc(d.rationale)}">
+            Flow ${fmt(plan.flow.peakIn)} in / ${fmt(plan.flow.peakOut)} out peak plt/day (×${plan.flow.peakFactor} peak) →
+            <b>${d.inbound.doors} inbound + ${d.outbound.doors} outbound = ${d.totalDoors} doors</b>
+          </div>
+          <div style="font-size:10.5px;color:var(--ies-gray-500);margin-top:3px;">
+            Dwell-method cross-check: ${d.dwellCheck.doors} doors (${d.dwellCheck.trucksPerPeakDay} trucks/peak-day)
+            ${d.methodsDiverge ? '<span style="color:#b91c1c;font-weight:700;">— DIVERGES</span>' : '— agrees'}
+          </div>
+          ${d.sanityNote ? `<div style="font-size:10.5px;color:var(--ies-gray-500);margin-top:3px;">${esc(d.sanityNote)}</div>` : ''}
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin:10px 0 4px;">Staging</div>
+          <div style="font-size:12px;">
+            Receive <b>${fmt(s.inbound.sqft)} sqft</b> <span style="color:var(--ies-gray-500);">(${s.inbound.governedBy}, ${fmt(s.inbound.stagedPallets)} plt)</span> ·
+            Ship <b>${fmt(s.outbound.sqft)} sqft</b> <span style="color:var(--ies-gray-500);">(${s.outbound.governedBy})</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:4px;">MHE fleet → aisles</div>
+          ${plan.mhe.fleet.map(f => `
+            <div style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:3px 0;border-top:1px solid var(--ies-gray-100);" title="${esc(f.rationale)}">
+              <span>${esc(f.label)} <span style="color:var(--ies-gray-500);">· ${esc(f.role)}</span></span>
+              <span style="font-weight:600;white-space:nowrap;">${f.aisleFt} ft</span>
+            </div>`).join('')}
+          <div style="font-size:11px;margin-top:4px;">Governing storage aisle: <b>${plan.mhe.governingAisleFt} ft</b></div>
+          ${plan.mhe.vnaAdvisory ? `<div style="font-size:10.5px;color:#7e22ce;margin-top:5px;">◆ ${esc(plan.mhe.vnaAdvisory)}</div>` : ''}
+        </div>
+      </div>
+      ${plan.gaps.length ? plan.gaps.map(g => `
+        <div style="font-size:10.5px;color:${g.severity === 'warn' ? '#b45309' : 'var(--ies-gray-500)'};margin-top:4px;">
+          ${g.severity === 'warn' ? '⚠' : 'ℹ'} ${esc(g.message)}</div>`).join('') : ''}
+    </div>
+  `;
+}
+
+function _bindDynamicsEvents(container, ctx) {
+  const num = (id, fallback) => {
+    const n = parseFloat(container.querySelector('#' + id)?.value);
+    return Number.isFinite(n) && n >= 0 ? n : fallback;
+  };
+  for (const [id, key] of [['wsc-dyn-window', 'arrivalWindowHrs'], ['wsc-dyn-dwell-in', 'dwellDaysIn'], ['wsc-dyn-dwell-out', 'dwellDaysOut']]) {
+    container.querySelector('#' + id)?.addEventListener('change', () => {
+      _dynPolicy = { ..._dynPolicy, [key]: num(id, _dynPolicy[key]) };
+      ctx.rerender();
+    });
+  }
+  container.querySelector('#wsc-dyn-apply')?.addEventListener('click', () => {
+    const plan = _computeDynPreview(ctx);
+    if (!plan) { ctx.toast?.('No dynamics plan — missing a flow signal.', 'error'); return; }
+    ctx.applyDynamicsPlan(plan);
+    ctx.rerender();
+    ctx.toast?.(`Dynamics applied — ${plan.docks.inbound.doors}+${plan.docks.outbound.doors} doors, ${(plan.staging.totalSqft).toLocaleString()} sqft staging, ${plan.mhe.governingAisleFt} ft aisles (derived).`, 'success');
+  });
+}
+
+// ============================================================
 // HOUSE FACTORS (N2) — pinned catalog + drift badge + explicit adopt
 // ============================================================
 
@@ -600,6 +707,7 @@ async function _renderFactorsCard(el, ctx) {
 function _bindEvents(container, ctx) {
   const fileInput = container.querySelector('#wsc-basis-file');
   _bindMediaEvents(container, ctx);   // N3 — rotation select + Apply
+  _bindDynamicsEvents(container, ctx);   // N4 — policy inputs + Apply
 
   container.querySelectorAll('[data-basis-upload]').forEach(btn => {
     btn.addEventListener('click', () => {

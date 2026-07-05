@@ -23,7 +23,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260704-wq1';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260703-ux0';
 import { renderDashboard } from './ui-dashboard.js?v=20260703-ux0';
-import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260704-n3a';
+import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260704-n4a';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260702-p1b';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
@@ -102,6 +102,11 @@ let pinnedFactors = null;
  *  the analyst clicks Apply. null = design still on asserted/preset mix.
  *  @type {Object|null} */
 let mediaPlan = null;
+
+/** N4 (2026-07-04) — throughput-derived dynamics plan (dynamics-calc.js):
+ *  docks, staging, MHE/aisles. Persisted on Apply.
+ *  @type {Object|null} */
+let dynamicsPlan = null;
 
 /** @type {boolean} */
 let isDirty = false;
@@ -305,6 +310,7 @@ function openEditor(savedRow) {
     profile = data.profile || null;   // N1 — design basis rides config_data
     pinnedFactors = data.pinnedFactors || null;  // N2 — legacy scenarios pin on next save
     mediaPlan = data.mediaPlan || null;           // N3 — engineered media plan
+    dynamicsPlan = data.dynamicsPlan || null;     // N4 — dynamics plan
     resetBasisState();
     zones = { ...createDefaultZones(), ...(data.zones || {}) };
     volumes = { ...createDefaultVolumes(), ...(data.volumes || {}) };
@@ -320,6 +326,7 @@ function openEditor(savedRow) {
     profile = null;                   // N1 — fresh scenario, no basis yet
     pinnedFactors = null;             // N2 — pins at first save
     mediaPlan = null;                 // N3 — no engineered plan yet
+    dynamicsPlan = null;              // N4 — no dynamics plan yet
     resetBasisState();
     zones = createDefaultZones();
     volumes = createDefaultVolumes();
@@ -572,7 +579,7 @@ async function handleSaveWsc() {
         if (live.length > 0) pinnedFactors = pinWscFactors(live);
       } catch (_) { /* pin on a later save instead */ }
     }
-    const saved = await api.saveConfig({ ...facility, zones, volumes, profile, pinnedFactors, mediaPlan });
+    const saved = await api.saveConfig({ ...facility, zones, volumes, profile, pinnedFactors, mediaPlan, dynamicsPlan });
     facility.id = saved.id || saved[0]?.id || facility.id;
     _clearDirty();
     showToast(`Saved "${facility.name || 'Untitled'}"`, 'success');
@@ -871,6 +878,30 @@ function renderContentView() {
         }
         _markDirty();
         renderConfigPanel();   // Configure shows the new mix immediately
+        _refreshWscKpis();
+      },
+      // N4 — dynamics plan: Apply derives dock doors, staging SF, and the
+      // governing storage aisle from throughput + the media plan.
+      getDynamicsPlan: () => dynamicsPlan,
+      getVolumes: () => volumes,
+      getFacility: () => facility,
+      applyDynamicsPlan: (plan) => {
+        dynamicsPlan = plan;
+        if (plan?.docks) {
+          zones.dockConfig = {
+            ...(zones.dockConfig || {}),
+            sided: (zones.dockConfig && zones.dockConfig.sided) || 'two',
+            inboundDoors: plan.docks.inbound.doors,
+            outboundDoors: plan.docks.outbound.doors,
+          };
+        }
+        if (plan?.staging) {
+          zones.receiveStagingSqft = plan.staging.inbound.sqft;
+          zones.shipStagingSqft = plan.staging.outbound.sqft;
+        }
+        if (plan?.mhe?.governingAisleFt > 0) facility.aisleWidth = plan.mhe.governingAisleFt;
+        _markDirty();
+        renderConfigPanel();
         _refreshWscKpis();
       },
       rerender: renderContentView,
