@@ -23,7 +23,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260704-wq1';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260703-ux0';
 import { renderDashboard } from './ui-dashboard.js?v=20260703-ux0';
-import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260704-n2a';
+import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260704-n3a';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260702-p1b';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
@@ -97,6 +97,11 @@ let profile = null;
  *  save (CM House-Assumptions governance). null = pins on next save.
  *  @type {{pinnedAt: string, rows: Object[]}|null} */
 let pinnedFactors = null;
+
+/** N3 (2026-07-04) — engineered media plan (media-calc.js), persisted when
+ *  the analyst clicks Apply. null = design still on asserted/preset mix.
+ *  @type {Object|null} */
+let mediaPlan = null;
 
 /** @type {boolean} */
 let isDirty = false;
@@ -299,6 +304,7 @@ function openEditor(savedRow) {
     facility = { ...createDefaultFacility(), ...data, id: savedRow.id, parent_cost_model_id: savedRow.parent_cost_model_id || null };
     profile = data.profile || null;   // N1 — design basis rides config_data
     pinnedFactors = data.pinnedFactors || null;  // N2 — legacy scenarios pin on next save
+    mediaPlan = data.mediaPlan || null;           // N3 — engineered media plan
     resetBasisState();
     zones = { ...createDefaultZones(), ...(data.zones || {}) };
     volumes = { ...createDefaultVolumes(), ...(data.volumes || {}) };
@@ -313,6 +319,7 @@ function openEditor(savedRow) {
     facility = createDefaultFacility();
     profile = null;                   // N1 — fresh scenario, no basis yet
     pinnedFactors = null;             // N2 — pins at first save
+    mediaPlan = null;                 // N3 — no engineered plan yet
     resetBasisState();
     zones = createDefaultZones();
     volumes = createDefaultVolumes();
@@ -565,7 +572,7 @@ async function handleSaveWsc() {
         if (live.length > 0) pinnedFactors = pinWscFactors(live);
       } catch (_) { /* pin on a later save instead */ }
     }
-    const saved = await api.saveConfig({ ...facility, zones, volumes, profile, pinnedFactors });
+    const saved = await api.saveConfig({ ...facility, zones, volumes, profile, pinnedFactors, mediaPlan });
     facility.id = saved.id || saved[0]?.id || facility.id;
     _clearDirty();
     showToast(`Saved "${facility.name || 'Untitled'}"`, 'success');
@@ -849,6 +856,23 @@ function renderContentView() {
       getPinnedFactors: () => pinnedFactors,
       adoptFactors: (live) => { pinnedFactors = pinWscFactors(live); _markDirty(); },
       fetchFactors: () => api.fetchWscFactors(),
+      // N3 — engineered media plan: Apply persists the plan AND flips the
+      // design's storage mix from asserted to derived (mix stays editable —
+      // Configure still owns the field; this just changes its default).
+      getMediaPlan: () => mediaPlan,
+      applyMediaPlan: (plan) => {
+        mediaPlan = plan;
+        if (plan?.allocation) {
+          zones.storageAllocation = {
+            fullPallet: plan.allocation.fullPallet,
+            cartonOnPallet: plan.allocation.cartonOnPallet,
+            cartonOnShelving: plan.allocation.cartonOnShelving,
+          };
+        }
+        _markDirty();
+        renderConfigPanel();   // Configure shows the new mix immediately
+        _refreshWscKpis();
+      },
       rerender: renderContentView,
       toast: showToast,
     }); break;

@@ -21,6 +21,7 @@ import {
   autoDetectMapping, SKU_MASTER_ROLES, INVENTORY_ROLES, ORDER_ROLES,
 } from './profile-calc.js?v=20260704-n1a';
 import { wscFactorsDrift } from './factors-calc.js?v=20260704-n2a';
+import { selectMedia } from './media-calc.js?v=20260704-n3a';
 
 // ── Module state (session-scoped; raw rows never persisted) ──
 /** Parsed datasets awaiting/backing the profile. */
@@ -31,6 +32,8 @@ let _sources = { skuMaster: null, inventory: null, orders: null };
 let _pending = null;
 /** N2 — live factor catalog cache (session): null = not fetched yet. */
 let _liveFactors = null;
+/** N3 — rotation policy for the media plan preview (persisted on Apply). */
+let _rotationPolicy = 'none';
 
 const SLOTS = [
   { key: 'skuMaster', label: 'SKU Master',         roles: SKU_MASTER_ROLES, hint: 'Item #, units/case, Ti×Hi, case dims' },
@@ -77,6 +80,7 @@ export function renderBasisView(container, ctx) {
       </div>
       <div id="wsc-basis-wizard" style="display:none;"></div>
       ${profile ? _renderProfileSummary(profile) : _renderEmptyState()}
+      ${profile ? _renderMediaCard(profile, ctx) : ''}
       <div id="wsc-basis-factors"></div>
     </div>
   `;
@@ -402,6 +406,116 @@ function _recomputeDataProfile(ctx) {
 }
 
 // ============================================================
+// MEDIA SELECTION (N3) — engineered portfolio + Apply-to-design
+// ============================================================
+
+const _fmtUsd = (n) => n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : `$${Math.round(n / 1e3)}K`;
+
+function _renderMediaCard(profile, ctx) {
+  const applied = ctx.getMediaPlan?.();
+  if (applied?.policy?.rotation) _rotationPolicy = _rotationPolicy || applied.policy.rotation;
+  const plan = selectMedia({
+    profile,
+    pinnedFactors: ctx.getPinnedFactors?.(),
+    policy: { rotation: _rotationPolicy },
+  });
+  if (!plan) {
+    return `
+      <div class="hub-card" style="padding:14px 16px;margin-top:14px;">
+        <div style="font-size:12px;font-weight:700;margin-bottom:4px;">Media Selection</div>
+        <div style="font-size:12px;color:var(--ies-gray-500);">Needs a depth-of-holding signal — upload an inventory snapshot or assert pallets-per-SKU in the sparse form.</div>
+      </div>`;
+  }
+  const a = plan.allocation;
+  const isApplied = !!applied;
+  return `
+    <div class="hub-card" style="padding:14px 16px;margin-top:14px;border-left:3px solid #6366f1;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+        <div style="font-size:12px;font-weight:700;">Media Selection ${provChip(plan.provenance)}
+          ${isApplied ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;background:#e0e7ff;color:#4338ca;">APPLIED ${esc(applied.createdAt)}</span>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label style="font-size:11px;font-weight:600;color:var(--ies-gray-600);display:flex;align-items:center;gap:5px;">
+            Rotation
+            <select id="wsc-media-rotation" style="padding:4px 6px;border:1px solid var(--ies-gray-200);border-radius:5px;font-size:11px;">
+              <option value="none"${_rotationPolicy === 'none' ? ' selected' : ''}>No constraint</option>
+              <option value="fifo_strict"${_rotationPolicy === 'fifo_strict' ? ' selected' : ''}>Strict FIFO / lot control</option>
+            </select>
+          </label>
+          <button class="hub-btn hub-btn-sm hub-btn-primary" id="wsc-media-apply"
+                  title="Persist this plan and set the design's storage mix from it. The mix stays editable in Configure.">
+            ${isApplied ? 'Re-apply to design' : 'Apply to design'}</button>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+        <thead><tr style="color:var(--ies-gray-500);font-size:10px;text-transform:uppercase;letter-spacing:0.4px;">
+          <th style="text-align:left;padding:3px 0;">Depth band</th><th style="text-align:right;">SKUs</th>
+          <th style="text-align:right;">Pallets</th><th style="text-align:left;padding-left:12px;">Medium</th>
+          <th style="text-align:right;">Occ.</th><th style="text-align:right;">Positions</th><th style="text-align:right;">Rack cost</th>
+        </tr></thead>
+        <tbody>
+          ${plan.bands.map(b => `
+            <tr style="border-top:1px solid var(--ies-gray-100);" title="${esc(b.rationale)}&#10;&#10;${esc((b.checks || []).join('\n'))}">
+              <td style="padding:5px 0;font-weight:600;">${esc(b.bucket)}</td>
+              <td style="text-align:right;">${fmt(b.skuCount)}</td>
+              <td style="text-align:right;">${fmt(b.pallets)}</td>
+              <td style="padding-left:12px;">${esc(b.mediaLabel)}</td>
+              <td style="text-align:right;">${b.occupancyPct}%</td>
+              <td style="text-align:right;font-weight:600;">${fmt(b.positions)}</td>
+              <td style="text-align:right;color:var(--ies-gray-600);">${_fmtUsd(b.costBand.min)}–${_fmtUsd(b.costBand.max)}</td>
+            </tr>`).join('')}
+          ${plan.shelving ? `
+            <tr style="border-top:1px solid var(--ies-gray-100);" title="${esc(plan.shelving.rationale)}">
+              <td style="padding:5px 0;font-weight:600;">&lt;1 plt/SKU</td>
+              <td style="text-align:right;">${fmt(plan.shelving.skuCount)}</td>
+              <td style="text-align:right;">${fmt(plan.shelving.pallets)}</td>
+              <td style="padding-left:12px;">Carton shelving / bins</td>
+              <td style="text-align:right;">—</td><td style="text-align:right;">—</td><td style="text-align:right;">—</td>
+            </tr>` : ''}
+          <tr style="border-top:2px solid var(--ies-gray-200);font-weight:700;">
+            <td style="padding:5px 0;">Total · ${plan.totals.mediaCount} media</td>
+            <td></td>
+            <td style="text-align:right;">${fmt(plan.totals.pallets)}</td>
+            <td></td><td></td>
+            <td style="text-align:right;">${fmt(plan.totals.positions)}</td>
+            <td style="text-align:right;">${_fmtUsd(plan.totals.costBand.min)}–${_fmtUsd(plan.totals.costBand.max)}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="font-size:10.5px;color:var(--ies-gray-600);margin-top:8px;" title="${esc(a.rationale)}">
+        Derived storage mix → Full-pallet <b>${a.fullPallet}%</b> · Carton-on-pallet <b>${a.cartonOnPallet}%</b> · Shelving <b>${a.cartonOnShelving}%</b>
+        <span style="color:var(--ies-gray-500);">(replaces the asserted mix on Apply; hover for basis)</span>
+      </div>
+      ${plan.gaps.length ? plan.gaps.map(g => `
+        <div style="font-size:10.5px;color:${g.severity === 'warn' ? '#b45309' : 'var(--ies-gray-500)'};margin-top:4px;">
+          ${g.severity === 'warn' ? '⚠' : 'ℹ'} ${esc(g.message)}</div>`).join('') : ''}
+      <div style="font-size:10px;color:var(--ies-gray-500);margin-top:8px;">
+        Hover any row for the full selection audit (candidates considered, Rule-of-3 checks, rejections). Factor citations ride each band into the Design Basis doc.
+      </div>
+    </div>
+  `;
+}
+
+function _bindMediaEvents(container, ctx) {
+  container.querySelector('#wsc-media-rotation')?.addEventListener('change', (e) => {
+    _rotationPolicy = e.target.value;
+    ctx.rerender();
+  });
+  container.querySelector('#wsc-media-apply')?.addEventListener('click', () => {
+    const profile = ctx.getProfile();
+    const plan = selectMedia({
+      profile,
+      pinnedFactors: ctx.getPinnedFactors?.(),
+      policy: { rotation: _rotationPolicy },
+    });
+    if (!plan) { ctx.toast?.('No plan to apply — profile lacks a depth signal.', 'error'); return; }
+    ctx.applyMediaPlan(plan);
+    ctx.rerender();
+    ctx.toast?.(`Media plan applied — storage mix now ${plan.allocation.fullPallet}/${plan.allocation.cartonOnPallet}/${plan.allocation.cartonOnShelving} (derived).`, 'success');
+  });
+}
+
+// ============================================================
 // HOUSE FACTORS (N2) — pinned catalog + drift badge + explicit adopt
 // ============================================================
 
@@ -485,6 +599,7 @@ async function _renderFactorsCard(el, ctx) {
 
 function _bindEvents(container, ctx) {
   const fileInput = container.querySelector('#wsc-basis-file');
+  _bindMediaEvents(container, ctx);   // N3 — rotation select + Apply
 
   container.querySelectorAll('[data-basis-upload]').forEach(btn => {
     btn.addEventListener('click', () => {
