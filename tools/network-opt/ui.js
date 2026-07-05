@@ -20,7 +20,7 @@ import * as api from './api.js?v=20260702-sec2';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
-import { icon } from '../../shared/icons.js?v=20260705-u3e';
+import { icon } from '../../shared/icons.js?v=20260705-u4a';
 
 // ============================================================
 // STATE
@@ -1479,7 +1479,7 @@ function renderFacilities(el) {
           ${facilities.length === 0 && demands.length === 0 ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-load-sample" title="Seed 5 candidate DCs + 10 demand points so you can explore the optimizer without entering data.">Load Sample Network</button>` : ''}
           ${demands.length > 0
             ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-find-optimal-header" title="Weighted k-means on your demand → recommended DC metros. Adds candidate facilities to the list without opening them.">${icon('target')} Find Optimal Locations</button>`
-            : `<button class="hub-btn hub-btn-sm hub-btn-secondary" disabled title="Add demand points first — k-means needs demand to cluster against." style="opacity:0.55;cursor:not-allowed;">${icon('target')} Find Optimal Locations</button>`}
+            : `<button class="hub-btn hub-btn-sm hub-btn-secondary u-disabled" disabled title="Add demand points first — k-means needs demand to cluster against.">${icon('target')} Find Optimal Locations</button>`}
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="no-add-facility">+ Add Facility</button>
         </div>
       </div>
@@ -1529,8 +1529,8 @@ function renderFacilities(el) {
               <td style="padding:8px 6px;">
                 <select data-fac-lock="${f.id}" style="font-size:11px;padding:3px 6px;border:1px solid var(--ies-gray-200);border-radius:4px;background:${lockState === 'open' ? 'var(--c-info-bg)' : lockState === 'closed' ? 'var(--c-danger-bg)' : '#fff'};">
                   <option value="none"${lockState === 'none' ? ' selected' : ''}>—</option>
-                  <option value="open"${lockState === 'open' ? ' selected' : ''}>🔒 Open</option>
-                  <option value="closed"${lockState === 'closed' ? ' selected' : ''}>🔒 Closed</option>
+                  <option value="open"${lockState === 'open' ? ' selected' : ''}>Locked Open</option>
+                  <option value="closed"${lockState === 'closed' ? ' selected' : ''}>Locked Closed</option>
                 </select>
               </td>
               <td style="padding:8px 6px;font-weight:600;">${f.name}</td>

@@ -51,11 +51,11 @@
   /* Spacing Scale */
   --sp-1: 4px;
   --sp-2: 8px;
-  --sp-3: 12px;
-  --sp-4: 16px;
-  --sp-5: 20px;
-  --sp-6: 24px;
-  --sp-7: 32px;
+  --sp-3: 10px;   /* U4 density: was 12px */
+  --sp-4: 14px;   /* U4 density: was 16px */
+  --sp-5: 18px;   /* U4 density: was 20px */
+  --sp-6: 20px;   /* U4 density: was 24px */
+  --sp-7: 28px;   /* U4 density: was 32px */
   --sp-8: 40px;
   --sp-9: 48px;
   --sp-10: 64px;
@@ -115,7 +115,9 @@
 
   /* Accent semantics (Brock 2026-07-05): orange = brand + primary action,
      blue = informational / links / selected-state. */
-  --accent-primary:   var(--ies-orange);
+  --accent-primary:        var(--ies-orange);
+  --dark-surface: #fff; /* U4c: raised surface — dark theme overrides to #1b1e24; light value keeps var() resolvable */
+  --accent-primary-strong: #e63400; /* U4: hover/darkened primary */
   --accent-info:      var(--ies-blue);
 }
 
@@ -166,7 +168,7 @@ a:hover { text-decoration: underline; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 10px 20px;
+  padding: 8px 16px; /* U4 density */
   font-family: 'Montserrat', sans-serif;
   font-size: var(--fs-body);
   font-weight: var(--fw-semibold);
@@ -183,12 +185,12 @@ a:hover { text-decoration: underline; }
   outline-offset: 2px;
 }
 
-.hub-btn-primary {
-  background: var(--ies-blue);
+.hub-btn-primary { /* U4 brand: primary action = orange (accent semantics, U0 decision) */
+  background: var(--accent-primary);
   color: #fff;
-  border-color: var(--ies-blue);
+  border-color: var(--accent-primary);
 }
-.hub-btn-primary:hover { background: #003d94; }
+.hub-btn-primary:hover { background: var(--accent-primary-strong); border-color: var(--accent-primary-strong); }
 
 .hub-btn-secondary {
   background: #fff;
@@ -216,7 +218,7 @@ a:hover { text-decoration: underline; }
 
 .hub-btn-sm,
 .hub-btn--sm { /* --sm = alias (U0); canonical is -sm. Migrate ui-3d.js in U3-WSC, then drop alias. */
-  padding: 8px 14px;
+  padding: 6px 12px; /* U4 density */
   font-size: var(--fs-caption);
 }
 
@@ -243,8 +245,8 @@ a:hover { text-decoration: underline; }
 /* ---- Inputs ---- */
 .hub-input,
 .hub-select {
-  height: 40px;
-  padding: 10px 12px;
+  height: 36px; /* U4 density: was 40px */
+  padding: 8px 10px;
   font-family: 'Montserrat', sans-serif;
   font-size: var(--fs-body);
   font-weight: var(--fw-semibold);
@@ -296,7 +298,7 @@ textarea.hub-input {
 }
 
 .hub-tab {
-  padding: 10px 20px;
+  padding: 8px 16px; /* U4 density */
   border-radius: var(--radius-sm);
   border: 1px solid var(--ies-gray-200);
   font-family: 'Montserrat', sans-serif;
@@ -4405,3 +4407,44 @@ textarea.hub-input {
 }
 /* inline SVG icon (shared/icons.js) */
 .hub-icon { display: inline-block; vertical-align: -2px; flex-shrink: 0; }
+
+/* ============================================================
+   U4c — DARK MODE FEASIBILITY SPIKE (2026-07-05)
+   Experimental. Activated via <html data-theme="dark"> (Admin >
+   header toggle, persisted in localStorage 'hub-theme').
+   SCOPE: token overrides + core hub.css surfaces only.
+   KNOWN GAPS (the point of the spike — costs for a real dark pass):
+   - 37 hardcoded `background:#fff` in hub.css classes (core ones
+     overridden below; long tail stays light)
+   - 88 `background:#fff` sites in JS templates — untouched
+   - Canvas surfaces (WSC plan, COG map) cannot resolve var() —
+     stay light by design
+   ============================================================ */
+:root[data-theme="dark"] {
+  --ies-gray-50:  #16181d;
+  --ies-gray-100: #1e2128;
+  --ies-gray-200: #2a2e37;
+  --ies-gray-300: #3a3f4b;
+  --ies-gray-400: #6b7280;
+  --ies-gray-500: #9ca3af;
+  --ies-gray-600: #c3c9d2;
+  --ies-gray-700: #dde1e6;
+  --ies-gray-800: #edeff2;
+  --ies-gray-900: #f5f6f8;
+  --ies-navy: #e8eaee;
+  --c-ink: #e8eaee;
+  --c-ink-deep: #f5f6f8;
+  --c-muted: #9ca3af;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --dark-surface: #1b1e24; /* raised surface (cards, inputs) */
+}
+:root[data-theme="dark"] body { background: var(--ies-gray-50); color: var(--ies-navy); }
+:root[data-theme="dark"] .hub-card,
+:root[data-theme="dark"] .hub-input,
+:root[data-theme="dark"] .hub-select,
+:root[data-theme="dark"] .hub-btn-secondary,
+:root[data-theme="dark"] .hub-tab { background: var(--dark-surface); color: var(--ies-navy); }
+:root[data-theme="dark"] .hub-table th { background: var(--ies-gray-100); }
+:root[data-theme="dark"] .hub-table tr:hover td { background: var(--ies-gray-100); }

@@ -11,6 +11,7 @@ import * as api from './api.js?v=20260703-dc5';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260703-dc1';
+import { icon } from '../../shared/icons.js?v=20260705-u4a';
 // UX-1 D1p2 (2026-07-03): the MSA merge — deal tabs reuse the Multi-Site
 // Analyzer's pure calc + site mapping instead of duplicating the math.
 import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260704-cmp1';
@@ -2033,11 +2034,11 @@ function renderDealDos() {
             </div>
             ${templates.map(t => {
               const status = _dosStatusFor(d.id, t);
-              const statusIcon = status === 'complete' ? '✅' : status === 'in-progress' ? '🔄' : '⬜';
-              const statusColor = status === 'complete' ? '#16a34a' : status === 'in-progress' ? '#d97706' : 'var(--ies-gray-300)';
+              const statusIcon = status === 'complete' ? icon('check', { size: 14 }) : status === 'in-progress' ? icon('clock', { size: 14 }) : icon('circle', { size: 14 }); // U4b: emoji triplet -> icons
+              const statusColor = status === 'complete' ? 'var(--c-success)' : status === 'in-progress' ? 'var(--c-warn-strong)' : 'var(--ies-gray-300)';
               return `
                 <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--ies-gray-50);cursor:pointer;" data-dos-toggle="${t.id}">
-                  <span style="font-size:14px;">${statusIcon}</span>
+                  <span style="display:inline-flex;color:${statusColor};">${statusIcon}</span>
                   <span style="font-size:13px;flex:1;${status === 'complete' ? 'text-decoration:line-through;color:var(--ies-gray-400);' : ''}">${t.name}</span>
                   ${t.required ? '<span style="font-size:9px;font-weight:700;color:var(--c-danger);padding:1px 6px;border-radius:10px;border:1px solid var(--c-danger);">REQ</span>' : ''}
                   <span style="font-size:11px;font-weight:600;color:${statusColor};">${status}</span>

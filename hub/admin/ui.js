@@ -13,6 +13,7 @@ import { getEnv, getEnvLabel, getProjectRef } from '../../shared/supabase.js?v=2
 import { getBuildInfo, getBuildInfoSync } from '../../shared/build-info.js?v=20260424-A2';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
+import { icon } from '../../shared/icons.js?v=20260705-u4a';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -91,6 +92,7 @@ function render() {
         <div style="display:flex;align-items:center;gap:10px;">
           <h2 class="text-page u-m0">Admin</h2>
           ${renderEnvChip()}
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="admin-theme-toggle" title="U4c dark-mode spike — experimental, admin-only. Canvas surfaces (WSC plan, COG map) stay light.">${document.documentElement.dataset.theme === 'dark' ? 'Light mode' : 'Dark mode (beta)'}</button>
         </div>
         <div class="u-flex" id="admin-tabs">
           ${['tables', 'activity', 'escalations', 'audit'].map(t => `
@@ -110,6 +112,14 @@ function render() {
       <div id="admin-content"></div>
     </div>
   `;
+
+  rootEl.querySelector('#admin-theme-toggle')?.addEventListener('click', () => {
+    const root = document.documentElement;
+    const next = root.dataset.theme === 'dark' ? '' : 'dark';
+    if (next) { root.dataset.theme = next; } else { delete root.dataset.theme; }
+    try { localStorage.setItem('hub-theme', next); } catch { /* private mode */ }
+    render();
+  });
 
   rootEl.querySelector('#admin-tabs')?.addEventListener('click', (e) => {
     const btn = /** @type {HTMLElement} */ (e.target).closest('[data-tab]');
@@ -151,8 +161,8 @@ function renderMasterData(el) {
           <div style="font-size:14px;font-weight:700;margin-bottom:4px;">${t.name}</div>
           <div style="font-size:12px;color:var(--ies-gray-400);margin-bottom:8px;">${t.description}</div>
           <div style="display:flex;gap:12px;font-size:11px;color:var(--ies-gray-400);margin-bottom:8px;">
-            <span data-count-for="${t.tableName}">📊 — records</span>
-            <span>📋 ${t.columns.length} columns</span>
+            <span data-count-for="${t.tableName}" style="display:inline-flex;align-items:center;gap:4px;">${icon('chart', { size: 12 })} — records</span>
+            <span style="display:inline-flex;align-items:center;gap:4px;">${icon('clipboard', { size: 12 })} ${t.columns.length} columns</span>
           </div>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" style="width:100%;margin-top:8px;">View →</button>
         </div>
@@ -175,10 +185,10 @@ function renderMasterData(el) {
       const slot = el.querySelector(`[data-count-for="${tableName}"]`);
       if (!slot) continue;
       if (count == null) {
-        slot.textContent = '📊 — records';
+        slot.innerHTML = `${icon('chart', { size: 12 })} — records`; // U4b: emoji -> icon (innerHTML: template-only, no user data)
         slot.title = 'Count unavailable (table missing or RLS-blocked)';
       } else {
-        slot.textContent = `📊 ${count.toLocaleString()} record${count === 1 ? '' : 's'}`;
+        slot.innerHTML = `${icon('chart', { size: 12 })} ${count.toLocaleString()} record${count === 1 ? '' : 's'}`;
         slot.removeAttribute('title');
       }
     }

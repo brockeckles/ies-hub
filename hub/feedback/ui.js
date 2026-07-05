@@ -10,6 +10,13 @@ import * as calc from './calc.js?v=20260418-sK';
 import * as api from './api.js?v=20260430-fb1';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeHtml as _h, escapeAttr as _a } from '../../shared/escape.js?v=20260702-sec2';
+import { icon } from '../../shared/icons.js?v=20260705-u4a';
+
+/** U4b: emoji-as-iconography -> shared icons (ui-layer map; calc.typeIcon untouched — engines frozen). */
+function _typeIcon(type, size = 14) {
+  const names = { bug: 'bug', feature: 'sparkle', improvement: 'wrench', question: 'info' };
+  return icon(names[type] || 'doc', { size });
+}
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -100,7 +107,7 @@ function renderBoard(el) {
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
       <span style="font-size:11px;font-weight:700;color:var(--ies-gray-400);">Type:</span>
       ${['all', 'bug', 'feature', 'improvement', 'question'].map(t => `
-        <button class="hub-btn hub-btn-sm ${t === typeFilter ? '' : 'hub-btn-secondary'}" data-type-filter="${t}">${t === 'all' ? 'All' : calc.typeIcon(t) + ' ' + t}</button>
+        <button class="hub-btn hub-btn-sm ${t === typeFilter ? '' : 'hub-btn-secondary'}" data-type-filter="${t}">${t === 'all' ? 'All' : _typeIcon(t) + ' ' + t}</button>
       `).join('')}
       <span style="margin-left:12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Status:</span>
       ${['all', 'open', 'in-progress', 'completed'].map(s => `
@@ -123,7 +130,7 @@ function renderBoard(el) {
             </div>
             <div style="flex:1;">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                <span style="font-size:14px;">${calc.typeIcon(item.type)}</span>
+                <span style="display:inline-flex;">${_typeIcon(item.type)}</span>
                 <span style="font-size:14px;font-weight:700;">${_h(item.title)}</span>
               </div>
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -149,7 +156,7 @@ function renderDetail(el) {
     <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fb-back" style="margin-bottom:16px;">← Back to Board</button>
     <div class="hub-card" style="padding:20px;margin-bottom:16px;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-        <span style="font-size:18px;">${calc.typeIcon(item.type)}</span>
+        <span style="display:inline-flex;">${_typeIcon(item.type, 18)}</span>
         <h3 style="font-size:18px;font-weight:800;margin:0;flex:1;">${_h(item.title)}</h3>
         <span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;color:#fff;background:${calc.statusBadgeColor(item.status)};">${_h(item.status)}</span>
       </div>
