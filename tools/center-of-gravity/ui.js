@@ -19,6 +19,7 @@ import * as cmApi from '../cost-model/api.js?v=20260704-cmp1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
+import { icon } from '../../shared/icons.js?v=20260705-u3c';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -465,7 +466,7 @@ function updateHeaderSaveState() {
   const btn = rootEl.querySelector('[data-tc-action="cog-save"]');
   if (!btn) return;
   btn.removeAttribute('disabled');
-  btn.textContent = isDirty ? (activeScenarioId ? '💾 Save' : '💾 Save Scenario') : (activeScenarioId ? '✓ Saved' : '💾 Save Scenario');
+  btn.innerHTML = isDirty ? (activeScenarioId ? `${icon('save')} Save` : `${icon('save')} Save Scenario`) : (activeScenarioId ? '✓ Saved' : `${icon('save')} Save Scenario`);
   btn.classList.toggle('hub-btn-primary', isDirty);
   btn.classList.toggle('hub-btn-secondary', !isDirty);
   // Also flip the Draft → Saved status chip in place without full re-render.
@@ -1280,18 +1281,18 @@ function renderUploadWizard(container) {
   const hasLocation = hasLatLng || hasZip5 || hasZip3 || hasCityState;
   const valid = hasUnits && hasLocation;
   const statusMsg = valid
-    ? `<span style="color:#15803d;font-weight:600;">✓ Ready to load — ${previewRows.length} rows previewed, ${aoa.length - (pu.headerRow ? 1 : 0)} total</span>`
-    : `<span style="color:#b91c1c;font-weight:600;">⚠ Need a Units column AND a location path (Lat+Lng, ZIP, or City+State)</span>`;
+    ? `<span style="color:var(--c-success-strong);font-weight:600;">✓ Ready to load — ${previewRows.length} rows previewed, ${aoa.length - (pu.headerRow ? 1 : 0)} total</span>`
+    : `<span style="color:var(--c-danger-strong);font-weight:600;">⚠ Need a Units column AND a location path (Lat+Lng, ZIP, or City+State)</span>`;
   container.style.display = 'block';
   container.innerHTML = `
-    <div class="hub-card" style="margin-top:10px;padding:14px 16px;background:#fffbeb;border-left:3px solid #f59e0b;">
+    <div class="hub-card" style="margin-top:10px;padding:14px 16px;background:var(--c-warn-soft);border-left:3px solid var(--c-warn);">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
         <div>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#92400e;">Column mapping for "${pu.fileName}"</div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--c-warn-ink);">Column mapping for "${pu.fileName}"</div>
           <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">${aoa.length} data row${aoa.length === 1 ? '' : 's'} · ${ncol} column${ncol === 1 ? '' : 's'}. Assign each column a role.</div>
         </div>
         <label style="font-size:11px;font-weight:600;color:var(--ies-gray-600);display:flex;align-items:center;gap:6px;cursor:pointer;">
-          <input type="checkbox" id="cog-wiz-has-header" ${pu.headerRow ? 'checked' : ''} style="cursor:pointer;">
+          <input type="checkbox" id="cog-wiz-has-header" ${pu.headerRow ? 'checked' : ''} class="u-pointer">
           Row 1 is a header
         </label>
       </div>
@@ -1302,7 +1303,7 @@ function renderUploadWizard(container) {
               ${Array.from({ length: ncol }, (_, i) => `
                 <th style="padding:6px 8px;text-align:left;border:1px solid #fcd34d;font-weight:700;min-width:120px;">
                   <div style="font-size:10px;color:#78350f;letter-spacing:0.3px;text-transform:uppercase;margin-bottom:2px;">Col ${String.fromCharCode(65 + i)}${pu.headerRow ? ' · ' + (pu.headerRow[i] || '') : ''}</div>
-                  <select data-wiz-col="${i}" style="width:100%;padding:4px 6px;border:1px solid #d97706;border-radius:4px;font-size:12px;font-weight:600;background:#fff;">
+                  <select data-wiz-col="${i}" style="width:100%;padding:4px 6px;border:1px solid var(--c-warn-strong);border-radius:4px;font-size:12px;font-weight:600;background:#fff;">
                     ${ROLES.map(r => `<option value="${r.value}"${(mapping[i] || '') === r.value ? ' selected' : ''}>${r.label}</option>`).join('')}
                   </select>
                 </th>
@@ -1325,10 +1326,10 @@ function renderUploadWizard(container) {
         <div style="display:flex;gap:8px;">
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-wiz-cancel">Cancel</button>
           ${points.length > 0 ? `
-            <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-wiz-append" ${valid ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}
+            <button class="hub-btn hub-btn-sm hub-btn-secondary${valid ? '' : ' cog-disabled'}" id="cog-wiz-append" ${valid ? '' : 'disabled'}
                     title="Add these rows to your existing ${points.length} points (no replace)">+ Append</button>
           ` : ''}
-          <button class="hub-btn hub-btn-sm hub-btn-primary" id="cog-wiz-confirm" ${valid ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}
+          <button class="hub-btn hub-btn-sm hub-btn-primary${valid ? '' : ' cog-disabled'}" id="cog-wiz-confirm" ${valid ? '' : 'disabled'}
                   title="${points.length > 0 ? 'Replace all ' + points.length + ' existing points' : 'Load these rows'}">
             ${points.length > 0 ? '↺ Replace' : 'Confirm & Load'}
           </button>
@@ -1531,7 +1532,7 @@ function renderSetupPhase(el) {
       ${_setupCard(1, 'Customer demand', 'Upload the customer\'s ZIP + units file — the mapping wizard handles layouts. Or load the demo to explore.', `
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <input type="file" id="cog-xlsx-input" accept=".xlsx,.xls,.csv" style="display:none;" />
-          <button class="hub-btn hub-btn-sm hub-btn-primary" id="cog-xlsx-pick" title="Choose an Excel (.xlsx, .xls) or CSV file — column-mapping wizard opens next">📂 Upload demand file</button>
+          <button class="hub-btn hub-btn-sm hub-btn-primary" id="cog-xlsx-pick" title="Choose an Excel (.xlsx, .xls) or CSV file — column-mapping wizard opens next">${icon('upload')} Upload demand file</button>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-load-demo" title="Load a 10-point US demo fixture">Load Demo</button>
           <span id="cog-xlsx-filename" style="font-size:12px;color:var(--ies-gray-500);font-style:italic;"></span>
           <span style="flex:1;text-align:right;font-size:12px;font-weight:600;color:${activePts.length ? 'var(--ies-gray-700)' : 'var(--ies-red)'};">
@@ -1545,7 +1546,7 @@ function renderSetupPhase(el) {
       ${_setupCard(2, 'How many DCs?', 'Auto solves every k and adopts the cost-curve recommendation — the default answer to "how many DCs should we quote?"', `
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
           <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="cog-k-auto" ${config.kAuto ? 'checked' : ''} style="cursor:pointer;">
+            <input type="checkbox" id="cog-k-auto" ${config.kAuto ? 'checked' : ''} class="u-pointer">
             Auto (recommended)
           </label>
           <span style="font-size:12px;color:var(--ies-gray-400);">or pin it:</span>
@@ -1648,39 +1649,39 @@ function renderInputsPhase(el) {
     <div>
       <!-- 2026-05-28 F2 — Deal Context card. Lives at the top so every
            scenario starts with customer/industry/deal-stage metadata. -->
-      <div class="hub-card" style="margin-bottom:16px;padding:14px 16px;border-left:3px solid #0047AB;">
+      <div class="hub-card" style="margin-bottom:16px;padding:14px 16px;border-left:3px solid var(--ies-blue);">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:12px;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);">Deal Context</div>
-          <div style="font-size:11px;color:var(--ies-gray-400);">Captured on the scenario · shows up in the landing list</div>
+          <div class="u-cap u-faint">Captured on the scenario · shows up in the landing list</div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:10px;">
           <div>
-            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Customer</label>
+            <label class="hub-field-label">Customer</label>
             <input type="text" id="cog-customer" value="${(config.customerName || '').replace(/"/g, '&quot;')}" placeholder="e.g. Wayfair, Acme Industries"
                    style="width:100%;padding:7px 9px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
           </div>
           <div>
-            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Industry</label>
+            <label class="hub-field-label">Industry</label>
             <select id="cog-industry" style="width:100%;padding:6px 9px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
               ${calc.INDUSTRY_OPTIONS.map(o => `<option value="${o.value}"${(config.industry || '') === o.value ? ' selected' : ''}>${o.label}</option>`).join('')}
             </select>
           </div>
           <div>
-            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Deal Stage</label>
+            <label class="hub-field-label">Deal Stage</label>
             <select id="cog-deal-stage" style="width:100%;padding:6px 9px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;">
               ${calc.DEAL_STAGES.map(o => `<option value="${o.value}"${(config.dealStage || '') === o.value ? ' selected' : ''}>${o.label}</option>`).join('')}
             </select>
           </div>
         </div>
         <div style="margin-top:10px;">
-          <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Notes</label>
+          <label class="hub-field-label">Notes</label>
           <textarea id="cog-notes" rows="2" placeholder="Open assumptions, customer constraints, anything the analyst should know on reopen…"
                     style="width:100%;padding:7px 9px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;resize:vertical;">${(config.notes || '').replace(/</g, '&lt;')}</textarea>
         </div>
       </div>
 
       <!-- Seeders card -->
-      <div class="hub-card" style="margin-bottom:16px;padding:14px 16px;border-left:3px solid #20c997;">
+      <div class="hub-card" style="margin-bottom:16px;padding:14px 16px;border-left:3px solid var(--ies-teal);">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:10px;">Seed demand points</div>
         <div style="display:grid;grid-template-columns:1fr;gap:10px;">
           <!-- Add a single point via city/ZIP lookup -->
@@ -1706,18 +1707,18 @@ function renderInputsPhase(el) {
               `).join('')}
             </select>
             <input type="number" id="cog-archetype-volume" placeholder="Total units (optional)" title="Optional: override the archetype's default total annual volume" style="width:170px;padding:7px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;" />
-            <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-load-archetype" title="Pick an archetype from the dropdown first" disabled style="opacity:0.5;cursor:not-allowed;">Apply Archetype</button>
+            <button class="hub-btn hub-btn-sm hub-btn-secondary cog-disabled" id="cog-load-archetype" title="Pick an archetype from the dropdown first" disabled>Apply Archetype</button>
             <span style="width:1px;height:18px;background:var(--ies-gray-200);"></span>
             <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-load-demo" title="Load a 10-point US demo fixture so you can explore the tool without entering data">Load Demo</button>
           </div>
-          <div id="cog-archetype-desc" style="font-size:12px;color:var(--ies-gray-500);display:none;padding:8px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;margin-left:100px;"></div>
+          <div id="cog-archetype-desc" style="font-size:12px;color:var(--ies-gray-500);display:none;padding:8px 12px;background:var(--c-warn-soft);border:1px solid #fde68a;border-radius:6px;margin-left:100px;"></div>
 
           <!-- 2026-05-26 — bulk demand from an Excel / CSV file. Two
                columns: 5-digit ZIP + units. Header row auto-detected. -->
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--ies-gray-200);padding-top:10px;">
             <div style="font-size:11px;font-weight:600;color:var(--ies-gray-500);width:90px;flex-shrink:0;">Upload</div>
             <input type="file" id="cog-xlsx-input" accept=".xlsx,.xls,.csv" style="display:none;" />
-            <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-xlsx-pick" title="Choose an Excel (.xlsx, .xls) or CSV file with two columns: 5-digit ZIP and units">📂 Upload XLS / XLSX / CSV</button>
+            <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-xlsx-pick" title="Choose an Excel (.xlsx, .xls) or CSV file with two columns: 5-digit ZIP and units">${icon('upload')} Upload XLS / XLSX / CSV</button>
             <span id="cog-xlsx-filename" style="font-size:12px;color:var(--ies-gray-500);font-style:italic;"></span>
             <span style="flex:1;font-size:11px;color:var(--ies-gray-400);text-align:right;">
               Two columns: <strong>5-digit ZIP</strong>, <strong>units</strong>. Header row OK.
@@ -1735,14 +1736,14 @@ function renderInputsPhase(el) {
       <!-- Points table -->
       <div class="hub-card" style="padding:14px 16px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-          <h3 class="text-section" style="margin:0;">Weighted Demand Points</h3>
+          <h3 class="text-section u-m0">Weighted Demand Points</h3>
           <span style="font-size:12px;color:var(--ies-gray-500);">${points.length} point${points.length === 1 ? '' : 's'}</span>
         </div>
         ${points.length === 0 ? `
           <div style="padding:24px;text-align:center;color:var(--ies-gray-400);font-size:12px;border:1px dashed var(--ies-gray-300);border-radius:6px;">No points yet — use the seeders above to add a few.</div>
         ` : `
           <div style="max-height:400px;overflow-y:auto;">
-            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <table class="u-table">
               <thead style="position:sticky;top:0;background:#fff;">
                 <tr style="border-bottom:2px solid var(--ies-gray-200);">
                   <th style="text-align:left;padding:8px 6px;font-weight:700;cursor:pointer;user-select:none;" data-sort="name" title="Click to sort by name">Name${_pointsSort.column === 'name' ? (_pointsSort.direction === 'asc' ? ' ↑' : ' ↓') : ''}</th>
@@ -1794,9 +1795,9 @@ function renderInputsPhase(el) {
                   return `
                   <tr style="${rowStyle}">
                     <td style="${nameStyle}" title="${exc ? 'Excluded from the solve. Edit the source file and re-upload, or delete this row.' : ''}">${escapeHtml(p.name || p.id)}</td>
-                    <td style="padding:6px;text-align:right;">${ll(p.lat)}</td>
-                    <td style="padding:6px;text-align:right;">${ll(p.lng)}</td>
-                    <td style="padding:6px;text-align:right;">${(p.weight || 0).toLocaleString()}</td>
+                    <td class="u-td-num">${ll(p.lat)}</td>
+                    <td class="u-td-num">${ll(p.lng)}</td>
+                    <td class="u-td-num">${(p.weight || 0).toLocaleString()}</td>
                     ${parcelCellHtml}
                     <td style="padding:6px;text-align:center;">
                       <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:${badgeBg};color:${badgeFg};">${p.type}</span>
@@ -1814,7 +1815,7 @@ function renderInputsPhase(el) {
         `}
       </div>
 
-      <div class="hub-card" style="margin-top:20px;background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 20px;">
+      <div class="hub-card" style="margin-top:20px;background:linear-gradient(135deg,var(--c-ink-deep),#0d1f3c);color:#fff;padding:16px 20px;">
         <div style="display:flex;gap:32px;align-items:center;">
           ${(() => {
             const activeCount = points.filter(p => p.type !== 'excluded').length;
@@ -2072,185 +2073,185 @@ function renderParametersPhase(el) {
       <!-- Analysis Configuration (COG-SCOPE-2 lift) -->
       <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid var(--ies-blue);">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:12px;">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);">Analysis Configuration</div>
+          <div class="cog-kicker">Analysis Configuration</div>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-reset-defaults" title="Reset every Parameters knob to its default value (k=1, $2.85/mi, rt=2.0, road=1.22, no SLA, no capacity, mode mix off…). Preserves Deal Context, points, and Current State.">↺ Reset defaults</button>
         </div>
         <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;">Centers (k):</label>
+          <div class="u-row">
+            <label class="u-13 u-semibold">Centers (k):</label>
             <input type="number" value="${config.numCenters}" min="1" max="20" id="cog-k" ${config.kAuto ? 'disabled' : ''}
                    style="width:70px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:14px;font-weight:700;text-align:center;color:var(--ies-blue);${config.kAuto ? 'opacity:.55;' : ''}">
             <label style="font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px;cursor:pointer;" title="Solve k from the sensitivity sweep's recommended elbow instead of a fixed count. Uncheck to pin k manually.">
-              <input type="checkbox" id="cog-k-auto" ${config.kAuto ? 'checked' : ''} style="cursor:pointer;">
+              <input type="checkbox" id="cog-k-auto" ${config.kAuto ? 'checked' : ''} class="u-pointer">
               Auto (recommended)
             </label>
-            <span style="font-size:11px;color:var(--ies-gray-400);">${config.kAuto ? 'k adopts the sweep recommendation on Run' : 'How many DC locations to optimize for'}</span>
+            <span class="u-cap u-faint">${config.kAuto ? 'k adopts the sweep recommendation on Run' : 'How many DC locations to optimize for'}</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;" title="Unit your demand 'weight' values are in. Math doesn't care which unit you pick — capacity below must use the same one. Drives label text everywhere weight appears.">Weight Unit:</label>
+          <div class="u-row">
+            <label class="u-13 u-semibold" title="Unit your demand 'weight' values are in. Math doesn't care which unit you pick — capacity below must use the same one. Drives label text everywhere weight appears.">Weight Unit:</label>
             <select id="cog-weight-unit" style="padding:7px 10px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;">
               ${calc.WEIGHT_UNIT_OPTIONS.map(u => `<option value="${u.value}"${(config.weightUnit||'lb')===u.value?' selected':''}>${u.label}</option>`).join('')}
             </select>
-            <span style="font-size:11px;color:var(--ies-gray-400);" title="The Truck $/mi rate is per truck-mile regardless of weight unit. Weight Unit only changes how demand totals are bucketed into truckloads via the capacity below.">Cost rate is per truck-mile · weight unit drives demand → truckloads</span>
+            <span class="u-cap u-faint" title="The Truck $/mi rate is per truck-mile regardless of weight unit. Weight Unit only changes how demand totals are bucketed into truckloads via the capacity below.">Cost rate is per truck-mile · weight unit drives demand → truckloads</span>
           </div>
           <!-- 2026-05-29 — Demand scaling factor. Lets the user dial
                sample data up to realistic customer volume without
                re-uploading. Applied uniformly across every point in
                _pointsForSolve, so flows through k-means + cost +
                parcel + CO₂ + sensitivity. -->
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;" title="Multiplies every demand-point weight uniformly before the solve. Use to dial sample data up to realistic customer volume (e.g. 100x), or to model 'what if customer is 5x our size'. 1.0 = no change. Does not modify the underlying points table.">Demand × :</label>
+          <div class="u-row">
+            <label class="u-13 u-semibold" title="Multiplies every demand-point weight uniformly before the solve. Use to dial sample data up to realistic customer volume (e.g. 100x), or to model 'what if customer is 5x our size'. 1.0 = no change. Does not modify the underlying points table.">Demand × :</label>
             <input type="number" value="${config.demandScaleFactor ?? 1.0}" step="0.1" min="0.001" max="10000" id="cog-demand-scale"
                    style="width:90px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;color:var(--ies-blue);">
-            <span style="font-size:11px;color:var(--ies-gray-400);">1.0 = no scale · 100 = 100× current · sample data → real volume</span>
+            <span class="u-cap u-faint">1.0 = no scale · 100 = 100× current · sample data → real volume</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;">Truck $/mi:</label>
+          <div class="u-row">
+            <label class="u-13 u-semibold">Truck $/mi:</label>
             <input type="number" value="${config.transportCostPerMile}" step="0.01" id="cog-cpm"
-                   style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <span style="font-size:11px;color:var(--ies-gray-400);">Per-truck rate (e.g. $2.85/mi for 53-ft van)</span>
+                   class="cog-num-input-p8" style="width:80px;">
+            <span class="u-cap u-faint">Per-truck rate (e.g. $2.85/mi for 53-ft van)</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;">${wmeta.short.charAt(0).toUpperCase()+wmeta.short.slice(1)} / Truck:</label>
+          <div class="u-row">
+            <label class="u-13 u-semibold">${wmeta.short.charAt(0).toUpperCase()+wmeta.short.slice(1)} / Truck:</label>
             <input type="number" value="${config.unitsPerTruck || 25000}" step="${wmeta.step}" min="1" id="cog-cap"
-                   style="width:90px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <span style="font-size:11px;color:var(--ies-gray-400);">Avg payload (${wmeta.short}) per truckload</span>
+                   class="cog-num-input-p8" style="width:90px;">
+            <span class="u-cap u-faint">Avg payload (${wmeta.short}) per truckload</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;">Max Iterations:</label>
+          <div class="u-row">
+            <label class="u-13 u-semibold">Max Iterations:</label>
             <input type="number" value="${config.maxIterations || 100}" min="10" max="500" step="10" id="cog-iter"
-                   style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
+                   class="cog-num-input-p8" style="width:80px;">
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;" title="Maximum k explored on the Sensitivity tab. Each k from 1..N gets its own solve. Default 8 covers typical network ranges; bump to 12-20 for big-network deep dives at the cost of slower Run.">Sensitivity max k:</label>
+          <div class="u-row">
+            <label class="u-13 u-semibold" title="Maximum k explored on the Sensitivity tab. Each k from 1..N gets its own solve. Default 8 covers typical network ranges; bump to 12-20 for big-network deep dives at the cost of slower Run.">Sensitivity max k:</label>
             <input type="number" value="${config.sensitivityMaxK ?? 8}" min="2" max="20" step="1" id="cog-sens-max"
-                   style="width:70px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <span style="font-size:11px;color:var(--ies-gray-400);">range 2-20 · default 8 · linear runtime cost</span>
+                   class="cog-num-input-p8" style="width:70px;">
+            <span class="u-cap u-faint">range 2-20 · default 8 · linear runtime cost</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;" title="Multiplier applied to one-way distance to account for the empty return leg. 2.0 = full round trip (no backhaul revenue). 1.5-1.8 if your network has reliable backhaul matches. Threaded through Analysis totals + Sensitivity + per-row table.">Round-trip:</label>
+          <div class="u-row">
+            <label class="u-13 u-semibold" title="Multiplier applied to one-way distance to account for the empty return leg. 2.0 = full round trip (no backhaul revenue). 1.5-1.8 if your network has reliable backhaul matches. Threaded through Analysis totals + Sensitivity + per-row table.">Round-trip:</label>
             <input type="number" value="${config.roundTripFactor ?? 2.0}" step="0.1" min="1.0" max="3.0" id="cog-rt-factor"
-                   style="width:70px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <span style="font-size:11px;color:var(--ies-gray-400);">2.0 = full round trip · 1.5-1.8 with backhaul</span>
+                   class="cog-num-input-p8" style="width:70px;">
+            <span class="u-cap u-faint">2.0 = full round trip · 1.5-1.8 with backhaul</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;" title="Multiplier converting great-circle (haversine) distance into estimated road miles. Continental US average is 1.20-1.25. Mountain west runs 1.30+, plains 1.15. Set to 1.0 to revert to legacy great-circle math.">Road factor:</label>
+          <div class="u-row">
+            <label class="u-13 u-semibold" title="Multiplier converting great-circle (haversine) distance into estimated road miles. Continental US average is 1.20-1.25. Mountain west runs 1.30+, plains 1.15. Set to 1.0 to revert to legacy great-circle math.">Road factor:</label>
             <input type="number" value="${config.roadFactor ?? 1.22}" step="0.01" min="1.0" max="1.5" id="cog-road-factor"
-                   style="width:70px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <span style="font-size:11px;color:var(--ies-gray-400);">1.22 = US avg · 1.30 = mountain · 1.15 = plains · 1.00 = great-circle</span>
+                   class="cog-num-input-p8" style="width:70px;">
+            <span class="u-cap u-faint">1.22 = US avg · 1.30 = mountain · 1.15 = plains · 1.00 = great-circle</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;" title="CO₂ emissions intensity per truck-mile. Default 1.62 kg/mi = EPA SmartWay 2024 US Class 8 average. Range 1.30 (new diesel / hybrid fleets) to 2.10 (older or refrigerated). Set to 0 to hide emissions output.">CO₂ kg/truck-mi:</label>
+          <div class="u-row">
+            <label class="u-13 u-semibold" title="CO₂ emissions intensity per truck-mile. Default 1.62 kg/mi = EPA SmartWay 2024 US Class 8 average. Range 1.30 (new diesel / hybrid fleets) to 2.10 (older or refrigerated). Set to 0 to hide emissions output.">CO₂ kg/truck-mi:</label>
             <input type="number" value="${config.co2KgPerTruckMile ?? 1.62}" step="0.01" min="0" max="3.0" id="cog-co2"
-                   style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <span style="font-size:11px;color:var(--ies-gray-400);">1.62 = US Class 8 avg · 1.30 = new diesel · 2.10 = refrigerated</span>
+                   class="cog-num-input-p8" style="width:80px;">
+            <span class="u-cap u-faint">1.62 = US Class 8 avg · 1.30 = new diesel · 2.10 = refrigerated</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;" title="Service-level constraint. Demand points whose road-distance to the assigned DC exceeds this threshold get flagged out-of-service in the Analysis table and on the map. Doesn't change k-means math — it answers the 'can we hit 95% next-day' question. 0 = disabled.">Max service mi:</label>
+          <div class="u-row">
+            <label class="u-13 u-semibold" title="Service-level constraint. Demand points whose road-distance to the assigned DC exceeds this threshold get flagged out-of-service in the Analysis table and on the map. Doesn't change k-means math — it answers the 'can we hit 95% next-day' question. 0 = disabled.">Max service mi:</label>
             <input type="number" value="${config.maxServiceMiles ?? 0}" step="50" min="0" max="3000" id="cog-max-service"
-                   style="width:80px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <span style="font-size:11px;color:var(--ies-gray-400);">0 = off · 250 = same-day parcel · 500 = next-day TL · 800 = 2-day LTL</span>
+                   class="cog-num-input-p8" style="width:80px;">
+            <span class="u-cap u-faint">0 = off · 250 = same-day parcel · 500 = next-day TL · 800 = 2-day LTL</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;" title="Capacity ceiling per DC (in your weight unit / yr). Post-solve, any cluster over cap reassigns its farthest demand to the nearest under-cap cluster until everyone fits or all clusters are full. 0 = disabled (k-means assignment kept as-is).">Capacity / DC:</label>
+          <div class="u-row">
+            <label class="u-13 u-semibold" title="Capacity ceiling per DC (in your weight unit / yr). Post-solve, any cluster over cap reassigns its farthest demand to the nearest under-cap cluster until everyone fits or all clusters are full. 0 = disabled (k-means assignment kept as-is).">Capacity / DC:</label>
             <input type="number" value="${config.capacityPerDC ?? 0}" step="100000" min="0" id="cog-capacity"
-                   style="width:120px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <span style="font-size:11px;color:var(--ies-gray-400);">0 = off · ${(calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'units')}/yr · typical 1.5M small / 5M med / 15M large</span>
+                   class="cog-num-input-p8" style="width:120px;">
+            <span class="u-cap u-faint">0 = off · ${(calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'units')}/yr · typical 1.5M small / 5M med / 15M large</span>
           </div>
           <!-- UX0-4 (2026-07-03): Planning horizon inputs. E3 shipped 2026-05-29
                with change-handlers + Analysis projection table but the inputs
                themselves were never rendered — the Analysis footnote pointed at
                a section that didn't exist. -->
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;" data-cog-horizon-group>
-            <label style="font-size:13px;font-weight:600;" title="Multi-year planning horizon. 1 = single-year analysis (no projection table). 2-10 years adds a growth/escalation/NPV projection to the Analysis tab.">Horizon (yrs):</label>
+            <label class="u-13 u-semibold" title="Multi-year planning horizon. 1 = single-year analysis (no projection table). 2-10 years adds a growth/escalation/NPV projection to the Analysis tab.">Horizon (yrs):</label>
             <input type="number" value="${config.analysisHorizonYears ?? 1}" min="1" max="10" step="1" id="cog-horizon-years"
-                   style="width:60px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <label style="font-size:13px;font-weight:600;" title="Annual demand growth applied to transport cost in out-years.">Growth %/yr:</label>
+                   class="cog-num-input-p8" style="width:60px;">
+            <label class="u-13 u-semibold" title="Annual demand growth applied to transport cost in out-years.">Growth %/yr:</label>
             <input type="number" value="${config.annualGrowthPct ?? 5}" step="0.5" id="cog-annual-growth"
-                   style="width:65px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <label style="font-size:13px;font-weight:600;" title="Annual cost escalation (rate inflation) applied in out-years.">Escalation %/yr:</label>
+                   class="cog-num-input-p8" style="width:65px;">
+            <label class="u-13 u-semibold" title="Annual cost escalation (rate inflation) applied in out-years.">Escalation %/yr:</label>
             <input type="number" value="${config.annualEscalationPct ?? 3}" step="0.5" min="0" id="cog-annual-escalation"
-                   style="width:65px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <label style="font-size:13px;font-weight:600;" title="Discount rate for NPV of the multi-year cost stream. Use the customer WACC.">Discount %:</label>
+                   class="cog-num-input-p8" style="width:65px;">
+            <label class="u-13 u-semibold" title="Discount rate for NPV of the multi-year cost stream. Use the customer WACC.">Discount %:</label>
             <input type="number" value="${config.discountRatePct ?? 8}" step="0.5" min="0" id="cog-discount-rate"
-                   style="width:65px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <span style="font-size:11px;color:var(--ies-gray-400);">Horizon 1 = single-year · 2+ adds the projection + NPV table on Analysis</span>
+                   class="cog-num-input-p8" style="width:65px;">
+            <span class="u-cap u-faint">Horizon 1 = single-year · 2+ adds the projection + NPV table on Analysis</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;" title="When ON, demand points whose lat/lng falls inside AK (51-72°N, -180 to -130°W), HI (18-23°N, -161 to -154°W), or PR (17.5-18.7°N, -67.5 to -65.3°W) bounding boxes are dropped before solving. Prevents a single offshore customer from dragging the centroid offshore.">
-              <input type="checkbox" id="cog-exclude-offshore" ${config.excludeOffshore ? 'checked' : ''} style="cursor:pointer;">
+              <input type="checkbox" id="cog-exclude-offshore" ${config.excludeOffshore ? 'checked' : ''} class="u-pointer">
               Exclude AK · HI · PR from solve
             </label>
-            <span style="font-size:11px;color:var(--ies-gray-400);">Keeps offshore demand visible in the points table but out of the k-means math</span>
+            <span class="u-cap u-faint">Keeps offshore demand visible in the points table but out of the k-means math</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:13px;font-weight:600;">Fixed $ / DC / yr:</label>
+          <div class="u-row">
+            <label class="u-13 u-semibold">Fixed $ / DC / yr:</label>
             <input type="number" value="${config.fixedCostPerDC || 0}" step="50000" min="0" id="cog-fixed-cost"
                    title="Annual fully-loaded fixed cost per DC (rent + labor + IT + depreciation). Set to a non-zero value (e.g. $1,500,000) to model a true U-curve on the Sensitivity tab. Leave at 0 for a transport-only curve."
-                   style="width:120px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-            <span style="font-size:11px;color:var(--ies-gray-400);">0 = transport only · >0 = real U-curve (e.g. $1.5M)</span>
+                   class="cog-num-input-p8" style="width:120px;">
+            <span class="u-cap u-faint">0 = transport only · >0 = real U-curve (e.g. $1.5M)</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;">
               <input type="checkbox" id="cog-outlier-toggle" ${config.outlierCapEnabled ? 'checked' : ''}
-                     style="cursor:pointer;">
+                     class="u-pointer">
               Cap outlier weights at
             </label>
             <input type="number" value="${config.outlierCapPercentile || 95}" min="80" max="99" step="1" id="cog-outlier-percentile"
                    ${config.outlierCapEnabled ? '' : 'disabled'}
                    title="Winsorize: any point heavier than the Nth-percentile weight is clipped DOWN to that cap before solving."
                    style="width:60px;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;${config.outlierCapEnabled ? '' : 'opacity:0.5;'}">
-            <span style="font-size:11px;color:var(--ies-gray-400);">th percentile · prevents one mega-account from owning the centroid</span>
+            <span class="u-cap u-faint">th percentile · prevents one mega-account from owning the centroid</span>
           </div>
         </div>
       </div>
 
       <!-- 2026-05-28 B3 — Mode mix (TL / LTL / parcel). -->
-      <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid #7c3aed;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
+      <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid var(--c-purple);">
+        <div class="cog-card-head">
           <div>
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);">Mode Mix <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--ies-gray-300);">(optional)</span></div>
-            <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">Blend TL / LTL / parcel rates instead of a single \$/mi. Real networks rarely run 100% TL — applying a flat TL rate to a parcel-heavy customer understates cost by 30-50%.</div>
+            <div class="cog-kicker">Mode Mix <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--ies-gray-300);">(optional)</span></div>
+            <div class="cog-hint">Blend TL / LTL / parcel rates instead of a single \$/mi. Real networks rarely run 100% TL — applying a flat TL rate to a parcel-heavy customer understates cost by 30-50%.</div>
           </div>
           <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;" title="When ON, the cost engine uses the mode-weighted effective rate instead of the single \$/mi knob. The Truck \$/mi input on Analysis Configuration is ignored while this is on.">
-            <input type="checkbox" id="cog-modemix-toggle" ${config.modeMixEnabled ? 'checked' : ''} style="cursor:pointer;">
+            <input type="checkbox" id="cog-modemix-toggle" ${config.modeMixEnabled ? 'checked' : ''} class="u-pointer">
             Use mode mix
           </label>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px 16px;font-size:12px;${config.modeMixEnabled ? '' : 'opacity:0.55;'}">
           <div>
-            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">TL share</label>
-            <div style="display:flex;align-items:center;gap:6px;">
+            <label class="hub-field-label">TL share</label>
+            <div class="u-row-tight">
               <input type="number" value="${config.modeMix?.tlPct ?? 100}" min="0" max="100" step="5" id="cog-modemix-tl-pct" ${config.modeMixEnabled ? '' : 'disabled'}
-                     style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <span style="color:var(--ies-gray-500);">% @ \$</span>
+                     class="cog-num-input" style="width:64px;">
+              <span class="u-muted">% @ \$</span>
               <input type="number" value="${(config.modeRates?.tlPerMile ?? 2.85).toFixed(2)}" min="0" step="0.05" id="cog-moderates-tl" ${config.modeMixEnabled ? '' : 'disabled'}
-                     style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <span style="color:var(--ies-gray-500);">/mi</span>
+                     class="cog-num-input" style="width:64px;">
+              <span class="u-muted">/mi</span>
             </div>
-            <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Truckload — \$2.50-3.20 spot</div>
+            <div class="cog-hint-sm">Truckload — \$2.50-3.20 spot</div>
           </div>
           <div>
-            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">LTL share</label>
-            <div style="display:flex;align-items:center;gap:6px;">
+            <label class="hub-field-label">LTL share</label>
+            <div class="u-row-tight">
               <input type="number" value="${config.modeMix?.ltlPct ?? 0}" min="0" max="100" step="5" id="cog-modemix-ltl-pct" ${config.modeMixEnabled ? '' : 'disabled'}
-                     style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <span style="color:var(--ies-gray-500);">% @ \$</span>
+                     class="cog-num-input" style="width:64px;">
+              <span class="u-muted">% @ \$</span>
               <input type="number" value="${(config.modeRates?.ltlPerMile ?? 4.20).toFixed(2)}" min="0" step="0.05" id="cog-moderates-ltl" ${config.modeMixEnabled ? '' : 'disabled'}
-                     style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <span style="color:var(--ies-gray-500);">/mi</span>
+                     class="cog-num-input" style="width:64px;">
+              <span class="u-muted">/mi</span>
             </div>
-            <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Less-than-truckload — \$3.80-4.60 effective</div>
+            <div class="cog-hint-sm">Less-than-truckload — \$3.80-4.60 effective</div>
           </div>
           <div>
-            <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Parcel share</label>
-            <div style="display:flex;align-items:center;gap:6px;">
+            <label class="hub-field-label">Parcel share</label>
+            <div class="u-row-tight">
               <input type="number" value="${config.modeMix?.parcelPct ?? 0}" min="0" max="100" step="5" id="cog-modemix-parcel-pct" ${config.modeMixEnabled ? '' : 'disabled'}
-                     style="width:64px;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <span style="color:var(--ies-gray-500);">%</span>
+                     class="cog-num-input" style="width:64px;">
+              <span class="u-muted">%</span>
               <span style="font-size:10px;color:var(--ies-gray-400);margin-left:6px;">→ Parcel Engine card below</span>
             </div>
-            <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Per-package zone-priced (UPS/FedEx) — not \$/mi</div>
+            <div class="cog-hint-sm">Per-package zone-priced (UPS/FedEx) — not \$/mi</div>
           </div>
         </div>
         ${(() => {
@@ -2259,9 +2260,9 @@ function renderParametersPhase(el) {
           const formula = calc.effectiveCpmForFormula(config.modeMix || {}, config.modeRates || {}, config.roadFactor ?? 1.22, config.roundTripFactor ?? 2.0);
           const hasParcel = (config.modeMix?.parcelPct || 0) > 0;
           if (!config.modeMixEnabled) return `<div style="font-size:11px;color:var(--ies-gray-400);margin-top:10px;font-style:italic;">Mode mix is off — Analysis uses the single Truck \$/mi knob (\$${(config.transportCostPerMile || 0).toFixed(2)}).</div>`;
-          if (sum === 0) return `<div style="font-size:11px;color:#b91c1c;margin-top:10px;font-weight:600;">Shares sum to 0 — set at least one mode > 0 to compute cost.</div>`;
+          if (sum === 0) return `<div style="font-size:11px;color:var(--c-danger-strong);margin-top:10px;font-weight:600;">Shares sum to 0 — set at least one mode > 0 to compute cost.</div>`;
           if (Math.abs(sum - 100) > 0.5) return `<div style="font-size:11px;color:#a16207;margin-top:10px;">Shares sum to ${sum}% (will be normalized to 100%) · natural blended <strong>\$${natural.toFixed(2)}/mi</strong>${hasParcel ? ` · engine uses <strong>\$${formula.toFixed(2)}/mi</strong> (parcel bypasses road×rt)` : ''}</div>`;
-          return `<div style="font-size:11px;color:#15803d;margin-top:10px;font-weight:600;">Natural blended: \$${natural.toFixed(2)}/mi${hasParcel ? ` · <span style="font-weight:600;">Engine uses \$${formula.toFixed(2)}/mi</span> <span style="font-weight:500;color:var(--ies-gray-500);">(parcel bypasses road×rt — see note below)</span>` : ''}</div>`;
+          return `<div style="font-size:11px;color:var(--c-success-strong);margin-top:10px;font-weight:600;">Natural blended: \$${natural.toFixed(2)}/mi${hasParcel ? ` · <span class="u-semibold">Engine uses \$${formula.toFixed(2)}/mi</span> <span style="font-weight:500;color:var(--ies-gray-500);">(parcel bypasses road×rt — see note below)</span>` : ''}</div>`;
         })()}
         ${config.modeMixEnabled && (config.modeMix?.parcelPct || 0) > 0 ? `
           <div style="font-size:10px;color:var(--ies-gray-500);margin-top:8px;line-height:1.5;border-top:1px dashed var(--ies-gray-200);padding-top:8px;">
@@ -2273,57 +2274,57 @@ function renderParametersPhase(el) {
       <!-- 2026-05-28 27c — Parcel Engine card. Only when mode mix on AND parcel > 0. -->
       ${config.modeMixEnabled && (config.modeMix?.parcelPct || 0) > 0 ? `
         <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid #be185d;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
+          <div class="cog-card-head">
             <div>
               <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#9d174d;">Parcel Engine</div>
-              <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">Per-package zone-priced cost via 2026 carrier list rates. Active when Mode Mix parcel share > 0.</div>
+              <div class="cog-hint">Per-package zone-priced cost via 2026 carrier list rates. Active when Mode Mix parcel share > 0.</div>
             </div>
           </div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:10px 16px;font-size:12px;">
             <div>
-              <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Carrier</label>
+              <label class="hub-field-label">Carrier</label>
               <select id="cog-parcel-carrier" style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;">
                 ${Object.entries(calc.PARCEL_CARRIER_LABELS).map(([key, label]) => `
                   <option value="${key}"${(config.parcelCarrier || 'fedex_ground') === key ? ' selected' : ''}>${label}</option>
                 `).join('')}
               </select>
-              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">USPS limit 70 lb · UPS/FedEx 150 lb · service levels in next commit</div>
+              <div class="cog-hint-sm">USPS limit 70 lb · UPS/FedEx 150 lb · service levels in next commit</div>
             </div>
             <div>
-              <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Avg pkg weight (lb)</label>
+              <label class="hub-field-label">Avg pkg weight (lb)</label>
               <input type="number" value="${config.parcelAvgPackageWeightLb ?? 5}" min="0.1" step="0.5" id="cog-parcel-avg-weight"
-                     style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">DTC apparel 1-3 · consumer 5-10 · large 30+</div>
+                     class="cog-num-input u-full">
+              <div class="cog-hint-sm">DTC apparel 1-3 · consumer 5-10 · large 30+</div>
             </div>
             <div>
-              <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Residential %</label>
+              <label class="hub-field-label">Residential %</label>
               <input type="number" value="${((config.parcelResidentialShare ?? 0.5) * 100).toFixed(0)}" min="0" max="100" step="5" id="cog-parcel-residential"
-                     style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Pure DTC ≈ 95% · B2B ≈ 5%</div>
+                     class="cog-num-input u-full">
+              <div class="cog-hint-sm">Pure DTC ≈ 95% · B2B ≈ 5%</div>
             </div>
             <div>
-              <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Fuel surcharge %</label>
+              <label class="hub-field-label">Fuel surcharge %</label>
               <input type="number" value="${config.parcelFuelPct ?? 25}" min="0" max="50" step="0.5" id="cog-parcel-fuel"
-                     style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Currently 25-26% (May 2026)</div>
+                     class="cog-num-input u-full">
+              <div class="cog-hint-sm">Currently 25-26% (May 2026)</div>
             </div>
             <div>
-              <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Contract discount %</label>
+              <label class="hub-field-label">Contract discount %</label>
               <input type="number" value="${config.parcelContractDiscountPct ?? 0}" min="0" max="80" step="1" id="cog-parcel-discount"
-                     style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">Most shippers negotiate 30-60% off list</div>
+                     class="cog-num-input u-full">
+              <div class="cog-hint-sm">Most shippers negotiate 30-60% off list</div>
             </div>
             <div>
-              <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">DIM weight ×</label>
+              <label class="hub-field-label">DIM weight ×</label>
               <input type="number" value="${config.parcelDimMultiplier ?? 1.0}" min="1.0" max="3.0" step="0.05" id="cog-parcel-dim"
-                     style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">1.0 dense · 1.2 mixed DTC · 2.0+ light/large</div>
+                     class="cog-num-input u-full">
+              <div class="cog-hint-sm">1.0 dense · 1.2 mixed DTC · 2.0+ light/large</div>
             </div>
             <div>
-              <label style="display:block;font-size:11px;font-weight:600;color:var(--ies-gray-500);margin-bottom:3px;">Accessorials \$/pkg avg</label>
+              <label class="hub-field-label">Accessorials \$/pkg avg</label>
               <input type="number" value="${config.parcelAccessorialsPerPkg ?? 0}" min="0" step="0.25" id="cog-parcel-accessorials"
-                     style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:13px;font-weight:600;text-align:right;">
-              <div style="font-size:10px;color:var(--ies-gray-400);margin-top:2px;">DAS + oversize + hazmat avg · \$0-10 typical DTC</div>
+                     class="cog-num-input u-full">
+              <div class="cog-hint-sm">DAS + oversize + hazmat avg · \$0-10 typical DTC</div>
             </div>
           </div>
 
@@ -2346,9 +2347,9 @@ function renderParametersPhase(el) {
             ${(() => {
               const mult = calc.serviceMixMultiplier(config.parcelServiceMix);
               const sum = calc.SERVICE_LEVELS.reduce((s, svc) => s + (Math.max(0, +(config.parcelServiceMix?.[svc.key]) || 0)), 0);
-              if (sum === 0) return `<div style="font-size:11px;color:#b91c1c;margin-top:8px;font-weight:600;">Service shares sum to 0 — set at least one to compute cost.</div>`;
+              if (sum === 0) return `<div style="font-size:11px;color:var(--c-danger-strong);margin-top:8px;font-weight:600;">Service shares sum to 0 — set at least one to compute cost.</div>`;
               if (Math.abs(sum - 100) > 0.5) return `<div style="font-size:11px;color:#a16207;margin-top:8px;">Shares sum to ${sum}% (normalized to 100%) · effective multiplier <strong>×${mult.toFixed(2)}</strong></div>`;
-              return `<div style="font-size:11px;color:#15803d;margin-top:8px;font-weight:600;">Service-blend multiplier: <strong>×${mult.toFixed(2)}</strong> applied on top of carrier Ground rates</div>`;
+              return `<div style="font-size:11px;color:var(--c-success-strong);margin-top:8px;font-weight:600;">Service-blend multiplier: <strong>×${mult.toFixed(2)}</strong> applied on top of carrier Ground rates</div>`;
             })()}
           </div>
           <!-- 2026-05-28 39 — Discount tier editor. -->
@@ -2365,10 +2366,10 @@ function renderParametersPhase(el) {
                   <span style="color:var(--ies-gray-500);width:60px;">Above</span>
                   <input type="number" data-cog-tier-min="${ti}" value="${+t.minWeightLb || 0}" min="0" step="1"
                          style="width:70px;padding:5px 7px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:12px;font-weight:600;text-align:right;">
-                  <span style="color:var(--ies-gray-500);">lb →</span>
+                  <span class="u-muted">lb →</span>
                   <input type="number" data-cog-tier-pct="${ti}" value="${+t.discountPct || 0}" min="0" max="80" step="1"
                          style="width:70px;padding:5px 7px;border:1px solid var(--ies-gray-200);border-radius:6px;font-size:12px;font-weight:600;text-align:right;">
-                  <span style="color:var(--ies-gray-500);">% off list</span>
+                  <span class="u-muted">% off list</span>
                   <button class="hub-btn hub-btn-sm hub-btn-secondary" data-cog-tier-del="${ti}" style="padding:3px 7px;">✕</button>
                 </div>
               `).join('')}
@@ -2396,13 +2397,13 @@ function renderParametersPhase(el) {
       ` : ''}
 
       <!-- 2026-05-28 E2 — Current State DCs for the vs-current benchmark. -->
-      <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid #92400e;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
+      <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid var(--c-warn-ink);">
+        <div class="cog-card-head">
           <div>
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);">Current State <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--ies-gray-300);">(optional)</span></div>
-            <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">The customer's existing DC footprint. When set, Analysis renders a side-by-side Current vs Proposed benchmark card with cost / coverage / CO₂ deltas.</div>
+            <div class="cog-kicker">Current State <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--ies-gray-300);">(optional)</span></div>
+            <div class="cog-hint">The customer's existing DC footprint. When set, Analysis renders a side-by-side Current vs Proposed benchmark card with cost / coverage / CO₂ deltas.</div>
           </div>
-          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-currentstate-copy-candidates" title="One-click: use the candidate facility list above as the current-state DCs (handy when the customer's existing sites are also in your candidate pool)" ${(config.candidateFacilities || []).length === 0 ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>Use my candidates</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary${(config.candidateFacilities || []).length === 0 ? ' cog-disabled' : ''}" id="cog-currentstate-copy-candidates" title="One-click: use the candidate facility list above as the current-state DCs (handy when the customer's existing sites are also in your candidate pool)" ${(config.candidateFacilities || []).length === 0 ? 'disabled' : ''}>Use my candidates</button>
         </div>
         <textarea id="cog-currentstate-list" rows="3"
                   placeholder="One per line — Label, Lat, Lng &#10;Examples: &#10;Memphis DC, 35.1495, -90.0490 &#10;Reno DC, 39.5296, -119.8138"
@@ -2412,13 +2413,13 @@ function renderParametersPhase(el) {
 
       <!-- Candidate Facilities (COG-B2 — snap k-means centers to a fixed list) -->
       <div class="hub-card" style="margin-bottom:20px;padding:16px;border-left:3px solid var(--ies-blue-light, #60a5fa);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap;">
+        <div class="cog-card-head">
           <div>
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-400);">Candidate Facilities <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--ies-gray-300);">(optional)</span></div>
-            <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">Snap solver centers to a fixed list of available sites (existing GXO buildings, REIT inventory, M&amp;A targets) instead of free lat/lng centroids.</div>
+            <div class="cog-kicker">Candidate Facilities <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--ies-gray-300);">(optional)</span></div>
+            <div class="cog-hint">Snap solver centers to a fixed list of available sites (existing GXO buildings, REIT inventory, M&amp;A targets) instead of free lat/lng centroids.</div>
           </div>
           <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;" title="When ON, k-means runs as usual then each center is moved to the nearest candidate facility from the list below.">
-            <input type="checkbox" id="cog-snap-toggle" ${config.snapToCandidates ? 'checked' : ''} style="cursor:pointer;">
+            <input type="checkbox" id="cog-snap-toggle" ${config.snapToCandidates ? 'checked' : ''} class="u-pointer">
             Snap solver centers to candidates
           </label>
         </div>
@@ -2799,7 +2800,7 @@ function renderRunPhase(el) {
         const matches = currentK === recK;
         const accent = matches ? '#22c55e' : '#f59e0b';
         const accentDark = matches ? '#059669' : '#b45309';
-        const bgGrad = matches ? 'linear-gradient(135deg,#f0fdf4,#f0f9ff)' : 'linear-gradient(135deg,#fffbeb,#fef3c7)';
+        const bgGrad = matches ? 'linear-gradient(135deg,var(--c-success-soft),#f0f9ff)' : 'linear-gradient(135deg,var(--c-warn-soft),#fef3c7)';
         return `
         <div class="hub-card" style="background:${bgGrad};border:1px solid ${accent};padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
           <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
@@ -2933,8 +2934,8 @@ function renderAnalysis(el) {
         };
 
         return `
-          <div class="hub-card" style="margin-bottom:20px;padding:18px 20px;background:linear-gradient(135deg,#fffbeb,#f0fdf4);border-left:5px solid #15803d;">
-            <div style="font-size:13px;font-weight:700;color:#15803d;margin-bottom:6px;">Network Benchmark — Current State vs Proposed</div>
+          <div class="hub-card" style="margin-bottom:20px;padding:18px 20px;background:linear-gradient(135deg,var(--c-warn-soft),var(--c-success-soft));border-left:5px solid var(--c-success-strong);">
+            <div style="font-size:13px;font-weight:700;color:var(--c-success-strong);margin-bottom:6px;">Network Benchmark — Current State vs Proposed</div>
             <div style="font-size:11px;color:var(--ies-gray-500);margin-bottom:12px;">Same demand, same cost rates, same SLA threshold. Differences come from where the DCs sit.</div>
             <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:8px 16px;font-size:13px;align-items:baseline;">
               <div style="font-weight:700;color:var(--ies-gray-500);font-size:11px;text-transform:uppercase;">Metric</div>
@@ -2942,32 +2943,32 @@ function renderAnalysis(el) {
               <div style="font-weight:700;color:var(--ies-gray-500);font-size:11px;text-transform:uppercase;text-align:right;">Proposed (${cogResult.centers.length} DC${cogResult.centers.length === 1 ? '' : 's'})</div>
               <div style="font-weight:700;color:var(--ies-gray-500);font-size:11px;text-transform:uppercase;text-align:right;">Delta</div>
 
-              <div style="color:var(--ies-gray-600);">Centers</div>
-              <div style="text-align:right;">${cell(csList.length)}</div>
-              <div style="text-align:right;">${cell(cogResult.centers.length)}</div>
-              <div style="text-align:right;">${deltaCell((cogResult.centers.length - csList.length > 0 ? '+' : '') + (cogResult.centers.length - csList.length), null, true)}</div>
+              <div class="u-dim">Centers</div>
+              <div class="u-right">${cell(csList.length)}</div>
+              <div class="u-right">${cell(cogResult.centers.length)}</div>
+              <div class="u-right">${deltaCell((cogResult.centers.length - csList.length > 0 ? '+' : '') + (cogResult.centers.length - csList.length), null, true)}</div>
 
-              <div style="color:var(--ies-gray-600);">Annual transport cost</div>
-              <div style="text-align:right;">${cell(calc.formatCurrency(csCost.totalCost, { compact: true }))}</div>
-              <div style="text-align:right;">${cell(calc.formatCurrency(propCost, { compact: true }))}</div>
-              <div style="text-align:right;">${deltaCell(`${sign(-dCost)}${calc.formatCurrency(Math.abs(dCost), { compact: true })} (${sign(-dCostPct)}${Math.abs(dCostPct).toFixed(1)}%)`, dCost > 0)}</div>
+              <div class="u-dim">Annual transport cost</div>
+              <div class="u-right">${cell(calc.formatCurrency(csCost.totalCost, { compact: true }))}</div>
+              <div class="u-right">${cell(calc.formatCurrency(propCost, { compact: true }))}</div>
+              <div class="u-right">${deltaCell(`${sign(-dCost)}${calc.formatCurrency(Math.abs(dCost), { compact: true })} (${sign(-dCostPct)}${Math.abs(dCostPct).toFixed(1)}%)`, dCost > 0)}</div>
 
               ${(csCoverage != null && propCoverage != null) ? `
-                <div style="color:var(--ies-gray-600);">Service coverage (${config.maxServiceMiles} mi)</div>
-                <div style="text-align:right;">${cell(csCoverage.toFixed(1) + '%')}</div>
-                <div style="text-align:right;">${cell(propCoverage.toFixed(1) + '%')}</div>
-                <div style="text-align:right;">${deltaCell(`${sign(dCoverage)}${dCoverage.toFixed(1)}pp`, dCoverage > 0)}</div>
+                <div class="u-dim">Service coverage (${config.maxServiceMiles} mi)</div>
+                <div class="u-right">${cell(csCoverage.toFixed(1) + '%')}</div>
+                <div class="u-right">${cell(propCoverage.toFixed(1) + '%')}</div>
+                <div class="u-right">${deltaCell(`${sign(dCoverage)}${dCoverage.toFixed(1)}pp`, dCoverage > 0)}</div>
               ` : ''}
 
-              <div style="color:var(--ies-gray-600);">Annual CO₂ (tons)</div>
-              <div style="text-align:right;">${cell(csCo2.toLocaleString(undefined, { maximumFractionDigits: 0 }))}</div>
-              <div style="text-align:right;">${cell(propCo2.toLocaleString(undefined, { maximumFractionDigits: 0 }))}</div>
-              <div style="text-align:right;">${deltaCell(`${sign(-dCo2)}${Math.abs(dCo2).toLocaleString(undefined, { maximumFractionDigits: 0 })} t (${sign(-dCo2Pct)}${Math.abs(dCo2Pct).toFixed(1)}%)`, dCo2 > 0)}</div>
+              <div class="u-dim">Annual CO₂ (tons)</div>
+              <div class="u-right">${cell(csCo2.toLocaleString(undefined, { maximumFractionDigits: 0 }))}</div>
+              <div class="u-right">${cell(propCo2.toLocaleString(undefined, { maximumFractionDigits: 0 }))}</div>
+              <div class="u-right">${deltaCell(`${sign(-dCo2)}${Math.abs(dCo2).toLocaleString(undefined, { maximumFractionDigits: 0 })} t (${sign(-dCo2Pct)}${Math.abs(dCo2Pct).toFixed(1)}%)`, dCo2 > 0)}</div>
 
-              <div style="color:var(--ies-gray-600);">Avg weighted distance</div>
-              <div style="text-align:right;">${cell(calc.formatMiles(csAvgDist))}</div>
-              <div style="text-align:right;">${cell(calc.formatMiles(propAvgDist))}</div>
-              <div style="text-align:right;">${deltaCell(`${sign(-dAvgDist)}${calc.formatMiles(Math.abs(dAvgDist))}`, dAvgDist > 0)}</div>
+              <div class="u-dim">Avg weighted distance</div>
+              <div class="u-right">${cell(calc.formatMiles(csAvgDist))}</div>
+              <div class="u-right">${cell(calc.formatMiles(propAvgDist))}</div>
+              <div class="u-right">${deltaCell(`${sign(-dAvgDist)}${calc.formatMiles(Math.abs(dAvgDist))}`, dAvgDist > 0)}</div>
 
               ${(() => {
                 // 2026-05-29 F13 — landed cost per unit. The TCO number
@@ -2981,10 +2982,10 @@ function renderAnalysis(el) {
                 const wtUnit = (calc.getWeightUnitMeta(config.weightUnit || 'lb').short || 'unit');
                 const fmtU = v => '\$' + v.toFixed(4);
                 return `
-                  <div style="color:var(--ies-gray-600);">Landed cost / ${wtUnit}</div>
-                  <div style="text-align:right;">${cell(fmtU(csPerUnit))}</div>
-                  <div style="text-align:right;">${cell(fmtU(propPerUnit))}</div>
-                  <div style="text-align:right;">${deltaCell(`${sign(-dPerUnit)}${fmtU(Math.abs(dPerUnit))} (${sign(-dPerUnit / Math.max(0.0001, csPerUnit) * 100)}${Math.abs(dPerUnit / Math.max(0.0001, csPerUnit) * 100).toFixed(1)}%)`, dPerUnit > 0)}</div>
+                  <div class="u-dim">Landed cost / ${wtUnit}</div>
+                  <div class="u-right">${cell(fmtU(csPerUnit))}</div>
+                  <div class="u-right">${cell(fmtU(propPerUnit))}</div>
+                  <div class="u-right">${deltaCell(`${sign(-dPerUnit)}${fmtU(Math.abs(dPerUnit))} (${sign(-dPerUnit / Math.max(0.0001, csPerUnit) * 100)}${Math.abs(dPerUnit / Math.max(0.0001, csPerUnit) * 100).toFixed(1)}%)`, dPerUnit > 0)}</div>
                 `;
               })()}
             </div>
@@ -2995,19 +2996,19 @@ function renderAnalysis(el) {
       <!-- Action Bar -->
       <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center;">
         <h3 class="text-section" style="margin:0;flex:1;">Analysis Results</h3>
-        <button class="hub-btn hub-btn-sm hub-btn-primary" id="cog-generate-deck" style="display:flex;align-items:center;gap:6px;" title="Generate a 6-slide PowerPoint deck — Title, Executive Summary, Map, Cost Breakdown, Sensitivity, Assumptions (keyboard: D)">
-          <span>📊 Generate Deck</span>
+        <button class="hub-btn hub-btn-sm hub-btn-primary u-row-tight" id="cog-generate-deck" title="Generate a 6-slide PowerPoint deck — Title, Executive Summary, Map, Cost Breakdown, Sensitivity, Assumptions (keyboard: D)">
+          <span>${icon('chart')} Generate Deck</span>
         </button>
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-print-pdf" style="display:flex;align-items:center;gap:6px;" title="Open a print-friendly snapshot in a new tab — use your browser's Print > Save as PDF">
-          <span>🖨️ Print / PDF</span>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary u-row-tight" id="cog-print-pdf" title="Open a print-friendly snapshot in a new tab — use your browser's Print > Save as PDF">
+          <span>${icon('printer')} Print / PDF</span>
         </button>
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-export-csv" style="display:flex;align-items:center;gap:6px;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary u-row-tight" id="cog-export-csv">
           <span>↓ Export CSV</span>
         </button>
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-export-shipment-csv" style="display:flex;align-items:center;gap:6px;" title="Per-shipment audit trail: every assignment with distance, zone, truck cost, parcel cost, total. Useful for contract negotiation.">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary u-row-tight" id="cog-export-shipment-csv" title="Per-shipment audit trail: every assignment with distance, zone, truck cost, parcel cost, total. Useful for contract negotiation.">
           <span>↓ Per-shipment</span>
         </button>
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="cog-export-geojson" style="display:flex;align-items:center;gap:6px;" title="GeoJSON file with centers + assignments — opens directly in QGIS, kepler.gl, or any GIS tool">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary u-row-tight" id="cog-export-geojson" title="GeoJSON file with centers + assignments — opens directly in QGIS, kepler.gl, or any GIS tool">
           <span>↓ Export GeoJSON</span>
         </button>
         <!-- UX0-5 (2026-07-03): Send-to-NetOpt hidden — NetOpt shelved
@@ -3017,7 +3018,7 @@ function renderAnalysis(el) {
       </div>
 
       <!-- KPI Bar -->
-      <div class="hub-card" style="background:linear-gradient(135deg,#0a1628,#0d1f3c);color:#fff;padding:16px 24px;margin-bottom:20px;">
+      <div class="hub-card" style="background:linear-gradient(135deg,var(--c-ink-deep),#0d1f3c);color:#fff;padding:16px 24px;margin-bottom:20px;">
         <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">
           ${kpi('Centers Found', String(cogResult.centers.length))}
           ${kpi('Iterations', String(cogResult.iterations))}
@@ -3050,23 +3051,23 @@ function renderAnalysis(el) {
         const lowFlag = costPerPoint < TYPICAL_LOW;
         const pkgsPerPoint = isParcel && cogResult.parcelDetails ? (cogResult.parcelDetails.totalPackages / Math.max(1, solvePts.length)) : null;
         return `
-          <div class="hub-card" style="padding:14px 18px;margin-bottom:20px;background:${lowFlag ? '#fef3c7' : '#f0fdf4'};border-left:4px solid ${lowFlag ? '#f59e0b' : '#22c55e'};">
+          <div class="hub-card" style="padding:14px 18px;margin-bottom:20px;background:${lowFlag ? 'var(--c-warn-bg)' : 'var(--c-success-soft)'};border-left:4px solid ${lowFlag ? 'var(--c-warn)' : 'var(--c-success-bright)'};">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
               <span style="font-size:14px;">${lowFlag ? '⚠' : '✓'}</span>
-              <strong style="font-size:13px;color:${lowFlag ? '#78350f' : '#15803d'};">Data sanity check</strong>
+              <strong style="font-size:13px;color:${lowFlag ? '#78350f' : 'var(--c-success-strong)'};">Data sanity check</strong>
               ${lowFlag ? '<span style="font-size:11px;color:#78350f;">Cost-per-point is below industry typical — likely a data-setup issue.</span>' : ''}
             </div>
             <div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:8px 14px;font-size:11px;font-variant-numeric:tabular-nums;">
-              <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Demand points</div><div style="font-weight:700;font-size:13px;">${solvePts.length.toLocaleString()}</div></div>
-              <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Total demand</div><div style="font-weight:700;font-size:13px;">${totalWt.toLocaleString(undefined, {maximumFractionDigits:0})} ${wtUnit}${(config.demandScaleFactor && config.demandScaleFactor !== 1.0) ? ` <span style="color:var(--ies-blue);font-size:10px;">(×${config.demandScaleFactor})</span>` : ''}</div></div>
-              <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Avg / point</div><div style="font-weight:700;font-size:13px;">${(totalWt/Math.max(1,solvePts.length)).toLocaleString(undefined, {maximumFractionDigits:0})} ${wtUnit}</div></div>
-              <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Cost / point / yr</div><div style="font-weight:700;font-size:13px;color:${lowFlag ? '#b91c1c' : '#0a1628'};">${calc.formatCurrency(costPerPoint)}</div></div>
-              <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Cost / ${wtUnit}</div><div style="font-weight:700;font-size:13px;">$${costPerUnit.toFixed(4)}</div></div>
+              <div><div class="cog-microlabel">Demand points</div><div class="u-bold u-13">${solvePts.length.toLocaleString()}</div></div>
+              <div><div class="cog-microlabel">Total demand</div><div class="u-bold u-13">${totalWt.toLocaleString(undefined, {maximumFractionDigits:0})} ${wtUnit}${(config.demandScaleFactor && config.demandScaleFactor !== 1.0) ? ` <span style="color:var(--ies-blue);font-size:10px;">(×${config.demandScaleFactor})</span>` : ''}</div></div>
+              <div><div class="cog-microlabel">Avg / point</div><div class="u-bold u-13">${(totalWt/Math.max(1,solvePts.length)).toLocaleString(undefined, {maximumFractionDigits:0})} ${wtUnit}</div></div>
+              <div><div class="cog-microlabel">Cost / point / yr</div><div style="font-weight:700;font-size:13px;color:${lowFlag ? 'var(--c-danger-strong)' : 'var(--c-ink-deep)'};">${calc.formatCurrency(costPerPoint)}</div></div>
+              <div><div class="cog-microlabel">Cost / ${wtUnit}</div><div class="u-bold u-13">$${costPerUnit.toFixed(4)}</div></div>
               ${pkgsPerPoint != null ? `
-                <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Pkgs / point / yr</div><div style="font-weight:700;font-size:13px;">${Math.round(pkgsPerPoint).toLocaleString()}</div></div>
-                <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Total packages / yr</div><div style="font-weight:700;font-size:13px;">${Math.round(cogResult.parcelDetails.totalPackages || 0).toLocaleString()}</div></div>
-                <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Avg \$ / pkg</div><div style="font-weight:700;font-size:13px;">${(cogResult.parcelDetails.totalPackages > 0 ? (cogResult.parcelCost / cogResult.parcelDetails.totalPackages) : 0).toFixed(2)}</div></div>
-                <div><div style="font-size:9px;text-transform:uppercase;color:var(--ies-gray-500);">Avg pkg weight</div><div style="font-weight:700;font-size:13px;">${(config.parcelAvgPackageWeightLb || 5)} lb</div></div>
+                <div><div class="cog-microlabel">Pkgs / point / yr</div><div class="u-bold u-13">${Math.round(pkgsPerPoint).toLocaleString()}</div></div>
+                <div><div class="cog-microlabel">Total packages / yr</div><div class="u-bold u-13">${Math.round(cogResult.parcelDetails.totalPackages || 0).toLocaleString()}</div></div>
+                <div><div class="cog-microlabel">Avg \$ / pkg</div><div class="u-bold u-13">${(cogResult.parcelDetails.totalPackages > 0 ? (cogResult.parcelCost / cogResult.parcelDetails.totalPackages) : 0).toFixed(2)}</div></div>
+                <div><div class="cog-microlabel">Avg pkg weight</div><div class="u-bold u-13">${(config.parcelAvgPackageWeightLb || 5)} lb</div></div>
               ` : ''}
             </div>
             ${lowFlag ? `
@@ -3103,15 +3104,15 @@ function renderAnalysis(el) {
         const yScale = v => padT + chartH - (v / Math.max(1, maxCost)) * chartH;
         const pts = proj.years.map((y, i) => `${padL + i * xStep},${yScale(y.cost)}`).join(' ');
         return `
-          <div class="hub-card" style="padding:18px 22px;margin-bottom:20px;background:linear-gradient(135deg,#fffbeb,#f0fdf4);border-left:4px solid #15803d;">
+          <div class="hub-card" style="padding:18px 22px;margin-bottom:20px;background:linear-gradient(135deg,var(--c-warn-soft),var(--c-success-soft));border-left:4px solid var(--c-success-strong);">
             <div style="display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;margin-bottom:6px;">
-              <div style="font-size:14px;font-weight:700;color:#15803d;">${horizon}-year cost timeline</div>
+              <div style="font-size:14px;font-weight:700;color:var(--c-success-strong);">${horizon}-year cost timeline</div>
               <div style="font-size:11px;color:var(--ies-gray-500);">${growth >= 0 ? '+' : ''}${growth}% growth/yr · +${escalation}% escalation/yr · ${discount}% discount</div>
             </div>
             <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px 24px;font-size:12px;margin-bottom:14px;">
-              <div><div style="font-size:10px;text-transform:uppercase;color:var(--ies-gray-500);letter-spacing:0.3px;">${horizon}-yr cumulative</div><div style="font-size:18px;font-weight:800;color:#0a1628;font-variant-numeric:tabular-nums;">${calc.formatCurrency(proj.totalCost, { compact: true })}</div></div>
-              <div><div style="font-size:10px;text-transform:uppercase;color:var(--ies-gray-500);letter-spacing:0.3px;">${horizon}-yr NPV</div><div style="font-size:18px;font-weight:800;color:#15803d;font-variant-numeric:tabular-nums;">${calc.formatCurrency(proj.totalNpv, { compact: true })}</div></div>
-              <div><div style="font-size:10px;text-transform:uppercase;color:var(--ies-gray-500);letter-spacing:0.3px;">Y${horizon} annual</div><div style="font-size:18px;font-weight:800;color:#0a1628;font-variant-numeric:tabular-nums;">${calc.formatCurrency(proj.years[proj.years.length - 1].cost, { compact: true })}</div></div>
+              <div><div style="font-size:10px;text-transform:uppercase;color:var(--ies-gray-500);letter-spacing:0.3px;">${horizon}-yr cumulative</div><div style="font-size:18px;font-weight:800;color:var(--c-ink-deep);font-variant-numeric:tabular-nums;">${calc.formatCurrency(proj.totalCost, { compact: true })}</div></div>
+              <div><div style="font-size:10px;text-transform:uppercase;color:var(--ies-gray-500);letter-spacing:0.3px;">${horizon}-yr NPV</div><div style="font-size:18px;font-weight:800;color:var(--c-success-strong);font-variant-numeric:tabular-nums;">${calc.formatCurrency(proj.totalNpv, { compact: true })}</div></div>
+              <div><div style="font-size:10px;text-transform:uppercase;color:var(--ies-gray-500);letter-spacing:0.3px;">Y${horizon} annual</div><div style="font-size:18px;font-weight:800;color:var(--c-ink-deep);font-variant-numeric:tabular-nums;">${calc.formatCurrency(proj.years[proj.years.length - 1].cost, { compact: true })}</div></div>
             </div>
             <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" style="background:rgba(255,255,255,0.6);border-radius:6px;">
               <!-- y-axis line -->
@@ -3143,14 +3144,14 @@ function renderAnalysis(el) {
                     <td style="padding:5px 8px;font-weight:600;">Year ${y.year}</td>
                     <td style="padding:5px 8px;text-align:right;">${calc.formatCurrency(y.cost)}</td>
                     <td style="padding:5px 8px;text-align:right;color:var(--ies-gray-600);">${calc.formatCurrency(y.cumulative)}</td>
-                    <td style="padding:5px 8px;text-align:right;color:#15803d;font-weight:600;">${calc.formatCurrency(y.npv)}</td>
+                    <td style="padding:5px 8px;text-align:right;color:var(--c-success-strong);font-weight:600;">${calc.formatCurrency(y.npv)}</td>
                   </tr>
                 `).join('')}
                 <tr style="border-top:2px solid var(--ies-gray-300);font-weight:700;">
                   <td style="padding:6px 8px;">${horizon}-yr total</td>
                   <td style="padding:6px 8px;"></td>
                   <td style="padding:6px 8px;text-align:right;">${calc.formatCurrency(proj.totalCost)}</td>
-                  <td style="padding:6px 8px;text-align:right;color:#15803d;">${calc.formatCurrency(proj.totalNpv)}</td>
+                  <td style="padding:6px 8px;text-align:right;color:var(--c-success-strong);">${calc.formatCurrency(proj.totalNpv)}</td>
                 </tr>
               </tbody>
             </table>
@@ -3211,53 +3212,53 @@ function renderAnalysis(el) {
         <div class="hub-card" style="margin-bottom:20px;padding:14px 18px;background:#f8fafc;border-left:4px solid #475569;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;color:var(--ies-gray-500);margin-bottom:10px;">How this cost was calculated</div>
           <div style="display:grid;grid-template-columns:auto 1fr auto;gap:6px 18px;font-size:13px;font-family:'SFMono-Regular',Consolas,Menlo,monospace;align-items:baseline;">
-            <span style="color:var(--ies-gray-500);">Annual demand (solve set)</span>
+            <span class="u-muted">Annual demand (solve set)</span>
             <span></span>
-            <span style="text-align:right;font-weight:600;">${fmtNum(totalWeight)} ${unitLabel}</span>
+            <span class="u-right u-semibold">${fmtNum(totalWeight)} ${unitLabel}</span>
             ${parcelOnPanel ? `
-              <span style="color:var(--ies-gray-500);">− parcel share (scenario ${Math.round(defParcelShare * 100)}% + per-point overrides)</span>
+              <span class="u-muted">− parcel share (scenario ${Math.round(defParcelShare * 100)}% + per-point overrides)</span>
               <span></span>
-              <span style="text-align:right;font-weight:600;">= ${fmtNum(truckWeight)} ${unitLabel} truck-share</span>
+              <span class="u-right u-semibold">= ${fmtNum(truckWeight)} ${unitLabel} truck-share</span>
             ` : ''}
-            <span style="color:var(--ies-gray-500);">÷ ${fmtNum(capacity)} ${unitLabel} per truckload</span>
+            <span class="u-muted">÷ ${fmtNum(capacity)} ${unitLabel} per truckload</span>
             <span></span>
-            <span style="text-align:right;font-weight:600;">= ${fmtNum(trucks)} truckloads/yr</span>
-            <span style="color:var(--ies-gray-500);">× weighted avg distance to assigned DC</span>
+            <span class="u-right u-semibold">= ${fmtNum(trucks)} truckloads/yr</span>
+            <span class="u-muted">× weighted avg distance to assigned DC</span>
             <span></span>
-            <span style="text-align:right;font-weight:600;">= ${fmtNum(totalGcMi)} great-circle mi/yr</span>
-            <span style="color:var(--ies-gray-500);">× ${road.toFixed(2)} road factor (great-circle → road)</span>
+            <span class="u-right u-semibold">= ${fmtNum(totalGcMi)} great-circle mi/yr</span>
+            <span class="u-muted">× ${road.toFixed(2)} road factor (great-circle → road)</span>
             <span></span>
-            <span style="text-align:right;font-weight:600;">= ${fmtNum(totalLoadedMi)} loaded road-mi/yr</span>
-            <span style="color:var(--ies-gray-500);">× ${rt.toFixed(1)} round-trip factor</span>
+            <span class="u-right u-semibold">= ${fmtNum(totalLoadedMi)} loaded road-mi/yr</span>
+            <span class="u-muted">× ${rt.toFixed(1)} round-trip factor</span>
             <span></span>
-            <span style="text-align:right;font-weight:600;">= ${fmtNum(totalMi)} total truck-mi/yr</span>
+            <span class="u-right u-semibold">= ${fmtNum(totalMi)} total truck-mi/yr</span>
             ${config.modeMixEnabled ? `
               <span style="color:var(--ies-gray-500);grid-column:1 / 4;border-top:1px dashed var(--ies-gray-200);padding-top:6px;margin-top:4px;"></span>
-              <span style="color:var(--ies-gray-500);">Mode mix: TL ${config.modeMix.tlPct}% @ $${(config.modeRates.tlPerMile || 0).toFixed(2)} · LTL ${config.modeMix.ltlPct}% @ $${(config.modeRates.ltlPerMile || 0).toFixed(2)} · Parcel ${config.modeMix.parcelPct}% @ $${(config.modeRates.parcelPerMile || 0).toFixed(2)}</span>
+              <span class="u-muted">Mode mix: TL ${config.modeMix.tlPct}% @ $${(config.modeRates.tlPerMile || 0).toFixed(2)} · LTL ${config.modeMix.ltlPct}% @ $${(config.modeRates.ltlPerMile || 0).toFixed(2)} · Parcel ${config.modeMix.parcelPct}% @ $${(config.modeRates.parcelPerMile || 0).toFixed(2)}</span>
               <span></span>
-              <span style="text-align:right;font-weight:600;">= $${cpm.toFixed(2)} blended /mi</span>
+              <span class="u-right u-semibold">= $${cpm.toFixed(2)} blended /mi</span>
             ` : ''}
-            <span style="color:var(--ies-gray-500);">× $${cpm.toFixed(2)} per loaded mile</span>
+            <span class="u-muted">× $${cpm.toFixed(2)} per loaded mile</span>
             <span></span>
-            <span style="text-align:right;font-weight:600;">= ${calc.formatCurrency(cogResult.parcelDetails ? (cogResult.truckCost || 0) : (totalMi * cpm), { compact: true })}/yr ${cogResult.parcelDetails ? ' <em style="color:var(--ies-gray-400);font-weight:500;">(TL+LTL only)</em>' : ''}</span>
+            <span class="u-right u-semibold">= ${calc.formatCurrency(cogResult.parcelDetails ? (cogResult.truckCost || 0) : (totalMi * cpm), { compact: true })}/yr ${cogResult.parcelDetails ? ' <em style="color:var(--ies-gray-400);font-weight:500;">(TL+LTL only)</em>' : ''}</span>
             ${cogResult.parcelDetails ? `
               <span style="color:var(--ies-gray-500);grid-column:1 / 4;border-top:1px dashed var(--ies-gray-200);padding-top:6px;margin-top:4px;"></span>
-              <span style="color:var(--ies-gray-500);">Parcel: ${fmtNum(cogResult.parcelDetails.totalPackages)} pkgs × $${(cogResult.parcelCost / Math.max(1, cogResult.parcelDetails.totalPackages)).toFixed(2)} avg</span>
+              <span class="u-muted">Parcel: ${fmtNum(cogResult.parcelDetails.totalPackages)} pkgs × $${(cogResult.parcelCost / Math.max(1, cogResult.parcelDetails.totalPackages)).toFixed(2)} avg</span>
               <span style="font-size:10px;color:var(--ies-gray-400);">${Object.entries(cogResult.parcelDetails.byZone).filter(([_, n]) => n > 0).map(([z, n]) => 'Z' + z + ':' + Math.round(n / cogResult.parcelDetails.totalPackages * 100) + '%').join(' · ')}</span>
-              <span style="text-align:right;font-weight:600;">= ${calc.formatCurrency(cogResult.parcelCost, { compact: true })}/yr</span>
+              <span class="u-right u-semibold">= ${calc.formatCurrency(cogResult.parcelCost, { compact: true })}/yr</span>
               <span style="color:var(--ies-gray-500);grid-column:1 / 4;border-top:1px solid var(--ies-gray-300);padding-top:6px;margin-top:4px;"></span>
               <span style="color:var(--ies-gray-700);font-weight:700;">TOTAL transport cost</span>
               <span></span>
               <span style="text-align:right;font-weight:800;color:var(--ies-blue);">= ${calc.formatCurrency(cogResult.totalCost, { compact: true })}/yr</span>
             ` : ''}
             <span style="color:var(--ies-gray-500);grid-column:1 / 4;border-top:1px dashed var(--ies-gray-200);padding-top:6px;margin-top:4px;"></span>
-            <span style="color:var(--ies-gray-500);">CO₂ (truck): ${fmtNum(totalMi)} truck-mi × ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi</span>
+            <span class="u-muted">CO₂ (truck): ${fmtNum(totalMi)} truck-mi × ${(config.co2KgPerTruckMile ?? 1.62).toFixed(2)} kg/mi</span>
             <span></span>
-            <span style="text-align:right;font-weight:600;">= ${(totalMi * (config.co2KgPerTruckMile ?? 1.62) / 1000).toFixed(0).toLocaleString()} t/yr</span>
+            <span class="u-right u-semibold">= ${(totalMi * (config.co2KgPerTruckMile ?? 1.62) / 1000).toFixed(0).toLocaleString()} t/yr</span>
             ${parcelOnPanel ? `
-              <span style="color:var(--ies-gray-500);">CO₂ (parcel): ${fmtNum(cogResult.parcelDetails.totalPackages)} pkgs × ${(+config.parcelCo2KgPerPkg || 0.5).toFixed(2)} kg/pkg</span>
+              <span class="u-muted">CO₂ (parcel): ${fmtNum(cogResult.parcelDetails.totalPackages)} pkgs × ${(+config.parcelCo2KgPerPkg || 0.5).toFixed(2)} kg/pkg</span>
               <span></span>
-              <span style="text-align:right;font-weight:600;">= ${(((cogResult.parcelDetails.totalPackages || 0) * (+config.parcelCo2KgPerPkg || 0.5)) / 1000).toFixed(0).toLocaleString()} t/yr</span>
+              <span class="u-right u-semibold">= ${(((cogResult.parcelDetails.totalPackages || 0) * (+config.parcelCo2KgPerPkg || 0.5)) / 1000).toFixed(0).toLocaleString()} t/yr</span>
             ` : ''}
           </div>
           <div style="font-size:11px;color:var(--ies-gray-500);margin-top:10px;line-height:1.4;">
@@ -3324,7 +3325,7 @@ function renderAnalysis(el) {
                     return '<div style="width:' + pct.toFixed(1) + '%;background:' + ZONE_COLORS[z] + ';" title="Z' + z + ': ' + Math.round(row.z[z]) + ' pkg (' + pct.toFixed(1) + '%)"></div>';
                   }).join('')}
                 </div>
-                <div style="text-align:right;font-weight:600;">${Math.round(row.total).toLocaleString()} pkg</div>
+                <div class="u-right u-semibold">${Math.round(row.total).toLocaleString()} pkg</div>
               `;
             }).join('')}
           </div>
@@ -3348,16 +3349,16 @@ function renderAnalysis(el) {
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
             <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${clusterColor(i)};"></span>
             <span style="font-size:14px;font-weight:700;">Center ${i + 1}: ${c.nearestCity}</span>
-            ${c.locked ? `<span title="This center is locked — k-means kept it pinned at this candidate site through every iteration." style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:#fef3c7;color:#92400e;letter-spacing:0.4px;">★ LOCKED${c.candidateLabel ? ' → ' + c.candidateLabel : ''}</span>` : (c.candidateLabel ? `<span title="K-means picked this from your candidate list. Free centroid was ${calc.formatLatLng(c.snappedFromLat, c.snappedFromLng)}." style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:#dbeafe;color:#1d4ed8;letter-spacing:0.4px;">SNAPPED → ${c.candidateLabel}</span>` : '')}
+            ${c.locked ? `<span title="This center is locked — k-means kept it pinned at this candidate site through every iteration." style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:var(--c-warn-bg);color:var(--c-warn-ink);letter-spacing:0.4px;">★ LOCKED${c.candidateLabel ? ' → ' + c.candidateLabel : ''}</span>` : (c.candidateLabel ? `<span title="K-means picked this from your candidate list. Free centroid was ${calc.formatLatLng(c.snappedFromLat, c.snappedFromLng)}." style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:var(--c-info-bg);color:var(--c-info-strong);letter-spacing:0.4px;">SNAPPED → ${c.candidateLabel}</span>` : '')}
           </div>
           <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;font-size:13px;">
             <div>
-              <span style="color:var(--ies-gray-400);font-size:11px;text-transform:uppercase;">Location</span>
-              <div style="font-weight:600;">${calc.formatLatLng(c.lat, c.lng)}</div>
+              <span class="u-cap u-faint u-upper">Location</span>
+              <div class="u-semibold">${calc.formatLatLng(c.lat, c.lng)}</div>
             </div>
             <div>
-              <span style="color:var(--ies-gray-400);font-size:11px;text-transform:uppercase;">Assigned Weight</span>
-              <div style="font-weight:600;">${c.totalWeight.toLocaleString()}${(() => {
+              <span class="u-cap u-faint u-upper">Assigned Weight</span>
+              <div class="u-semibold">${c.totalWeight.toLocaleString()}${(() => {
                 const cap = cogResult.capacityStats;
                 if (!cap || cap.capacityPerDC <= 0 || !cap.perCluster[i]) return '';
                 const u = cap.perCluster[i].utilization;
@@ -3367,44 +3368,44 @@ function renderAnalysis(el) {
               })()}</div>
             </div>
             <div>
-              <span style="color:var(--ies-gray-400);font-size:11px;text-transform:uppercase;">Avg Weighted Dist</span>
-              <div style="font-weight:600;">${calc.formatMiles(c.avgWeightedDistance)}</div>
+              <span class="u-cap u-faint u-upper">Avg Weighted Dist</span>
+              <div class="u-semibold">${calc.formatMiles(c.avgWeightedDistance)}</div>
             </div>
             <div>
-              <span style="color:var(--ies-gray-400);font-size:11px;text-transform:uppercase;">Max Distance</span>
-              <div style="font-weight:600;">${calc.formatMiles(c.maxDistance)}</div>
+              <span class="u-cap u-faint u-upper">Max Distance</span>
+              <div class="u-semibold">${calc.formatMiles(c.maxDistance)}</div>
             </div>
             <div>
-              <span style="color:var(--ies-gray-400);font-size:11px;text-transform:uppercase;">Annual Cost</span>
+              <span class="u-cap u-faint u-upper">Annual Cost</span>
               <div style="font-weight:600;color:${clusterColor(i)};">${clusterCost != null ? calc.formatCurrency(clusterCost, { compact: true }) : '—'}</div>
-              ${costShare != null ? `<div style="font-size:11px;color:var(--ies-gray-400);">${costShare.toFixed(0)}% of total</div>` : ''}
+              ${costShare != null ? `<div class="u-cap u-faint">${costShare.toFixed(0)}% of total</div>` : ''}
             </div>
           </div>
         </div>
       `;}).join('')}
 
       ${(cogResult.capacityStats && cogResult.capacityStats.capacityPerDC > 0 && cogResult.capacityStats.stillOver) ? `
-        <div class="hub-card" style="margin-bottom:16px;padding:14px 18px;background:#fef2f2;border-left:4px solid #b91c1c;">
-          <div style="font-size:13px;font-weight:700;color:#b91c1c;margin-bottom:4px;">Capacity overflow — solution not feasible</div>
+        <div class="hub-card" style="margin-bottom:16px;padding:14px 18px;background:var(--c-danger-soft);border-left:4px solid var(--c-danger-strong);">
+          <div style="font-size:13px;font-weight:700;color:var(--c-danger-strong);margin-bottom:4px;">Capacity overflow — solution not feasible</div>
           <div style="font-size:12px;color:#7f1d1d;line-height:1.5;">
             Every cluster hit the ${cogResult.capacityStats.capacityPerDC.toLocaleString()} cap and there's still
             <strong>${cogResult.capacityStats.totalOverflow.toLocaleString()}</strong> in overflow weight.
             The reassignment walk made ${cogResult.capacityStats.reassignmentCount} moves before stalling.
             Options: raise <strong>Centers (k)</strong>, increase <strong>Capacity / DC</strong>, or accept the overflow as a third-party / overflow-DC plug.
-            Adjust in <a href="#" data-cog-jump="parameters" style="color:#b91c1c;text-decoration:underline;">Parameters</a>.
+            Adjust in <a href="#" data-cog-jump="parameters" style="color:var(--c-danger-strong);text-decoration:underline;">Parameters</a>.
           </div>
         </div>
       ` : ''}
       ${(cogResult.serviceStats && cogResult.serviceStats.maxMiles > 0 && cogResult.serviceStats.outCount > 0) ? `
-        <div class="hub-card" style="margin-bottom:16px;padding:14px 18px;background:#fef2f2;border-left:4px solid #b91c1c;">
-          <div style="font-size:13px;font-weight:700;color:#b91c1c;margin-bottom:4px;">Service-level violations</div>
+        <div class="hub-card" style="margin-bottom:16px;padding:14px 18px;background:var(--c-danger-soft);border-left:4px solid var(--c-danger-strong);">
+          <div style="font-size:13px;font-weight:700;color:var(--c-danger-strong);margin-bottom:4px;">Service-level violations</div>
           <div style="font-size:12px;color:#7f1d1d;line-height:1.5;">
             <strong>${cogResult.serviceStats.outCount}</strong> of ${cogResult.serviceStats.outCount + cogResult.serviceStats.coveredCount} demand points
             (<strong>${(100 - cogResult.serviceStats.coveragePct).toFixed(1)}%</strong> of weight) exceed the
             <strong>${cogResult.serviceStats.maxMiles} road-mi</strong> SLA threshold.
             They're highlighted in red in the Assignment Table below.
             Options: add a DC to the candidate list near the violations, raise <strong>Centers (k)</strong>,
-            or relax the threshold in <a href="#" data-cog-jump="parameters" style="color:#b91c1c;text-decoration:underline;">Parameters</a>.
+            or relax the threshold in <a href="#" data-cog-jump="parameters" style="color:var(--c-danger-strong);text-decoration:underline;">Parameters</a>.
           </div>
         </div>
       ` : ''}
@@ -3413,7 +3414,7 @@ function renderAnalysis(el) {
       <div class="hub-card" style="padding:16px;">
         <div style="font-size:14px;font-weight:700;margin-bottom:12px;">Point Assignments</div>
         <div style="max-height:300px;overflow-y:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <table class="u-table">
             <thead style="position:sticky;top:0;background:#fff;">
               <tr style="border-bottom:2px solid var(--ies-gray-200);">
                 <th style="text-align:center;padding:6px;">Cluster</th>
@@ -3435,7 +3436,7 @@ function renderAnalysis(el) {
                   : null;
                 const cost = cbaRow ? cbaRow.totalCost : 0;
                 const outBadge = a.outOfService
-                  ? `<span title="Road distance ${Math.round(a.driveRoadMi || 0)} mi > ${cogResult.serviceStats?.maxMiles || 0} mi SLA" style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:700;background:#fee2e2;color:#b91c1c;letter-spacing:0.4px;">OUT</span>`
+                  ? `<span title="Road distance ${Math.round(a.driveRoadMi || 0)} mi > ${cogResult.serviceStats?.maxMiles || 0} mi SLA" style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:700;background:var(--c-danger-bg);color:var(--c-danger-strong);letter-spacing:0.4px;">OUT</span>`
                   : '';
                 return `
                   <tr style="border-bottom:1px solid var(--ies-gray-200);${a.outOfService ? 'background:#fff5f5;' : ''}">
@@ -3443,9 +3444,9 @@ function renderAnalysis(el) {
                       <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${clusterColor(a.clusterId)};"></span>
                     </td>
                     <td style="padding:6px;font-weight:600;">${escapeHtml(pt?.name || a.pointId)}${outBadge}</td>
-                    <td style="padding:6px;text-align:right;">${(pt?.weight || 0).toLocaleString()}</td>
-                    <td style="padding:6px;text-align:right;">${calc.formatMiles(a.distanceToCenter)}</td>
-                    <td style="padding:6px;text-align:right;">${calc.formatCurrency(cost, { compact: true })}</td>
+                    <td class="u-td-num">${(pt?.weight || 0).toLocaleString()}</td>
+                    <td class="u-td-num">${calc.formatMiles(a.distanceToCenter)}</td>
+                    <td class="u-td-num">${calc.formatCurrency(cost, { compact: true })}</td>
                   </tr>
                 `;
               }).join('')}
@@ -3631,7 +3632,7 @@ function renderCompare(el) {
   el.innerHTML = `
     <div>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-        <h3 class="text-section" style="margin:0;">Compare Scenarios</h3>
+        <h3 class="text-section u-m0">Compare Scenarios</h3>
         <span style="font-size:12px;color:var(--ies-gray-400);">Active scenario vs up to 2 saved scenarios</span>
       </div>
 
@@ -3663,7 +3664,7 @@ function renderCompare(el) {
         <div class="hub-card" style="padding:16px 18px;">
           <div style="display:grid;grid-template-columns:${gridCols};gap:8px 18px;font-size:13px;align-items:baseline;">
             <div style="font-weight:700;color:var(--ies-gray-500);font-size:11px;text-transform:uppercase;">Metric</div>
-            ${cols.map((m, i) => `<div style="text-align:right;">${colHeader(m, i)}</div>`).join('')}
+            ${cols.map((m, i) => `<div class="u-right">${colHeader(m, i)}</div>`).join('')}
 
             ${(() => {
               const anyParcel = cols.some(m => m.parcelCost != null && m.parcelCost > 0);
@@ -3752,10 +3753,10 @@ function renderMap(el) {
   el.innerHTML = `
     <div style="display:flex;flex-direction:column;height:100%;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-        <h3 class="text-section" style="margin:0;">Center of Gravity Map</h3>
-        <span style="font-size:11px;color:var(--ies-gray-400);">${points.length} points • ${cogResult.centers.length} center(s)</span>
+        <h3 class="text-section u-m0">Center of Gravity Map</h3>
+        <span class="u-cap u-faint">${points.length} points • ${cogResult.centers.length} center(s)</span>
         ${cogResult.centers.some(c => !Number.isFinite(c.lat) || !Number.isFinite(c.lng)) ? `
-          <div style="width:100%;font-size:11px;background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:4px;margin-top:4px;">
+          <div style="width:100%;font-size:11px;background:var(--c-danger-bg);color:var(--c-danger-ink);padding:6px 10px;border-radius:4px;margin-top:4px;">
             <strong>⚠ Invalid center coordinates</strong> — re-run the solve to recompute.
           </div>
         ` : ''}
@@ -3763,12 +3764,12 @@ function renderMap(el) {
              default; click to expand the full per-center detail with
              lat/lng + avg drive + total weight + zoom-to button. -->
         <details style="width:100%;margin-top:6px;">
-          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;font-weight:600;color:#0a1628;user-select:none;">
+          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;font-weight:600;color:var(--c-ink-deep);user-select:none;">
             <span style="font-size:11px;color:#64748b;">▸</span>
             <span style="text-transform:uppercase;letter-spacing:0.04em;font-size:11px;color:#64748b;">Center Locations</span>
             ${cogResult.centers.map((c, i) => `
               <span style="display:inline-flex;align-items:center;gap:5px;">
-                <span style="width:12px;height:12px;border-radius:50%;background:${clusterColor(i)};border:1.5px solid #0a1628;"></span>
+                <span style="width:12px;height:12px;border-radius:50%;background:${clusterColor(i)};border:1.5px solid var(--c-ink-deep);"></span>
                 <span>C${i + 1}${c.nearestCity ? ' · ' + c.nearestCity.split('(')[0].trim() : ''}</span>
               </span>
             `).join('')}
@@ -3779,39 +3780,39 @@ function renderMap(el) {
               const valid = Number.isFinite(c.lat) && Number.isFinite(c.lng);
               return `
                 <div style="display:flex;align-items:center;gap:14px;padding:6px 0;${i < cogResult.centers.length - 1 ? 'border-bottom:1px solid #e2e8f0;' : ''}">
-                  <div style="flex:none;width:32px;height:32px;border-radius:50%;background:${color};border:2.5px solid #0a1628;display:flex;align-items:center;justify-content:center;color:#ffffff;font-weight:800;font-size:13px;">C${i + 1}</div>
+                  <div style="flex:none;width:32px;height:32px;border-radius:50%;background:${color};border:2.5px solid var(--c-ink-deep);display:flex;align-items:center;justify-content:center;color:#ffffff;font-weight:800;font-size:13px;">C${i + 1}</div>
                   <div style="flex:1;">
-                    <div style="font-size:13px;font-weight:700;color:#0a1628;">${c.nearestCity || `Center ${i + 1}`}</div>
+                    <div style="font-size:13px;font-weight:700;color:var(--c-ink-deep);">${c.nearestCity || `Center ${i + 1}`}</div>
                     <div style="font-size:11px;color:#475569;font-family:monospace;">
-                      ${valid ? `${c.lat.toFixed(4)}°, ${c.lng.toFixed(4)}°` : `<span style="color:#b91c1c;font-weight:700;">INVALID COORDS (${c.lat}, ${c.lng})</span>`}
+                      ${valid ? `${c.lat.toFixed(4)}°, ${c.lng.toFixed(4)}°` : `<span style="color:var(--c-danger-strong);font-weight:700;">INVALID COORDS (${c.lat}, ${c.lng})</span>`}
                       ${c.avgWeightedDistance != null ? ` · avg drive ${calc.formatMiles(c.avgWeightedDistance)}` : ''}
                       ${c.totalWeight != null ? ` · ${Math.round(c.totalWeight).toLocaleString()} total weight` : ''}
                     </div>
                   </div>
-                  <button type="button" data-cog-action="zoom-centers" style="flex:none;font-size:11px;font-weight:700;padding:5px 10px;border:1.5px solid #0a1628;background:#fff;color:#0a1628;border-radius:5px;cursor:pointer;">Zoom to →</button>
+                  <button type="button" data-cog-action="zoom-centers" style="flex:none;font-size:11px;font-weight:700;padding:5px 10px;border:1.5px solid var(--c-ink-deep);background:#fff;color:var(--c-ink-deep);border-radius:5px;cursor:pointer;">Zoom to →</button>
                 </div>
               `;
             }).join('')}
           </div>
         </details>
         <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
-            <input type="checkbox" data-cog-toggle="zones" ${mapOptions.zones ? 'checked' : ''} style="margin:0;"> Service zones
+          <label class="cog-check-label">
+            <input type="checkbox" data-cog-toggle="zones" ${mapOptions.zones ? 'checked' : ''} class="u-m0"> Service zones
           </label>
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;">
-            <input type="checkbox" data-cog-toggle="heat" ${mapOptions.heat ? 'checked' : ''} style="margin:0;"> Heatmap
+          <label class="cog-check-label">
+            <input type="checkbox" data-cog-toggle="heat" ${mapOptions.heat ? 'checked' : ''} class="u-m0"> Heatmap
           </label>
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;" title="Show 'C1 Memphis' tooltips above each centroid">
-            <input type="checkbox" data-cog-toggle="labels" ${mapOptions.labels !== false ? 'checked' : ''} style="margin:0;"> Center labels
+          <label class="cog-check-label" title="Show 'C1 Memphis' tooltips above each centroid">
+            <input type="checkbox" data-cog-toggle="labels" ${mapOptions.labels !== false ? 'checked' : ''} class="u-m0"> Center labels
           </label>
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;" title="Voronoi-style service territories — each cell is colored by the nearest center (haversine grid, ~60x40 cells)">
-            <input type="checkbox" data-cog-toggle="territories" ${mapOptions.territories ? 'checked' : ''} style="margin:0;"> Territories
+          <label class="cog-check-label" title="Voronoi-style service territories — each cell is colored by the nearest center (haversine grid, ~60x40 cells)">
+            <input type="checkbox" data-cog-toggle="territories" ${mapOptions.territories ? 'checked' : ''} class="u-m0"> Territories
           </label>
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;" title="FedEx/UPS parcel zone boundary rings (Z2-Z6 at 150/300/600/1000/1400 mi) — colored green→red so you can see at a glance which destinations land in which zone">
-            <input type="checkbox" data-cog-toggle="parcelZones" ${mapOptions.parcelZones ? 'checked' : ''} style="margin:0;"> Parcel zones
+          <label class="cog-check-label" title="FedEx/UPS parcel zone boundary rings (Z2-Z6 at 150/300/600/1000/1400 mi) — colored green→red so you can see at a glance which destinations land in which zone">
+            <input type="checkbox" data-cog-toggle="parcelZones" ${mapOptions.parcelZones ? 'checked' : ''} class="u-m0"> Parcel zones
           </label>
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ies-gray-600);cursor:pointer;" title="Show demand-point names directly on the map (otherwise visible only on hover)">
-            <input type="checkbox" data-cog-toggle="pointLabels" ${mapOptions.pointLabels ? 'checked' : ''} style="margin:0;"> Point labels
+          <label class="cog-check-label" title="Show demand-point names directly on the map (otherwise visible only on hover)">
+            <input type="checkbox" data-cog-toggle="pointLabels" ${mapOptions.pointLabels ? 'checked' : ''} class="u-m0"> Point labels
           </label>
           <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--ies-gray-600);" title="Switch basemap. Voyager = labeled streets (default). Positron = clean light. Satellite = imagery for site context.">
             Basemap:
@@ -4152,7 +4153,7 @@ function _initCogMapBody() {
     const marker = L.circleMarker([pt.lat, pt.lng], {
       radius: size, fillColor: color, color: ringColor, weight: ringWeight, fillOpacity: 0.9, pane: 'cog-demand',
     }).addTo(mapInstance);
-    const outNote = a.outOfService ? `<br><strong style="color:#b91c1c;">OUT of SLA</strong> (${Math.round(a.driveRoadMi || 0)} road-mi > ${cogResult.serviceStats?.maxMiles || 0} mi)` : '';
+    const outNote = a.outOfService ? `<br><strong style="color:var(--c-danger-strong);">OUT of SLA</strong> (${Math.round(a.driveRoadMi || 0)} road-mi > ${cogResult.serviceStats?.maxMiles || 0} mi)` : '';
     marker.bindPopup(`<strong>${escapeHtml(pt.name || pt.id)}</strong><br>Weight: ${pt.weight.toLocaleString()}<br>Cluster: ${a.clusterId + 1}<br>Distance: ${calc.formatMiles(a.distanceToCenter)}${outNote}`);
     // 2026-05-28 D14 — permanent labels above each demand point when toggled.
     if (mapOptions.pointLabels) {
@@ -4235,16 +4236,16 @@ function _initCogMapBody() {
         position: absolute; left: 50%; bottom: 52px;
         transform: translateX(-50%);
         white-space: nowrap;
-        background: rgba(255,255,255,0.97); border: 1.5px solid #0a1628;
+        background: rgba(255,255,255,0.97); border: 1.5px solid var(--c-ink-deep);
         border-radius: 5px; padding: 3px 8px;
-        font-size: 12px; font-weight: 700; color: #0a1628;
+        font-size: 12px; font-weight: 700; color: var(--c-ink-deep);
         box-shadow: 0 2px 6px rgba(0,0,0,0.25);
         pointer-events: none;
       ">★ ${labelText}</div>` : ''}
       <div style="
         width: 44px; height: 44px; border-radius: 50%;
         background: ${centerColor};
-        border: 4px solid #0a1628;
+        border: 4px solid var(--c-ink-deep);
         box-shadow: 0 0 0 6px rgba(255,255,255,0.97), 0 4px 14px rgba(0,0,0,0.45);
         display: flex; align-items: center; justify-content: center;
         color: #ffffff; font-weight: 800; font-size: 17px;
@@ -4571,7 +4572,7 @@ function renderSensitivity(el) {
             const parcelAvgWt = config.parcelAvgPackageWeightLb || 5;
             const unitsTruck = config.unitsPerTruck || 25000;
             return `
-              <div style="background:#fef3c7;border-left:3px solid #f59e0b;padding:10px 14px;margin-top:14px;font-size:11px;color:#78350f;line-height:1.55;border-radius:0 4px 4px 0;">
+              <div style="background:var(--c-warn-bg);border-left:3px solid var(--c-warn);padding:10px 14px;margin-top:14px;font-size:11px;color:#78350f;line-height:1.55;border-radius:0 4px 4px 0;">
                 <strong>⚠ Counterintuitive result on Parcel share of mix.</strong> The chart says reducing parcel share <em>raises</em> total cost — but parcel typically costs more per pound than TL, so this usually goes the other way. Almost always a data-setup issue:
                 <ul style="margin:6px 0 0 18px;padding:0;">
                   <li><strong>Avg package weight</strong> currently set to <strong>${parcelAvgWt} lb</strong> — if this is too high (e.g. 500 lb), per-package parcel cost is artificially low, making parcel look cheaper than TL. Realistic DTC parcel is 1-50 lb.</li>
@@ -4596,9 +4597,9 @@ function renderSensitivity(el) {
       <h4 style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--ies-gray-700);">Cost vs. Number of Centers</h4>
 
       <!-- Network Summary -->
-      <div class="hub-card" style="padding:20px;margin-bottom:20px;background:linear-gradient(135deg,#f0fdf4,#f0fdf4);border-left:4px solid #22c55e;">
-        <div style="font-size:13px;font-weight:700;color:#15803d;margin-bottom:8px;">Optimal Network Summary</div>
-        <div style="font-size:13px;line-height:1.6;color:#166534;">
+      <div class="hub-card" style="padding:20px;margin-bottom:20px;background:linear-gradient(135deg,var(--c-success-soft),var(--c-success-soft));border-left:4px solid var(--c-success-bright);">
+        <div style="font-size:13px;font-weight:700;color:var(--c-success-strong);margin-bottom:8px;">Optimal Network Summary</div>
+        <div style="font-size:13px;line-height:1.6;color:var(--c-success-ink);">
           Optimal network of <strong>${cogResult.centers.length}</strong> facilit${cogResult.centers.length === 1 ? 'y' : 'ies'} reduces
           avg distance to <strong>${cogResult.centers[0] ? calc.formatMiles(cogResult.centers.reduce((s, c) => s + c.avgWeightedDistance, 0) / cogResult.centers.length) : 'N/A'}</strong>
           per facility, with total annual transport cost of <strong>${calc.formatCurrency(cogResult.totalCost ?? 0)}</strong>.
@@ -4660,13 +4661,13 @@ function renderSensitivity(el) {
         </svg>
         <div style="font-size:11px;color:var(--ies-gray-400);margin-top:8px;">
           ${hasFixedCost ? `
-            <span style="margin-right:16px;"><strong style="color:#1d4ed8;">Blue</strong> = transport cost</span>
+            <span style="margin-right:16px;"><strong style="color:var(--c-info-strong);">Blue</strong> = transport cost</span>
             <span style="margin-right:16px;"><strong style="color:#fb923c;">Orange</strong> = facility fixed cost (${calc.formatCurrency(config.fixedCostPerDC, { compact: true })}/yr × k)</span>
             ${hasInteriorMin
-              ? `<span><strong style="color:#16a34a;">★</strong> = cost-optimal k = ${optimalK} (interior minimum of the U-curve)</span>`
-              : `<span><strong style="color:var(--ies-gray-600);">Cost-optimal k = ${optimalK}</strong> — boundary minimum (no interior U-shape at this fixed cost)</span>`}
+              ? `<span><strong style="color:var(--c-success);">★</strong> = cost-optimal k = ${optimalK} (interior minimum of the U-curve)</span>`
+              : `<span><strong class="u-dim">Cost-optimal k = ${optimalK}</strong> — boundary minimum (no interior U-shape at this fixed cost)</span>`}
           ` : `
-            <span style="margin-right:16px;"><strong style="color:var(--ies-gray-600);">Blue bar</strong> = current selection (k=${config.numCenters})</span>
+            <span style="margin-right:16px;"><strong class="u-dim">Blue bar</strong> = current selection (k=${config.numCenters})</span>
             <span><strong style="color:#f97316;">Orange bar ★</strong> = knee point (max curvature on cost curve)</span>
           `}
         </div>
@@ -4689,7 +4690,7 @@ function renderSensitivity(el) {
               <div style="height:24px;border-radius:6px;background:var(--ies-gray-200);overflow:hidden;">
                 <div style="height:100%;width:${pct}%;background:${isCurrent ? 'var(--ies-blue)' : 'var(--ies-gray-400)'};border-radius:6px;"></div>
               </div>
-              <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">
+              <div class="cog-hint">
                 Avg distance: ${calc.formatMiles(d.avgDistance)}
               </div>
             </div>
@@ -4698,7 +4699,7 @@ function renderSensitivity(el) {
       </div>
 
       <div class="hub-card" style="padding:20px;">
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <table class="u-table">
           <thead>
             <tr style="border-bottom:2px solid var(--ies-gray-200);">
               <th style="text-align:center;padding:8px;font-weight:700;">k</th>
@@ -4718,7 +4719,7 @@ function renderSensitivity(el) {
                   <td style="padding:8px;text-align:right;">${Math.round(d.totalWeightedDistance).toLocaleString()}</td>
                   <td style="padding:8px;text-align:right;font-weight:600;">${calc.formatCurrency(d.estimatedCost, { compact: true })}</td>
                   <td style="padding:8px;text-align:right;">${calc.formatMiles(d.avgDistance)}</td>
-                  <td style="padding:8px;text-align:right;color:${savings > 0 ? '#22c55e' : '#6b7280'};">${i > 0 ? calc.formatCurrency(savings, { compact: true }) : '—'}</td>
+                  <td style="padding:8px;text-align:right;color:${savings > 0 ? 'var(--c-success-bright)' : 'var(--c-muted)'};">${i > 0 ? calc.formatCurrency(savings, { compact: true }) : '—'}</td>
                 </tr>
               `;
             }).join('')}
@@ -4727,9 +4728,9 @@ function renderSensitivity(el) {
       </div>
 
       ${hasFixedCost ? `
-        <div class="hub-card" style="margin-top:16px;background:${hasInteriorMin ? '#f0fdf4' : '#fffbeb'};border-color:${hasInteriorMin ? '#22c55e' : '#f59e0b'};">
-          <div style="font-size:13px;font-weight:600;color:${hasInteriorMin ? '#15803d' : '#92400e'};margin-bottom:6px;">How to read this curve — ${hasInteriorMin ? 'true U-curve mode' : 'fixed-cost dominates'}</div>
-          <div style="font-size:13px;color:${hasInteriorMin ? '#166534' : '#78350f'};line-height:1.6;">
+        <div class="hub-card" style="margin-top:16px;background:${hasInteriorMin ? 'var(--c-success-soft)' : 'var(--c-warn-soft)'};border-color:${hasInteriorMin ? 'var(--c-success-bright)' : 'var(--c-warn)'};">
+          <div style="font-size:13px;font-weight:600;color:${hasInteriorMin ? 'var(--c-success-strong)' : 'var(--c-warn-ink)'};margin-bottom:6px;">How to read this curve — ${hasInteriorMin ? 'true U-curve mode' : 'fixed-cost dominates'}</div>
+          <div style="font-size:13px;color:${hasInteriorMin ? 'var(--c-success-ink)' : '#78350f'};line-height:1.6;">
             Each bar is a <strong>stack</strong>: blue = outbound transport cost, orange = facility fixed cost (k × ${calc.formatCurrency(config.fixedCostPerDC, { compact: true })}/yr). Stack height = total annual cost.
             <br/><br/>
             ${hasInteriorMin
@@ -4740,8 +4741,8 @@ function renderSensitivity(el) {
           </div>
         </div>
       ` : `
-        <div class="hub-card" style="margin-top:16px;background:#fffbeb;border-color:#f59e0b;">
-          <div style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:6px;">How to read this curve</div>
+        <div class="hub-card" style="margin-top:16px;background:var(--c-warn-soft);border-color:var(--c-warn);">
+          <div style="font-size:13px;font-weight:600;color:var(--c-warn-ink);margin-bottom:6px;">How to read this curve</div>
           <div style="font-size:13px;color:#78350f;line-height:1.6;">
             This chart plots <strong>outbound transport cost only</strong> — facility fixed cost (rent, labor, IT, depreciation) is <strong>not</strong> modeled here. Because there is no fixed-cost term, the curve is monotonically non-increasing in k: more centers can only reduce or hold transport cost, never raise it.
             <br/><br/>

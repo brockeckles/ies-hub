@@ -21,7 +21,7 @@ import {
   autoDetectMapping, SKU_MASTER_ROLES, INVENTORY_ROLES, ORDER_ROLES,
 } from './profile-calc.js?v=20260704-n1a';
 import { wscFactorsDrift } from './factors-calc.js?v=20260704-n2a';
-import { icon } from '../../shared/icons.js?v=20260705-u0a';
+import { icon } from '../../shared/icons.js?v=20260705-u3c';
 import { selectMedia } from './media-calc.js?v=20260704-n3a';
 import { computeDynamics } from './dynamics-calc.js?v=20260705-mhe1';
 import { synthesizeLayout } from './layout-calc.js?v=20260705-mhe1';

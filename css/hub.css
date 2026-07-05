@@ -4358,6 +4358,20 @@ textarea.hub-input {
 .u-td-num  { padding: 6px; text-align: right; }
 .u-th-rule { border-bottom: 2px solid var(--ies-gray-200); }
 
+/* ---- U3-COG (2026-07-05, u3c): utilities promoted during COG migration ---- */
+.u-pointer { cursor: pointer; }
+.u-upper   { text-transform: uppercase; }
+/* COG tool-scoped (COG ui.js has no injected style block; values byte-identical to prior inline styles) */
+.cog-num-input    { padding: 6px 8px; border: 1px solid var(--ies-gray-200); border-radius: 6px; font-size: 13px; font-weight: 600; text-align: right; }
+.cog-num-input-p8 { padding: 8px; border: 1px solid var(--ies-gray-200); border-radius: 6px; font-size: 13px; font-weight: 600; text-align: right; }
+.cog-hint       { font-size: 11px; color: var(--ies-gray-400); margin-top: 2px; }
+.cog-hint-sm    { font-size: 10px; color: var(--ies-gray-400); margin-top: 2px; }
+.cog-microlabel { font-size: 9px; text-transform: uppercase; color: var(--ies-gray-500); }
+.cog-kicker     { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ies-gray-400); }
+.cog-check-label { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ies-gray-600); cursor: pointer; }
+.cog-disabled   { opacity: 0.5; cursor: not-allowed; }
+.cog-card-head  { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 12px; flex-wrap: wrap; }
+
 /* -- components -- */
 /* form micro-label (14x): block caption above an input */
 .hub-field-label {
