@@ -39,10 +39,10 @@
 
   <!-- Module Preloads (shared core) -->
   <link rel="modulepreload" href="./shared/event-bus.js?v=20260418-sK">
-  <link rel="modulepreload" href="./shared/router.js?v=20260705-r1">
+  <link rel="modulepreload" href="./shared/router.js?v=20260706-r1">
 
   <!-- Design System -->
-  <link rel="stylesheet" href="./css/hub.css?v=20260706-r0">
+  <link rel="stylesheet" href="./css/hub.css?v=20260706-r1">
 
   <!-- Feature flags — defaults ON for engines that have shipped past Phase 1 -->
   <script>
@@ -213,8 +213,8 @@
   <!-- App Bootstrap -->
   <script type="module">
     import { auth } from './shared/auth.js?v=20260705-u1a';
-    import { router } from './shared/router.js?v=20260705-r1';
-    import { search } from './shared/search.js?v=20260705-r1';
+    import { router } from './shared/router.js?v=20260706-r1';
+    import { search } from './shared/search.js?v=20260706-r1';
     import { bus } from './shared/event-bus.js?v=20260418-sK';
     // Shared UX modules — self-wire their listeners/guards on import.
     import { showToast } from './shared/toast.js?v=20260705-u1a';
@@ -577,12 +577,12 @@
 
       // Design Tool sub-routes (lazy loaded)
       const toolRoutes = {
-        'designtools/cost-model': { title: 'Cost Model Builder', path: './tools/cost-model/ui.js?v=20260705-r1' },
-        'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260705-r1' },
-        'designtools/most-standards': { title: 'MOST Labor Standards', path: './tools/most-standards/ui.js?v=20260705-r1' },
-        'designtools/network-opt': { title: 'Network Optimization', path: './tools/network-opt/ui.js?v=20260705-r1' },
-        'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260705-r5' },
-        'designtools/center-of-gravity': { title: 'Center of Gravity', path: './tools/center-of-gravity/ui.js?v=20260705-r1' },
+        'designtools/cost-model': { title: 'Cost Model Builder', path: './tools/cost-model/ui.js?v=20260706-r1' },
+        'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260706-r1' },
+        'designtools/most-standards': { title: 'MOST Labor Standards', path: './tools/most-standards/ui.js?v=20260706-r1' },
+        'designtools/network-opt': { title: 'Network Optimization', path: './tools/network-opt/ui.js?v=20260706-r1' },
+        'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260706-r1' },
+        'designtools/center-of-gravity': { title: 'Center of Gravity', path: './tools/center-of-gravity/ui.js?v=20260706-r1' },
       };
 
       for (const [route, config] of Object.entries(toolRoutes)) {

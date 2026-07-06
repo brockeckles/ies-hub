@@ -38,7 +38,7 @@ globalThis.document = {
   body: { style: { set overflow(v) { overflowReset = v; }, get overflow() { return overflowReset; } } },
 };
 
-const { Router } = await import('./shared/router.js?v=20260703-p34');
+const { Router } = await import('./shared/router.js?v=20260706-r1');
 
 await ta('router sweep removes plain orphans, calls rich teardowns, resets scroll lock', async () => {
   const r = new Router();

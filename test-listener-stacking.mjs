@@ -45,7 +45,7 @@ globalThis.window = globalThis.window || {
   location: { hash: '#overview' },
 };
 
-const { Router } = await import('./shared/router.js?v=20260703-p34');
+const { Router } = await import('./shared/router.js?v=20260706-r1');
 
 await ta('router mounts each navigation into a FRESH outlet node (listeners die with the old one)', async () => {
   const r = new Router();
@@ -74,7 +74,7 @@ await ta('router swap preserves outlet attributes (id survives cloneNode(false))
 });
 
 // ── 2. tool-chrome live-context bind — functional ────────────────────────
-const tc = await import('./shared/tool-chrome.js?v=20260703-ls1');
+const tc = await import('./shared/tool-chrome.js?v=20260706-r1');
 
 await ta('bindToolChromeEvents adds exactly ONE click listener even after legacy __tcBound=false reset', async () => {
   const rootEl = {

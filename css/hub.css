@@ -555,7 +555,7 @@ textarea.hub-input {
   gap: var(--sp-3);
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--radius-sm);
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--ies-gray-400); /* R1: warm stone muted */
   font-size: var(--fs-body);
   font-weight: var(--fw-semibold);
   cursor: pointer;
@@ -569,7 +569,10 @@ textarea.hub-input {
 }
 
 .hub-nav-item.active {
-  background: var(--ies-orange);
+  /* R1 redesign: quiet editorial active — orange tint + inset signature bar
+     (was solid --ies-orange fill) */
+  background: rgba(255, 58, 0, 0.14);
+  box-shadow: inset 3px 0 0 var(--ies-orange);
   color: #fff;
 }
 

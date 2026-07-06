@@ -27,7 +27,7 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260705-u3d';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260705-u1a';
-import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents } from '../../shared/tool-chrome.js?v=20260705-r1';
+import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, applyToolCrumb } from '../../shared/tool-chrome.js?v=20260706-r1';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
@@ -2867,10 +2867,10 @@ function _buildCmChromeOpts() {
     { id: 'cm-export', label: 'Export', title: 'Export to .xlsx' },
   ];
 
-  // Top-bar model identity: name + scenario label, rendered as row2Prefix
-  // so the user always knows which model + scenario they\'re viewing.
-  // Colors tuned for the dark navy chrome bg — model name is white, pills use
-  // higher-opacity tints so they don\'t disappear into the bg.
+  // R1 (2026-07-06): model identity — name + scenario/status chips — now
+  // renders in the SHELL BREADCRUMB via tool-chrome `crumb` (was row2Prefix
+  // on the dark chrome; row 2 was wrapping on Solution\'s 8 pills). Colors
+  // tuned for the light top bar.
   const _modelName = (model?.projectDetails?.name || model?.name || '').trim();
   const _scenarioLabel = (_chromeScenarioRow?.scenario_label
     || model?.scenario_label
@@ -2879,15 +2879,15 @@ function _buildCmChromeOpts() {
     || /^baseline$/i.test(_scenarioLabel);
   const _scStatus = _chromeScenarioRow?.status || null;
   // Status badge — bright tints + white text for legibility on dark chrome.
-  const _statusBg = _scStatus === 'approved' ? 'rgba(34,197,94,0.22)'
-                  : _scStatus === 'rejected' ? 'rgba(239,68,68,0.22)' : null;
-  const _statusFg = _scStatus === 'approved' ? '#86efac'
-                  : _scStatus === 'rejected' ? '#fca5a5' : null;
+  const _statusBg = _scStatus === 'approved' ? 'var(--c-success-bg)'
+                  : _scStatus === 'rejected' ? 'var(--c-danger-bg)' : null;
+  const _statusFg = _scStatus === 'approved' ? 'var(--c-success-ink)'
+                  : _scStatus === 'rejected' ? 'var(--c-danger-ink)' : null;
   // Scenario pill — baseline gets a brighter blue tint, child gets a translucent
   // white tint. Both use near-white text on the dark chrome.
   const _pillCss = _isBaseline
-    ? 'color:#bfdbfe;background:rgba(59,130,246,0.22);'
-    : 'color:rgba(255,255,255,0.85);background:rgba(255,255,255,0.10);';
+    ? 'color:var(--c-info-ink);background:var(--c-info-soft);border:1px solid var(--c-info-border);'
+    : 'color:var(--ies-gray-600);background:var(--ies-gray-100);border:1px solid var(--ies-gray-200);';
   const _pillLabel = _isBaseline ? '\u2605 Baseline' : (_scenarioLabel || 'Scenario');
   const _safeName = _modelName.replace(/"/g, '&quot;');
   // UX-2 / D6 — starter-template provenance chip. Shown while the model is
@@ -2897,9 +2897,9 @@ function _buildCmChromeOpts() {
     ? '<span style="display:inline-block;font-size:9px;font-weight:700;padding:3px 8px;border-radius:8px;letter-spacing:0.04em;text-transform:uppercase;background:var(--c-warn-bg);color:var(--c-warn-ink);white-space:nowrap;" title="Seeded from the ' + CM_STARTER_TEMPLATES[_starterKey].label + ' starter template — every value is a catalog default until you edit or save it.">' + CM_STARTER_TEMPLATES[_starterKey].label + ' defaults</span>'
     : '';
   const _modelTitleHtml = (_modelName || _scenarioLabel || _starterChip) ? (
-    '<div class="cm-model-title" style="display:flex;align-items:center;gap:8px;padding:0 12px 0 0;border-right:1px solid rgba(255,255,255,0.18);margin-right:10px;flex-shrink:0;min-width:0;">' +
+    '<div class="cm-model-title" style="display:inline-flex;align-items:center;gap:8px;min-width:0;">' +
       (_modelName
-        ? '<span style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;" title="' + _safeName + '">' + _modelName + '</span>'
+        ? '<span style="font-size:13px;font-weight:600;color:var(--c-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px;" title="' + _safeName + '">' + _modelName + '</span>'
         : '') +
       (_scenarioLabel || _isBaseline
         ? '<span style="display:inline-block;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;' + _pillCss + '" title="Scenario">' + _pillLabel + '</span>'
@@ -2920,7 +2920,7 @@ function _buildCmChromeOpts() {
     sectionCompleteness: (k) => _sectionCompleteness(STD_TO_ENG[k] || k),
     saveState: { state: stateName, title: stateTitle, when: formatSavedWhen() },
     actions,
-    row2Prefix: _modelTitleHtml,
+    crumb: _modelTitleHtml,
     showSidebar: _cmSidebarOpen,
     sidebarHeader: 'All Sections',
     sidebarBody: renderGroupedNav() + '<div id="cm-validation" style="padding: 8px 16px; border-top: 1px solid var(--ies-gray-200); font-size: 11px;"></div>',
@@ -11450,7 +11450,7 @@ function _launchToTool(target) {
       // state. Invisible to the cache-bust guard because the './tools/...'
       // path resolves module-relative in the scanner but page-relative at
       // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260705-r1',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260706-r1',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {
@@ -13103,6 +13103,7 @@ function handleNetOptPush(payload) {
 // ============================================================
 
 function renderLanding() {
+  applyToolCrumb(''); // R1: back at landing — drop the model crumb
   const count = savedModels.length;
   // ref_markets primary key is `id` (uuid) with a `name` column; the fallback shape
   // uses market_id/name. Build a lookup that works for either shape.

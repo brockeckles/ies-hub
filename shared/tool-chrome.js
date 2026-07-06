@@ -110,6 +110,31 @@ function _actionButtonHtml(a) {
 // 2026-06-10: removes the previously-bound Cmd+Enter document listener (see bindToolChromeEvents).
 let _tcRemovePrevShortcut = null;
 
+
+/**
+ * R1 (2026-07-06): tool identity crumb — scenario/model name + status chips
+ * rendered into the SHELL breadcrumb (#hub-breadcrumb), not row 2. Frees the
+ * full row-2 width for section pills + KPIs (CM Solution tab was wrapping).
+ * `html` is trusted tool-supplied markup (same trust level as row2Prefix).
+ * Pass '' to clear (tools MUST clear when returning to their landing —
+ * the router only rewrites the breadcrumb on hash changes).
+ * No-ops outside the browser so Node test imports stay pure.
+ */
+export function applyToolCrumb(html) {
+  if (typeof document === 'undefined') return;
+  const bc = document.getElementById('hub-breadcrumb');
+  if (!bc) return;
+  bc.querySelectorAll('[data-tc-crumb]').forEach(n => n.remove());
+  if (!html) return;
+  const sep = document.createElement('span');
+  sep.setAttribute('data-tc-crumb', ''); sep.className = 'u-faint'; sep.textContent = '/';
+  const wrap = document.createElement('span');
+  wrap.setAttribute('data-tc-crumb', '');
+  wrap.style.cssText = 'display:inline-flex;align-items:center;gap:8px;min-width:0;';
+  wrap.innerHTML = html;
+  bc.appendChild(sep); bc.appendChild(wrap);
+}
+
 export function renderToolChrome(opts) {
   const {
     toolKey = 'tool',
@@ -136,6 +161,7 @@ export function renderToolChrome(opts) {
   const bodyAttr = bodyId ? ' id="' + _a(bodyId) + '"' : '';
 
   const row2PrefixHtml = opts.row2Prefix || '';
+  if (opts.crumb !== undefined) applyToolCrumb(opts.crumb);
   return (
     '<div class="hub-builder tool-chrome-shell" data-tool="' + _a(toolKey) + '" style="height: calc(100vh - 48px); display: flex; flex-direction: column;">' +
       '<header class="tc-top">' +
@@ -182,6 +208,8 @@ export function renderToolChrome(opts) {
  */
 export function refreshToolChrome(rootEl, opts) {
   if (!rootEl) return;
+
+  if (opts.crumb !== undefined) applyToolCrumb(opts.crumb);
 
   const tabsEl = rootEl.querySelector('.tc-phase-tabs');
   if (tabsEl) tabsEl.innerHTML = _phaseTabsHtml(opts);
