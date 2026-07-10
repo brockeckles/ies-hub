@@ -85,7 +85,7 @@ export function wscExtraStyles() {
          migration would be a massive diff.) */
       .wsc-config-field > input,
       .wsc-config-field > select {
-        font-family: 'Montserrat', sans-serif;
+        font-family: var(--font-ui);
         font-size: 13px;
         font-weight: 600;
         color: var(--ies-navy);

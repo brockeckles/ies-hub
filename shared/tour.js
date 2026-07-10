@@ -5,7 +5,7 @@
  * popover; the rest of the page stays fully interactive (no modal overlay).
  *
  * Usage:
- *   import { tour } from './shared/tour.js?v=20260705-u1a';
+ *   import { tour } from './shared/tour.js?v=20260710-r2';
  *   tour.start('overview');   // start a named tour
  *   tour.next();              // advance manually (normally user clicks)
  *   tour.stop();              // end immediately
@@ -177,7 +177,7 @@ function renderPopover(step, target) {
     'padding:16px 18px',
     'font-size:13px',
     'line-height:1.5',
-    'font-family:Montserrat,sans-serif',
+    'font-family:var(--font-ui)',
     'pointer-events:auto',
     'border:1px solid rgba(255,255,255,.08)',
   ].join(';');

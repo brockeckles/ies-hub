@@ -16,7 +16,7 @@
 :root {
   /* Brand Colors */
   --ies-orange: #ff3a00;
-  --font-ui: 'Inter', 'Montserrat', -apple-system, sans-serif; /* R0 */
+  --font-ui: 'Inter', -apple-system, sans-serif; /* R2 — Montserrat link removed */
   --font-display: 'Source Serif 4', Georgia, serif; /* R0 */
   --ies-blue: #0047AB;
   --ies-navy: #1c1c1c;
@@ -392,7 +392,7 @@ textarea.hub-input {
   text-overflow: ellipsis;
   line-height: 1.15;
   /* Phase A.A14 (2026-05-26) — tabular-nums so digit columns align
-     across KPI tiles. Kept on Montserrat (the Hub's brand face) — the
+     across KPI tiles. (Historic note: written in the Montserrat era; face is now --font-ui/Inter.) The
      CAD persona review's "monospace" recommendation translates in
      practice to tabular-nums, which fixes the alignment problem without
      swapping fonts and breaking the visual identity. font-feature-

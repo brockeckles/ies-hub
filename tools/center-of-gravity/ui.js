@@ -9,7 +9,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260705-u1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
-import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260706-r1';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260710-r2';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260702-p1m1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
@@ -19,7 +19,7 @@ import * as cmApi from '../cost-model/api.js?v=20260704-cmp1';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
-import { icon } from '../../shared/icons.js?v=20260705-r1';
+import { icon } from '../../shared/icons.js?v=20260710-r2';
 
 // ============================================================
 // CHROME v3 — phase + section structure (CM Chrome v3 ripple, step 3 redo)
@@ -46,7 +46,7 @@ const COG_SECTIONS = [
   { key: 'numbers',     label: 'Numbers',     iconName: 'chart', group: 'run' },
   { key: 'map',         label: 'Map',         iconName: 'map',   group: 'run' },
   { key: 'sensitivity', label: 'Sensitivity', iconName: 'chart', group: 'run' },
-  { key: 'compare',     label: '\u{2696}\u{FE0F} Compare',     group: 'run' },
+  { key: 'compare',     label: 'Compare',     iconName: 'scales', group: 'run' },
 ];
 
 // ============================================================

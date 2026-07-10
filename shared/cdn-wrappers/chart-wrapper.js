@@ -3,7 +3,7 @@
  * Bridges Chart.js (loaded as global `Chart`) with ES module imports.
  *
  * Usage:
- *   import { getChart } from './chart-wrapper.js?v=20260418-sK';
+ *   import { getChart } from './chart-wrapper.js?v=20260710-r2';
  *   const Chart = getChart();
  *   new Chart(ctx, config);
  *
@@ -40,14 +40,14 @@ export function createChart(canvas, config) {
     plugins: {
       legend: {
         labels: {
-          font: { family: 'Montserrat', size: 12, weight: '600' },
+          font: { family: 'Inter, sans-serif', size: 12, weight: '600' },
           color: '#1c1c1c',
         },
       },
       tooltip: {
         backgroundColor: '#1c1c1c',
-        titleFont: { family: 'Montserrat', size: 12, weight: '700' },
-        bodyFont: { family: 'Montserrat', size: 12, weight: '500' },
+        titleFont: { family: 'Inter, sans-serif', size: 12, weight: '700' },
+        bodyFont: { family: 'Inter, sans-serif', size: 12, weight: '500' },
         cornerRadius: 6,
         padding: 10,
       },

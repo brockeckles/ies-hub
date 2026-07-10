@@ -10,17 +10,17 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260705-u1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
-import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260706-r1';
+import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260710-r2';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260702-p1m1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import * as calc from './calc.js?v=20260702-p23a';
 import * as api from './api.js?v=20260702-sec2';
-import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260418-sK';
+import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260710-r2';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
-import { icon } from '../../shared/icons.js?v=20260705-r1';
+import { icon } from '../../shared/icons.js?v=20260710-r2';
 
 // ============================================================
 // STATE

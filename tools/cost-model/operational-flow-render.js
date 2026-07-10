@@ -37,7 +37,7 @@ import {
   ofpUomOut as _ofpUomOut,
 } from './ofp-helpers.js?v=20260702-sec2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
-import { icon } from '../../shared/icons.js?v=20260705-r1';
+import { icon } from '../../shared/icons.js?v=20260710-r2';
 import * as calc from './calc.js?v=20260704-ebr1';
 import ofpStyles from './operational-flow-styles.js?v=20260705-r1';
 

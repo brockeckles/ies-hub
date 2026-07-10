@@ -17,7 +17,7 @@
  * @module shared/tool-chrome
  */
 
-import { icon as _svgIcon } from './icons.js?v=20260705-r1';
+import { icon as _svgIcon } from './icons.js?v=20260710-r2';
 
 function _h(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

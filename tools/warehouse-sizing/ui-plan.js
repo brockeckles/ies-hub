@@ -20,7 +20,7 @@
  */
 
 import * as calc from './calc.js?v=20260703-ux0';
-import { icon } from '../../shared/icons.js?v=20260705-r1';
+import { icon } from '../../shared/icons.js?v=20260710-r2';
 
 // Phase A.A6 (2026-05-26) — Foot-snap grid overlay state. Module-level
 // because it's a UI preference (not part of the persisted facility model).
@@ -341,7 +341,7 @@ function _drawPlanUnsafe(pctx) {
   const totalSqft = pctx.facility.totalSqft || sized.totalSqft || 0;
   if (totalSqft <= 0) {
     ctx.fillStyle = '#9ca3af';
-    ctx.font = '13px Montserrat, sans-serif';
+    ctx.font = '13px Inter, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('Enter peak units + storage inputs — the tool will size the floorplan.', cw / 2, ch / 2);
     return;
@@ -736,7 +736,7 @@ function _drawPlanUnsafe(pctx) {
         const cy = yTop + bandH / 2;
         const cx = (_planRackLeftX + _planRackRightX) / 2;
         ctx.fillStyle = '#4b5563';
-        ctx.font = 'bold 9px Montserrat, sans-serif';
+        ctx.font = 'bold 9px Inter, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('◀  CROSS-AISLE  ▶', cx, cy + 3);
       }
@@ -748,7 +748,7 @@ function _drawPlanUnsafe(pctx) {
   // Render each zone's name at its horizontal center, just below the top
   // dim line. Skip pctx.zones that didn't render any cols (extents stay at
   // Infinity / -Infinity).
-  ctx.font = 'bold 11px Montserrat, sans-serif';
+  ctx.font = 'bold 11px Inter, sans-serif';
   ctx.textAlign = 'center';
   for (let i = 0; i < TYPES.length; i++) {
     const ex = _zoneXExtents[i];
@@ -788,14 +788,14 @@ function _drawPlanUnsafe(pctx) {
       ctx.stroke();
     }
     ctx.fillStyle = '#5b21b6';
-    ctx.font = 'bold 11px Montserrat, sans-serif';
+    ctx.font = 'bold 11px Inter, sans-serif';
     ctx.textAlign = 'center';
     if (_layers.labels) ctx.fillText(`Forward Pick  ·  ${(pctx.zones.forwardPick.type || 'carton flow').replace('_', ' ')}`, fpX + fpW / 2, fpY + fpStripPx / 2 + 4);
   }
 
   // Storage label (top of storage zone, right-aligned to clear the office)
   ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 12px Montserrat, sans-serif';
+  ctx.font = 'bold 12px Inter, sans-serif';
   ctx.textAlign = 'right';
   ctx.fillText(
     `Storage  ·  ${calc.formatSqft(sized.storageSqft)}  ·  ${totalCols} rack rows  ·  ${aisleFt} ft aisles`,
@@ -815,7 +815,7 @@ function _drawPlanUnsafe(pctx) {
     ctx.fillRect(X0 + 2, Y0 + 2, Wpx - 4, recvHpx - 2);
     ctx.strokeRect(X0 + 2, Y0 + 2, Wpx - 4, recvHpx - 2);
     ctx.fillStyle = '#166534';
-    ctx.font = 'bold 11px Montserrat, sans-serif';
+    ctx.font = 'bold 11px Inter, sans-serif';
     ctx.textAlign = 'center';
     const recvSqft = sized.recvStagingSqft || 0;
     const label = recvSqft > 0
@@ -843,7 +843,7 @@ function _drawPlanUnsafe(pctx) {
   if (_layers.hatch) drawHatch(ctx, 'dots', shipX, shipY, shipW, shipDrawH, '#92400e');
   ctx.strokeRect(shipX, shipY, shipW, shipDrawH);
   ctx.fillStyle = '#92400e';
-  ctx.font = 'bold 11px Montserrat, sans-serif';
+  ctx.font = 'bold 11px Inter, sans-serif';
   ctx.textAlign = 'center';
   if (shipW > 100) {
     // If user corner-resized this zone, label should reflect drawn w*h, not
@@ -868,12 +868,12 @@ function _drawPlanUnsafe(pctx) {
   ctx.strokeRect(officeX, officeY, officeWpx, officeBlockH);
   if (_layers.hatch) drawHatch(ctx, 'ansi31', officeX, officeY, officeWpx, officeBlockH, '#6b21a8');
   ctx.fillStyle = '#5b21b6';
-  ctx.font = 'bold 11px Montserrat, sans-serif';
+  ctx.font = 'bold 11px Inter, sans-serif';
   ctx.textAlign = 'center';
   if (_layers.labels && officeWpx > 50 && officeBlockH > 28) {
     ctx.fillText('Office', officeX + officeWpx / 2, officeY + officeBlockH / 2 - 4);
     ctx.fillStyle = '#6b21a8';
-    ctx.font = '10px Montserrat, sans-serif';
+    ctx.font = '10px Inter, sans-serif';
     // Resize-aware label (Brock 2026-05-14). Uses hit-rect w*h, which is
     // what the user dragged. officeBlockH is the visual stretched-to-dock-face
     // height — not the user-chosen size, so we deliberately use officeHpx.
@@ -949,7 +949,7 @@ function _drawPlanUnsafe(pctx) {
       ctx.strokeRect(cx - halfDoor, yTop, doorWPx, 12);
     }
     ctx.fillStyle = '#7f1d1d';
-    ctx.font = 'bold 10px Montserrat, sans-serif';
+    ctx.font = 'bold 10px Inter, sans-serif';
     ctx.textAlign = 'center';
     const labelTxt = overflow > 0 ? `${label} (+${overflow} won't fit)` : label;
     ctx.fillText(labelTxt, (xStart + xEnd) / 2, yTop + (labelAbove ? -6 : 28));
@@ -979,7 +979,7 @@ function _drawPlanUnsafe(pctx) {
 
   // ---------- Building dimension labels ----------
   ctx.fillStyle = '#374151';
-  ctx.font = '11px Montserrat, sans-serif';
+  ctx.font = '11px Inter, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText(`${widthFt.toLocaleString()} ft`, X0 + Wpx / 2, Y0 + Hpx + 44);
   ctx.save();
@@ -992,18 +992,18 @@ function _drawPlanUnsafe(pctx) {
   // INSIDE the building (was Y0-22, overlapped the title block "clear ht
   // 36 ft" line at canvas Y=38). Bottom label stays just below dock face.
   ctx.fillStyle = '#6b7280';
-  ctx.font = '10px Montserrat, sans-serif';
+  ctx.font = '10px Inter, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(twoSided ? '▲ INBOUND DOCK' : '▲ BACK', X0 + 6, Y0 + 14);
   ctx.fillText(twoSided ? '▼ OUTBOUND DOCK' : '▼ DOCK FACE', X0 + 4, Y0 + Hpx + 22);
 
   // Title block (top-left, outside building)
   ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 13px Montserrat, sans-serif';
+  ctx.font = 'bold 13px Inter, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(pctx.facility.name || 'Facility', 12, 22);
   ctx.fillStyle = '#6b7280';
-  ctx.font = '11px Montserrat, sans-serif';
+  ctx.font = '11px Inter, sans-serif';
   ctx.fillText(
     `${calc.formatSqft(sized.totalSqft)} sized  ·  clear ht ${pctx.facility.clearHeight || 0} ft`,
     12, 38,
@@ -1111,7 +1111,7 @@ function _drawPlanUnsafe(pctx) {
     const stepYPx = colY * pxPerFt;
     if (stepXPx >= minPxBetween && stepYPx >= minPxBetween) {
       ctx.save();
-      ctx.font = 'bold 9px Montserrat, sans-serif';
+      ctx.font = 'bold 9px Inter, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       // X-axis (letters along the top of the building)
@@ -1187,7 +1187,7 @@ function _drawPlanUnsafe(pctx) {
       const sqft = (wFt * hFt).toLocaleString();
       const text = `${wFt} × ${hFt} ft  ·  ${sqft} sf`;
       ctx.save();
-      ctx.font = 'bold 11px Montserrat, sans-serif';
+      ctx.font = 'bold 11px Inter, sans-serif';
       const padX = 8;
       const padY = 5;
       const metrics = ctx.measureText(text);
@@ -1366,7 +1366,7 @@ function drawDimensionLine(ctx, ax, ay, bx, by, dashed) {
   const labelX = midX + offX;
   const labelY = midY + offY;
   const labelText = `${distFt.toFixed(distFt < 10 ? 1 : 0)} ft`;
-  ctx.font = 'bold 11px Montserrat, sans-serif';
+  ctx.font = 'bold 11px Inter, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const textW = ctx.measureText(labelText).width;
@@ -1446,7 +1446,7 @@ function drawScaleBar(ctx, cw, ch, pxPerFt) {
   }
   // Tick labels — 0, 1×, 2×, 3×, 4×.
   ctx.fillStyle = '#1f2937';
-  ctx.font = '9px Montserrat, sans-serif';
+  ctx.font = '9px Inter, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   for (let i = 0; i <= 4; i++) {
@@ -1460,7 +1460,7 @@ function drawScaleBar(ctx, cw, ch, pxPerFt) {
   // Scale ratio text above the bar (e.g., "0 — 200 ft").
   ctx.textAlign = 'left';
   ctx.textBaseline = 'bottom';
-  ctx.font = '9px Montserrat, sans-serif';
+  ctx.font = '9px Inter, sans-serif';
   ctx.fillStyle = '#6b7280';
   ctx.fillText(`SCALE  0 — ${totalFt} ft`, x0, y0 - 1);
   ctx.restore();
@@ -1510,7 +1510,7 @@ function drawNorthArrow(ctx, cw, ch) {
   ctx.stroke();
   // "N" label below the arrow.
   ctx.fillStyle = '#1f2937';
-  ctx.font = 'bold 11px Montserrat, sans-serif';
+  ctx.font = 'bold 11px Inter, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.fillText('N', cx, cy + r + 3);

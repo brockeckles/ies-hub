@@ -27,12 +27,12 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260705-u3d';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260705-u1a';
-import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, applyToolCrumb } from '../../shared/tool-chrome.js?v=20260706-r1';
+import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, applyToolCrumb } from '../../shared/tool-chrome.js?v=20260710-r2';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
-import { icon } from '../../shared/icons.js?v=20260705-r1';
+import { icon } from '../../shared/icons.js?v=20260710-r2';
 import {
   OFP_MHE_OPTIONS as _OFP_MHE_OPTIONS,
   OFP_IT_OPTIONS as _OFP_IT_OPTIONS,
@@ -100,7 +100,7 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260705-r1';
+} from './operational-flow-render.js?v=20260710-r2';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
 import { computeHeaderKpis } from './header-kpis.js?v=20260704-ebr1';
@@ -11450,7 +11450,7 @@ function _launchToTool(target) {
       // state. Invisible to the cache-bust guard because the './tools/...'
       // path resolves module-relative in the scanner but page-relative at
       // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260706-r1',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260710-r2',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {

@@ -11,7 +11,7 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260705-u1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
-import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260706-r1';
+import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260710-r2';
 import * as calc from './calc.js?v=20260703-ux0';
 import * as api from './api.js?v=20260703-dc2';
 import * as cmApi from '../cost-model/api.js?v=20260704-cmp1';
@@ -21,14 +21,14 @@ import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { render3DView, disposeScene3d } from './ui-3d.js?v=20260705-u3b';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260705-u3a';
-import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260705-r1';
+import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260710-r2';
 import { renderDashboard } from './ui-dashboard.js?v=20260705-u3a';
-import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260705-r1';
+import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260710-r2';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
-import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260702-p1b';
+import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260710-r2';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
-import { wscExtraStyles } from './ui-styles.js?v=20260705-u3a';
-import { bindShellEvents } from './ui-shell-events.js?v=20260706-r1';
+import { wscExtraStyles } from './ui-styles.js?v=20260710-r2';
+import { bindShellEvents } from './ui-shell-events.js?v=20260710-r2';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================
@@ -988,7 +988,7 @@ function drawDimV(ctx, x, y1, y2, label) {
   ctx.beginPath(); ctx.moveTo(x - 4, y1); ctx.lineTo(x + 4, y1); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(x - 4, y2); ctx.lineTo(x + 4, y2); ctx.stroke();
   ctx.fillStyle = '#333';
-  ctx.font = '10px Montserrat';
+  ctx.font = '10px Inter, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(label, x + 8, (y1 + y2) / 2 + 4);
 }
@@ -1000,7 +1000,7 @@ function drawDimH(ctx, x1, x2, y, label) {
   ctx.beginPath(); ctx.moveTo(x1, y - 4); ctx.lineTo(x1, y + 4); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(x2, y - 4); ctx.lineTo(x2, y + 4); ctx.stroke();
   ctx.fillStyle = '#333';
-  ctx.font = '10px Montserrat';
+  ctx.font = '10px Inter, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText(label, (x1 + x2) / 2, y - 8);
 }

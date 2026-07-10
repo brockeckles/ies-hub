@@ -11,7 +11,7 @@ import * as api from './api.js?v=20260703-dc5';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260703-dc1';
-import { icon } from '../../shared/icons.js?v=20260705-r1';
+import { icon } from '../../shared/icons.js?v=20260710-r2';
 // UX-1 D1p2 (2026-07-03): the MSA merge — deal tabs reuse the Multi-Site
 // Analyzer's pure calc + site mapping instead of duplicating the math.
 import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260704-cmp1';
@@ -1137,11 +1137,11 @@ function renderDealWinStrategy() {
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
       <div class="hub-card u-p-4">
         <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Value Proposition</div>
-        <textarea data-strategy-field="valueProp" rows="4" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-family:Montserrat,sans-serif;font-size:13px;line-height:1.5;resize:vertical;">${escapeAttr(s.valueProp)}</textarea>
+        <textarea data-strategy-field="valueProp" rows="4" style="width:100%;padding:8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-family:var(--font-ui);font-size:13px;line-height:1.5;resize:vertical;">${escapeAttr(s.valueProp)}</textarea>
 
         <div style="font-size:13px;font-weight:700;margin:18px 0 10px;">Differentiators</div>
         <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--ies-gray-700);line-height:1.7;">
-          ${s.differentiators.map((x, i) => `<li><input type="text" data-strategy-list="differentiators" data-strategy-idx="${i}" value="${escapeAttr(x)}" style="width:100%;border:none;padding:2px 0;font-family:Montserrat,sans-serif;font-size:13px;background:transparent;"/></li>`).join('')}
+          ${s.differentiators.map((x, i) => `<li><input type="text" data-strategy-list="differentiators" data-strategy-idx="${i}" value="${escapeAttr(x)}" style="width:100%;border:none;padding:2px 0;font-family:var(--font-ui);font-size:13px;background:transparent;"/></li>`).join('')}
         </ul>
         <button class="hub-btn hub-btn-sm hub-btn-secondary" data-strategy-add="differentiators" style="font-size:11px;margin-top:6px;">+ Add differentiator</button>
       </div>
@@ -1150,7 +1150,7 @@ function renderDealWinStrategy() {
         <div class="hub-card u-p-4">
           <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--c-danger);">Risks</div>
           <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--ies-gray-700);line-height:1.7;">
-            ${s.risks.map((x, i) => `<li><input type="text" data-strategy-list="risks" data-strategy-idx="${i}" value="${escapeAttr(x)}" style="width:100%;border:none;padding:2px 0;font-family:Montserrat,sans-serif;font-size:13px;background:transparent;"/></li>`).join('')}
+            ${s.risks.map((x, i) => `<li><input type="text" data-strategy-list="risks" data-strategy-idx="${i}" value="${escapeAttr(x)}" style="width:100%;border:none;padding:2px 0;font-family:var(--font-ui);font-size:13px;background:transparent;"/></li>`).join('')}
           </ul>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" data-strategy-add="risks" style="font-size:11px;margin-top:6px;">+ Add risk</button>
         </div>
@@ -1158,14 +1158,14 @@ function renderDealWinStrategy() {
         <div class="hub-card u-p-4">
           <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--c-warn-strong);">Open Asks</div>
           <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--ies-gray-700);line-height:1.7;">
-            ${s.asks.map((x, i) => `<li><input type="text" data-strategy-list="asks" data-strategy-idx="${i}" value="${escapeAttr(x)}" style="width:100%;border:none;padding:2px 0;font-family:Montserrat,sans-serif;font-size:13px;background:transparent;"/></li>`).join('')}
+            ${s.asks.map((x, i) => `<li><input type="text" data-strategy-list="asks" data-strategy-idx="${i}" value="${escapeAttr(x)}" style="width:100%;border:none;padding:2px 0;font-family:var(--font-ui);font-size:13px;background:transparent;"/></li>`).join('')}
           </ul>
           <button class="hub-btn hub-btn-sm hub-btn-secondary" data-strategy-add="asks" style="font-size:11px;margin-top:6px;">+ Add ask</button>
         </div>
 
         <div class="hub-card u-p-4">
           <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Competitor Threats</div>
-          <input type="text" data-strategy-field="competitorThreats" value="${escapeAttr(s.competitorThreats)}" style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-family:Montserrat,sans-serif;font-size:13px;"/>
+          <input type="text" data-strategy-field="competitorThreats" value="${escapeAttr(s.competitorThreats)}" style="width:100%;padding:6px 8px;border:1px solid var(--ies-gray-200);border-radius:6px;font-family:var(--font-ui);font-size:13px;"/>
         </div>
       </div>
     </div>

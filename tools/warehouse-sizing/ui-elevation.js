@@ -126,7 +126,7 @@ export function drawElevation(ectx) {
     drawRackProfile(ctx, toX, toY, x + rackD + aisleW, rackD, levels, posH, elev.storageType);
     // Aisle label
     ctx.fillStyle = '#0047AB';
-    ctx.font = '10px Montserrat';
+    ctx.font = '10px Inter, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(`${aisleW}'`, toX(x + rackD + aisleW / 2), toY(0) + 14);
     x += moduleW + 2;
@@ -136,7 +136,7 @@ export function drawElevation(ectx) {
   ctx.fillStyle = '#999';
   ctx.fillRect(toX(-5), toY(0), toX(0) - toX(-5), toY(-4) - toY(0));
   ctx.fillStyle = '#333';
-  ctx.font = '10px Montserrat';
+  ctx.font = '10px Inter, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('Dock', toX(-2.5), toY(-2));
 
@@ -219,7 +219,7 @@ function drawShelvingBayDetail(ctx, w, h, sized) {
   const c = sized?.cartonProfile;
   if (!c) {
     ctx.fillStyle = '#9ca3af';
-    ctx.font = '13px Montserrat, sans-serif';
+    ctx.font = '13px Inter, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('Carton profile unavailable — fill in Step 2 (Unit Load & Carton).', w / 2, h / 2);
     return;
@@ -288,7 +288,7 @@ function drawShelvingBayDetail(ctx, w, h, sized) {
   const cartonW = cartonAlongRackFt * scale;  // along the bay run (orientation-aware)
   const cartonH = cartonHin * scale;  // vertical
   const deckThickFt = 0.04;
-  ctx.font = '9px Montserrat, sans-serif';
+  ctx.font = '9px Inter, sans-serif';
   for (let lvl = 0; lvl < levels; lvl++) {
     const yLevelFt = lvl * levelHeightFt;
     // Deck slab
@@ -324,7 +324,7 @@ function drawShelvingBayDetail(ctx, w, h, sized) {
   // Dimension lines + labels
   ctx.strokeStyle = '#666';
   ctx.lineWidth = 1;
-  ctx.font = '11px Montserrat, sans-serif';
+  ctx.font = '11px Inter, sans-serif';
   ctx.fillStyle = '#333';
   ctx.textAlign = 'center';
 
@@ -339,7 +339,7 @@ function drawShelvingBayDetail(ctx, w, h, sized) {
   // Right info panel
   const infoX = toX(bayWidthFt) + 100;
   const infoY = pad.t;
-  ctx.font = '10px Montserrat, sans-serif';
+  ctx.font = '10px Inter, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillStyle = '#6b7280';
   ctx.fillText('CARTON', infoX, infoY);

@@ -10,7 +10,7 @@ import * as calc from './calc.js?v=20260418-sK';
 import * as api from './api.js?v=20260430-fb1';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeHtml as _h, escapeAttr as _a } from '../../shared/escape.js?v=20260702-sec2';
-import { icon } from '../../shared/icons.js?v=20260705-r1';
+import { icon } from '../../shared/icons.js?v=20260710-r2';
 
 /** U4b: emoji-as-iconography -> shared icons (ui-layer map; calc.typeIcon untouched — engines frozen). */
 function _typeIcon(type, size = 14) {

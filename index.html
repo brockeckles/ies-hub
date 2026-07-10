@@ -5,10 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>IES Intelligence Hub</title>
 
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Fonts: self-hosted woff2 via css/hub.css @font-face (R0); Google Fonts link removed R2 -->
 
   <!-- CDN Libraries (shared — always loaded) -->
   <!-- SECURITY (Phase 0, 2026-07-02): versions PINNED to exact (no floating majors).
@@ -39,10 +36,10 @@
 
   <!-- Module Preloads (shared core) -->
   <link rel="modulepreload" href="./shared/event-bus.js?v=20260418-sK">
-  <link rel="modulepreload" href="./shared/router.js?v=20260706-r1">
+  <link rel="modulepreload" href="./shared/router.js?v=20260710-r2">
 
   <!-- Design System -->
-  <link rel="stylesheet" href="./css/hub.css?v=20260706-r1">
+  <link rel="stylesheet" href="./css/hub.css?v=20260710-r2">
 
   <!-- Feature flags — defaults ON for engines that have shipped past Phase 1 -->
   <script>
@@ -213,15 +210,15 @@
   <!-- App Bootstrap -->
   <script type="module">
     import { auth } from './shared/auth.js?v=20260705-u1a';
-    import { router } from './shared/router.js?v=20260706-r1';
-    import { search } from './shared/search.js?v=20260706-r1';
+    import { router } from './shared/router.js?v=20260710-r2';
+    import { search } from './shared/search.js?v=20260710-r2';
     import { bus } from './shared/event-bus.js?v=20260418-sK';
     // Shared UX modules — self-wire their listeners/guards on import.
     import { showToast } from './shared/toast.js?v=20260705-u1a';
     import './shared/error-net.js?v=20260703-net1';  // P3-2 global error net — keep first among side-effect imports
     import { mountFeedbackFab } from './shared/feedback-fab.js?v=20260430-btn-cleanup';
     import './shared/unsaved-guard.js?v=20260703-p34';
-    import { tour } from './shared/tour.js?v=20260705-u1a';
+    import { tour } from './shared/tour.js?v=20260710-r2';
     import { analytics } from './shared/analytics.js?v=20260504-auth1';
     import { openMfaGate } from './shared/mfa-ui.js?v=20260705-u1a';
     // Expose a couple of helpers for inline handlers + console debugging.
@@ -577,12 +574,12 @@
 
       // Design Tool sub-routes (lazy loaded)
       const toolRoutes = {
-        'designtools/cost-model': { title: 'Cost Model Builder', path: './tools/cost-model/ui.js?v=20260706-r1' },
-        'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260706-r1' },
-        'designtools/most-standards': { title: 'MOST Labor Standards', path: './tools/most-standards/ui.js?v=20260706-r1' },
-        'designtools/network-opt': { title: 'Network Optimization', path: './tools/network-opt/ui.js?v=20260706-r1' },
-        'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260706-r1' },
-        'designtools/center-of-gravity': { title: 'Center of Gravity', path: './tools/center-of-gravity/ui.js?v=20260706-r1' },
+        'designtools/cost-model': { title: 'Cost Model Builder', path: './tools/cost-model/ui.js?v=20260710-r2' },
+        'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260710-r2' },
+        'designtools/most-standards': { title: 'MOST Labor Standards', path: './tools/most-standards/ui.js?v=20260710-r2' },
+        'designtools/network-opt': { title: 'Network Optimization', path: './tools/network-opt/ui.js?v=20260710-r2' },
+        'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260710-r2' },
+        'designtools/center-of-gravity': { title: 'Center of Gravity', path: './tools/center-of-gravity/ui.js?v=20260710-r2' },
       };
 
       for (const [route, config] of Object.entries(toolRoutes)) {
@@ -596,9 +593,9 @@
       const hubRoutes = {
         'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260705-u3e' },
         'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260705-u3e' },
-        'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260705-r1' },
-        'admin': { title: 'Admin', path: './hub/admin/ui.js?v=20260705-r1' },
-        'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260705-r1' },
+        'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260710-r2' },
+        'admin': { title: 'Admin', path: './hub/admin/ui.js?v=20260710-r2' },
+        'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260710-r2' },
       };
 
       for (const [route, config] of Object.entries(hubRoutes)) {
@@ -867,7 +864,7 @@
               padding:3px 9px;border-radius:999px;
               background:rgba(255,255,255,0.82);color:#475569;
               border:1px solid rgba(148,163,184,0.35);
-              font-family:'Montserrat',-apple-system,sans-serif;
+              font-family:var(--font-ui);
               font-size:10px;font-weight:500;letter-spacing:0.02em;
               line-height:1;pointer-events:auto;cursor:default;
               backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);">

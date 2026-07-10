@@ -9,7 +9,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260706-r1';
+import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260710-r2';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean, listDirty as guardListDirty } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
@@ -595,7 +595,7 @@ function _mostExtraStyles() {
         padding: 8px 12px;
         border: 1px solid var(--ies-gray-200);
         border-radius: 10px;
-        font-family: Montserrat, sans-serif;
+        font-family: var(--font-ui);
         font-size: 13px;
         font-weight: 600;
       }
@@ -662,7 +662,7 @@ function _mostExtraStyles() {
         color: var(--ies-gray-500);
         font-size: 12px;
         font-weight: 600;
-        font-family: Montserrat, sans-serif;
+        font-family: var(--font-ui);
         cursor: pointer;
         border-radius: 4px;
         transition: all 0.15s ease;
@@ -720,7 +720,7 @@ function _mostExtraStyles() {
         border: 1px solid transparent;
         border-radius: 10px;
         color: var(--ies-gray-500);
-        font-family: Montserrat, sans-serif;
+        font-family: var(--font-ui);
         font-size: 11px;
         font-weight: 600;
         cursor: pointer;
