@@ -5030,8 +5030,8 @@ async function openPptxExport() {
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
     const customerName = (config.customerName || '').trim();
-    const industryLabel = (calc.INDUSTRY_OPTIONS.find(o => o.value === config.industry) || {}).label || '';
-    const stageLabel = (calc.DEAL_STAGES.find(o => o.value === config.dealStage) || {}).label || '';
+    const industryLabel = (calc.INDUSTRY_OPTIONS.find(o => o.value && o.value === config.industry) || {}).label || '';
+    const stageLabel = (calc.DEAL_STAGES.find(o => o.value && o.value === config.dealStage) || {}).label || '';
     const scenName = _scenarioName || 'Untitled scenario';
     pres.title = `COG ${customerName ? customerName + ' — ' : ''}${dateStr}`;
 
@@ -5485,7 +5485,7 @@ function openPrintView() {
     totalTruckMiles: cogResult.totalTruckMiles ?? 0,
   };
   const today = new Date().toISOString().split('T')[0];
-  const ctxParts = [config.customerName, (calc.INDUSTRY_OPTIONS.find(o => o.value === config.industry) || {}).label, (calc.DEAL_STAGES.find(o => o.value === config.dealStage) || {}).label].filter(Boolean);
+  const ctxParts = [config.customerName, config.industry ? (calc.INDUSTRY_OPTIONS.find(o => o.value === config.industry) || {}).label : null, config.dealStage ? (calc.DEAL_STAGES.find(o => o.value === config.dealStage) || {}).label : null].filter(Boolean);
   const ctxLine = ctxParts.length ? ctxParts.join(' · ') : 'Untitled scenario';
   const scenarioName = _scenarioName || '(unsaved)';
   const fmtMoney = (v) => '$' + (v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
