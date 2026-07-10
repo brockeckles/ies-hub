@@ -15,6 +15,9 @@
  * @module tools/warehouse-sizing/basis-doc
  */
 
+import { printFontCss, FONT_UI, FONT_DISPLAY, FONT_MONO } from '../../shared/print-fonts.js?v=20260710-r3';
+import { icon } from '../../shared/icons.js?v=20260710-r2';
+
 const fmt = (n, d = 0) => n == null || !Number.isFinite(Number(n)) ? '—'
   : Number(n).toLocaleString(undefined, { maximumFractionDigits: d });
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -273,7 +276,7 @@ export function renderDesignBasisHtml(model) {
     }
     if (s.gaps) {
       body = (s.gaps.length ? `<table class="grid"><tr><th></th><th>Origin</th><th>Finding</th></tr>${s.gaps.map(g =>
-        `<tr class="${g.severity === 'warn' || g.severity === 'error' ? 'warn' : ''}"><td>${g.severity === 'error' ? '⛔' : g.severity === 'warn' ? '⚠' : 'ℹ'}</td><td>${esc(g.origin)}</td><td>${esc(g.message)}</td></tr>`).join('')}</table>`
+        `<tr class="${g.severity === 'warn' || g.severity === 'error' ? 'warn' : ''}"><td style="color:${g.severity === 'error' ? '#b42318' : g.severity === 'warn' ? '#b54708' : '#667085'};">${icon(g.severity === 'error' ? 'warn' : g.severity === 'warn' ? 'warn' : 'info', { size: 12 })}</td><td>${esc(g.origin)}</td><td>${esc(g.message)}</td></tr>`).join('')}</table>`
         : '<p class="note">No open gaps — fully derived basis.</p>')
         + `<p class="note"><b>Exclusions:</b></p><ul>${s.exclusions.map(e => `<li>${esc(e)}</li>`).join('')}</ul>`;
     }
@@ -283,9 +286,10 @@ export function renderDesignBasisHtml(model) {
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${esc(model.title)}</title>
 <style>
-  body { font: 12px/1.45 'Segoe UI', Arial, sans-serif; color: #1f2430; margin: 40px 48px; }
-  h1 { font-size: 21px; margin: 0 0 2px; } .sub { color: #667085; font-size: 11px; margin-bottom: 18px; }
-  h2 { font-size: 13px; border-bottom: 2px solid #1f2430; padding-bottom: 3px; margin: 22px 0 8px; }
+  ${printFontCss()}
+  body { font: 12px/1.45 ${FONT_UI}; color: #1f2430; margin: 40px 48px; }
+  h1 { font-family: ${FONT_DISPLAY}; font-size: 22px; letter-spacing: -0.015em; margin: 0 0 2px; } .sub { color: #667085; font-size: 11px; margin-bottom: 18px; }
+  h2 { font-family: ${FONT_DISPLAY}; font-size: 14px; letter-spacing: -0.01em; border-bottom: 2px solid #1f2430; padding-bottom: 3px; margin: 22px 0 8px; }
   table { border-collapse: collapse; width: 100%; font-size: 11px; }
   .kv td { padding: 3px 8px 3px 0; vertical-align: top; } .kv .k { font-weight: 600; width: 220px; color: #475069; }
   .grid th { text-align: left; background: #f2f4f7; padding: 4px 8px; border: 1px solid #d8dde6; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }

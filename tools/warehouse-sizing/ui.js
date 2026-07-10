@@ -23,7 +23,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260705-u3a';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260710-r2';
 import { renderDashboard } from './ui-dashboard.js?v=20260705-u3a';
-import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260710-r2';
+import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260710-r3';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260710-r2';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';

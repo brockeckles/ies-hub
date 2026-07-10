@@ -109,6 +109,11 @@ const fix = {
   t('html escapes + no undefined/NaN', !html.includes('undefined') && !html.includes('NaN'));
   t('html includes media rationale row', html.includes('↳ r'));
   t('html traceability strapline', html.includes('every value traces'));
+  // R3 (2026-07-10): print surfaces carry the Editorial type system inline
+  t('html inlines 6 @font-face rules (popup does not inherit hub.css)', (html.match(/@font-face/g) || []).length === 6);
+  t('html body uses Inter stack', /body \{ font: 12px\/1\.45 'Inter'/.test(html));
+  t('html headings use Source Serif 4', html.includes("h1 { font-family: 'Source Serif 4'"));
+  t('html gap severity uses icon svg not emoji', !html.includes('⛔') && !html.includes('\u26D4'));
 }
 
 console.log(`\ntest-wsc-basis-doc: ${pass} passed, ${fail} failed.`);

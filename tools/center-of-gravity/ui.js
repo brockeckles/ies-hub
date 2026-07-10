@@ -11,6 +11,7 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202607
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260710-r2';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
+import { printFontCss, FONT_UI, FONT_DISPLAY } from '../../shared/print-fonts.js?v=20260710-r3';
 import { downloadCSV } from '../../shared/export.js?v=20260702-p1m1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import * as calc from './calc.js?v=20260704-ux2c';
@@ -5497,11 +5498,12 @@ function openPrintView() {
 <html><head><meta charset="utf-8"/>
 <title>COG Analysis — ${scenarioName.replace(/</g, '&lt;')} — ${today}</title>
 <style>
+  ${printFontCss()}
   @page { size: letter portrait; margin: 0.5in; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #0a1628; background: #fff; margin: 0; padding: 0; font-size: 12px; line-height: 1.4; }
+  body { font-family: ${FONT_UI}; color: #0a1628; background: #fff; margin: 0; padding: 0; font-size: 12px; line-height: 1.4; }
   .doc { max-width: 7.5in; margin: 0 auto; padding: 16px 0; }
-  h1 { font-size: 20px; margin: 0 0 4px; color: #0a1628; }
-  h2 { font-size: 14px; margin: 18px 0 8px; color: #0a1628; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
+  h1 { font-family: ${FONT_DISPLAY}; font-size: 21px; letter-spacing: -0.015em; margin: 0 0 4px; color: #0a1628; }
+  h2 { font-family: ${FONT_DISPLAY}; font-size: 15px; letter-spacing: -0.01em; margin: 18px 0 8px; color: #0a1628; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
   .meta { color: #475569; font-size: 11px; margin-bottom: 16px; }
   .kpi-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 16px; background: linear-gradient(135deg, #0a1628, #0d1f3c); color: #fff; padding: 12px 16px; border-radius: 6px; }
   .kpi { font-size: 11px; }

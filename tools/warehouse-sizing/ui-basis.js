@@ -25,7 +25,7 @@ import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { selectMedia } from './media-calc.js?v=20260704-n3a';
 import { computeDynamics } from './dynamics-calc.js?v=20260705-mhe1';
 import { synthesizeLayout } from './layout-calc.js?v=20260705-mhe1';
-import { buildDesignBasisModel, renderDesignBasisHtml } from './basis-doc.js?v=20260705-mhe1';
+import { buildDesignBasisModel, renderDesignBasisHtml } from './basis-doc.js?v=20260710-r3';
 
 // ── Module state (session-scoped; raw rows never persisted) ──
 /** Parsed datasets awaiting/backing the profile. */
