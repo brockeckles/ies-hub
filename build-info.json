@@ -1,8 +1,8 @@
 {
-  "tag": "2026.07.10-878b41e",
-  "sha": "878b41e",
-  "shaFull": "878b41e2f60cff02be38f8b08a78acc639d9ed32",
+  "tag": "2026.07.10-78bb635",
+  "sha": "78bb635",
+  "shaFull": "78bb6357faf09d5940c86929f3a2f1a66ca3af57",
   "date": "2026-07-10",
-  "timestamp": "2026-07-10T16:29:32Z",
-  "builtBy": "browser-relay@claude"
+  "timestamp": "2026-07-10T20:34:48Z",
+  "builtBy": "kind-stoic-cray@claude"
 }
