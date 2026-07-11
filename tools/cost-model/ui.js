@@ -33,6 +33,7 @@ import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
+import { computeAll } from './compute-all.js?v=20260710-m2';
 import {
   OFP_MHE_OPTIONS as _OFP_MHE_OPTIONS,
   OFP_IT_OPTIONS as _OFP_IT_OPTIONS,
@@ -103,7 +104,7 @@ import {
 } from './operational-flow-render.js?v=20260710-r2';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260704-ebr1';
+import { computeHeaderKpis } from './header-kpis.js?v=20260710-m2';
 import { computeWhatIfPreview } from './what-if-preview.js?v=20260704-ebr1';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
@@ -5612,46 +5613,12 @@ function renderMonthlyLaborViewCard() {
   const lines = model.laborLines || [];
   if (lines.length === 0) return '';
   const shifts = model.shifts || {};
-  const annualOpHours = calc.operatingHours(shifts);
   const shiftsPerDay = Math.max(1, Math.floor(shifts.shiftsPerDay || 1));
-  const contractYears = model.projectDetails?.contractTerm || 5;
-  const fin = model.financial || {};
-  const allPeriods = (refData?.periods || []).filter(p =>
-    p.period_type === 'month' && p.period_index >= 0 && p.period_index < contractYears * 12
-  );
-  // Fallback: if periods table hasn't loaded yet, synthesize a simple axis
-  // so the card renders with best-effort seasonality + growth.
-  const periods = allPeriods.length > 0 ? allPeriods : (() => {
-    const go = new Date(model.projectDetails?.goLiveDate || '2026-01-01');
-    const out = [];
-    for (let i = 0; i < contractYears * 12; i++) {
-      const d = new Date(go.getFullYear(), go.getMonth() + i, 1);
-      out.push({
-        id: i, period_type: 'month', period_index: i,
-        calendar_year: d.getFullYear(), calendar_month: d.getMonth() + 1,
-        label: `M${i + 1}`, is_pre_go_live: false,
-      });
-    }
-    return out;
-  })();
-
-  const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
-    currentScenario, currentScenarioSnapshots, heuristicOverrides, _heurProjectFallbacks(model), whatIfTransient,
-  ), model);
-  const view = monthlyCalc.computeMonthlyLaborView({
-    laborLines: lines,
-    periods,
-    annualOpHours,
-    shiftsPerDay,
-    calcHeur,
-    marketLaborProfile: currentMarketLaborProfile || null,
-    ramp: null,
-    seasonality: model.seasonalityProfile || null,
-    volGrowthPct: calcHeur?.volGrowthPct || 0,
-    indirectGenerator: calc.autoGenerateIndirectLabor,
-    state: model,
-  });
-
+  // M2 (2026-07-10) — MLV comes from the shared recompute seam (memoized,
+  // indirect-generator variant). Periods synthesis + calcHeur resolution
+  // moved to compute-all.js getMlv().
+  const view = computeAll(_computeCtx()).getMlv(true);
+  if (!view) return '';
   const { summary, months } = view;
   const { direct, byMhe, byIt, indirect } = summary;
 
@@ -6882,41 +6849,10 @@ function syncSeasonalFlex() {
  */
 function _tryComputeMlvForEquipment() {
   try {
-    const lines = model.laborLines || [];
-    if (!lines.length) return null;
-    const shifts = model.shifts || {};
-    const annualOpHours = calc.operatingHours(shifts);
-    const shiftsPerDay = Math.max(1, Math.floor(shifts.shiftsPerDay || 1));
-    const contractYears = model.projectDetails?.contractTerm || 5;
-    const fin = model.financial || {};
-    let periods = (refData?.periods || []).filter(p =>
-      p.period_type === 'month' && p.period_index >= 0 && p.period_index < contractYears * 12
-    );
-    if (periods.length === 0) {
-      // Synthesize a simple axis if ref_periods hasn't loaded
-      const go = new Date(model.projectDetails?.goLiveDate || '2026-01-01');
-      periods = [];
-      for (let i = 0; i < contractYears * 12; i++) {
-        const d = new Date(go.getFullYear(), go.getMonth() + i, 1);
-        periods.push({
-          id: i, period_type: 'month', period_index: i,
-          calendar_year: d.getFullYear(), calendar_month: d.getMonth() + 1,
-          label: `M${i + 1}`, is_pre_go_live: false,
-        });
-      }
-    }
-    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
-      currentScenario, currentScenarioSnapshots, heuristicOverrides, _heurProjectFallbacks(model), whatIfTransient,
-    ), model);
-    return monthlyCalc.computeMonthlyLaborView({
-      laborLines: lines,
-      periods, annualOpHours, shiftsPerDay,
-      calcHeur,
-      marketLaborProfile: currentMarketLaborProfile || null,
-      ramp: null,
-      seasonality: model.seasonalityProfile || null,
-      volGrowthPct: calcHeur?.volGrowthPct || 0,
-    });
+    if (!(model.laborLines || []).length) return null;
+    // M2 (2026-07-10) — shared recompute seam, no-indirect variant (the
+    // equipment overflow probe never ran the indirect auto-generator).
+    return computeAll(_computeCtx()).getMlv(false);
   } catch (e) {
     console.warn('[CM] MLV build failed for equipment overflow:', e);
     return null;
@@ -8032,80 +7968,38 @@ function renderBucketAssignments(buckets) {
   `;
 }
 
+/** M2 recompute seam (2026-07-10) — bag of the module-scope state
+ *  compute-all.js reads. regenSiblingProjections' model-swap pattern keeps
+ *  working: the bag is rebuilt from the (swapped) module vars on each call. */
+function _computeCtx() {
+  return {
+    model, refData,
+    currentScenario, currentScenarioSnapshots,
+    heuristicOverrides, whatIfTransient, currentMarketLaborProfile,
+  };
+}
+
 function renderSummary() {
-  const market = model.projectDetails?.market;
-  const fr = (refData.facilityRates || []).find(r => r.market_id === market);
-  const ur = (refData.utilityRates || []).find(r => r.market_id === market);
-  const opHrs = calc.operatingHours(model.shifts || {});
-  const outboundStar = (model.volumeLines || []).find(v => v.isOutboundPrimary);
-  const orders = outboundStar?.volume || 0;
-  // Human-readable UOM label for KPI tile ("Order" / "Each" / "Case" / "Unit").
-  // Derived from the starred volume line's UOM so the tile re-labels when the
-  // user changes the outbound-primary star on Volumes & Profile.
-  const outboundUomLabel = formatUomSingular(outboundStar?.uom);
-  const contractYears = model.projectDetails?.contractTerm || 5;
-  const fin = model.financial || {};
-
-  // Phase 3 close-the-loop: resolve heuristics through the
-  //   transient (Phase 5b) → approved-snapshot → override → project-column
-  // chain so approved scenarios re-run against their FROZEN values and
-  // the What-If Studio can preview-override without persisting.
-  // P1-2 (2026-07-02 assessment): resolved BEFORE computeSummary now — the
-  // annual pricing path needs the same labor drivers (market temp premium,
-  // OT/absence, temp-share What-If) the monthly expense engine reads, so
-  // priced labor recovers the dollars the P&L books.
-  const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
-    currentScenario,
-    currentScenarioSnapshots,
-    heuristicOverrides,
-    _heurProjectFallbacks(model),
-    whatIfTransient,
-  ), model);
-  const laborOpts = scenarios.resolveSummaryLaborOpts({
-    calcHeur, marketLaborProfile: currentMarketLaborProfile,
-  });
-
-  const summary = calc.computeSummary({
-    laborLines: model.laborLines || [],
-    indirectLaborLines: model.indirectLaborLines || [],
-    equipmentLines: model.equipmentLines || [],
-    overheadLines: model.overheadLines || [],
-    vasLines: model.vasLines || [],
-    startupLines: model.startupLines || [],
-    facility: model.facility || {},
-    shifts: model.shifts || {},
-    facilityRate: fr,
-    utilityRate: ur,
-    contractYears,
-    targetMarginPct: fin.targetMargin || 0,
-    annualOrders: orders || 1,
-    laborOpts, // P1-2: price labor on the monthly engine's basis
-  });
-
-  // Build multi-year projections
-  const marginFrac = (calcHeur.targetMarginPct || 0) / 100;
-
-  // I-02 FIX — derive missing bucket rates from assigned costs so new
-  // models don't render $0 revenue until someone hand-wires bucket.rate.
-  // I-01 FIX — also capture unassigned-cost rollup for the Summary banner.
-  const pricingSnapshot = calc.computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears, laborOpts });
+  // M2 (2026-07-10) — single recompute seam. The heuristics -> summary ->
+  // pricing -> projections pipeline that lived here verbatim now runs in
+  // compute-all.js (content-memoized); this render consumes the result.
+  // All prior alignment notes (P1-2 labor basis, I-01/I-02 bucket
+  // enrichment, Phase-2a shared params builder) live in that module.
+  const c = computeAll(_computeCtx());
+  const { market, fr, ur, opHrs, outboundStar, orders, outboundUomLabel,
+          contractYears, fin, calcHeur, laborOpts, marginFrac, summary,
+          pricingSnapshot, projections } = c;
   const enrichedPricingBuckets = pricingSnapshot.buckets;
   const unassignedCost = pricingSnapshot.bucketCosts['_unassigned'] || 0;
   const unassignedCount = pricingSnapshot.unassignedCount;
-  // Phase 2a (2026-06-10): params assembled by the single shared builder —
-  // the four hand-rolled ~40-key bags were the active drift mechanism
-  // (assessment findings #10/#11). Per-surface differences go in overrides.
-  const projResult = calc.buildYearlyProjections(scenarios.buildProjectionParams({
-    model, summary, calcHeur, contractYears, orders, refData,
-    pricingBuckets: enrichedPricingBuckets, // I-02: derived rates when unset
-    marketLaborProfile: currentMarketLaborProfile,
-  }));
   _lastCalcHeuristics = calcHeur; // for the frozen-banner in Summary/Timeline
   // CM-PROV-1 — stash the inputs the cell-inspector panel needs to explain
   // any P&L cell. Refreshed every Summary render so heuristic / what-if
-  // changes flow through immediately.
+  // changes flow through immediately. _source tag marks this ctx as
+  // Summary-page-authoritative so refreshHeaderKpis does not overwrite it
+  // with the lighter KPI ctx.
   _lastProvenanceContext = {
-    projections: [], // populated below once `projections` is in scope
+    projections,
     summary,
     calcHeur,
     marginFrac,
@@ -8113,19 +8007,12 @@ function renderSummary() {
     baseOrders: orders || 1,
     computedAt: new Date().toISOString(),
     // Phase 5.1 — per-channel lineage feeds the inspector's "By channel"
-    // sub-rows for volume-driven cells (orders, revenue, labor, vas, ΔWC).
-    channelLineage: channelCalc.buildChannelLineage(model),
-    // Phase 5.2 — kpi extras (costPerUnit, npv, payback, etc.) are
-    // refreshed by computeHeaderKpis on every strip render. _source tag
-    // marks this ctx as Summary-page-authoritative so refreshHeaderKpis
-    // does not overwrite it with the lighter KPI ctx.
+    // sub-rows for volume-driven cells (orders, revenue, labor, vas, dWC).
+    channelLineage: c.channelLineage,
     _source: 'summary',
   };
   // Stash the monthly bundle for save-time persistence
-  if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;
-  const projections = projResult.projections || [];
-  // CM-PROV-1 — finish wiring the provenance ctx now that projections exist.
-  if (_lastProvenanceContext) _lastProvenanceContext.projections = projections;
+  if (c.monthlyBundle) _lastMonthlyBundle = c.monthlyBundle;
   // Cache for cross-section reads (M3 banner on Pricing page reads Y1 margin
   // from this to surface ramp-adjusted actual alongside reference-basis).
   _lastProjections = projections;
@@ -8139,7 +8026,7 @@ function renderSummary() {
   // calcHeur.discountRatePct/reinvestRatePct (full override→snapshot→project
   // chain). This site previously read fin.discountRate||10, ignoring
   // heuristic overrides — the F3-class drift the suite claims to lock.
-  const metrics = calc.computeFinancialMetrics(projections, scenarios.buildMetricsOpts({ summary, calcHeur }));
+  const metrics = c.metrics;
 
   // Sensitivity data — use Year-1 projection as the base so the driver deltas
   // tie out to the P&L the user is looking at. Previously we used
@@ -12600,55 +12487,14 @@ function ensureMonthlyBundle() {
   if (_lastMonthlyBundle) return _lastMonthlyBundle;
   if (!model) return null;
   try {
-    const market = model.projectDetails?.market;
-    const fr = (refData.facilityRates || []).find(r => r.market_id === market);
-    const ur = (refData.utilityRates || []).find(r => r.market_id === market);
-    const opHrs = calc.operatingHours(model.shifts || {});
-    const orders = (model.volumeLines || []).find(v => v.isOutboundPrimary)?.volume || 0;
-    const contractYears = model.projectDetails?.contractTerm || 5;
-    const fin = model.financial || {};
-    // P1-2 (2026-07-02 assessment): calcHeur resolved before computeSummary
-    // so the shared laborOpts bag prices labor on the monthly engine's basis
-    // (mirrors renderSummary — the two must agree or persisted monthly facts
-    // drift from the Summary P&L).
-    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
-      currentScenario,
-      currentScenarioSnapshots,
-      heuristicOverrides,
-      _heurProjectFallbacks(model),
-      whatIfTransient,
-    ), model);
-    const laborOpts = scenarios.resolveSummaryLaborOpts({
-      calcHeur, marketLaborProfile: currentMarketLaborProfile,
-    });
-    const summary = calc.computeSummary({
-      laborLines: model.laborLines || [],
-      indirectLaborLines: model.indirectLaborLines || [],
-      equipmentLines: model.equipmentLines || [],
-      overheadLines: model.overheadLines || [],
-      vasLines: model.vasLines || [],
-      startupLines: model.startupLines || [],
-      facility: model.facility || {},
-      shifts: model.shifts || {},
-      facilityRate: fr,
-      utilityRate: ur,
-      contractYears,
-      targetMarginPct: fin.targetMargin || 0,
-      annualOrders: orders || 1,
-      laborOpts,
-    });
-    const emBMarginFrac = (calcHeur.targetMarginPct || 0) / 100;
-    // Phase 2a (2026-06-10): shared builder. This site previously OMITTED
-    // the SG&A overlay — persisted monthly facts disagreed with Summary on
-    // overlay projects. The builder includes it unconditionally now.
-    const projResult = calc.buildYearlyProjections(scenarios.buildProjectionParams({
-      model, summary, calcHeur, contractYears, orders, refData,
-      pricingBuckets: buildEnrichedPricingBuckets(summary, emBMarginFrac, opHrs, contractYears, laborOpts),
-      marketLaborProfile: currentMarketLaborProfile,
-    }));
-    if (projResult && projResult.monthlyBundle) _lastMonthlyBundle = projResult.monthlyBundle;
-    if (projResult && projResult.projections) _lastProjections = projResult.projections;
-    if (calcHeur) _lastCalcHeuristics = calcHeur;
+    // M2 (2026-07-10) — consume the shared recompute seam. This block was a
+    // verbatim copy of renderSummary's pipeline (P1-2: the two MUST agree or
+    // persisted monthly facts drift from the Summary P&L — that agreement is
+    // now structural).
+    const c = computeAll(_computeCtx());
+    if (c.monthlyBundle) _lastMonthlyBundle = c.monthlyBundle;
+    if (c.projections) _lastProjections = c.projections;
+    if (c.calcHeur) _lastCalcHeuristics = c.calcHeur;
     return _lastMonthlyBundle;
   } catch (err) {
     console.warn('[CM] ensureMonthlyBundle failed:', err);

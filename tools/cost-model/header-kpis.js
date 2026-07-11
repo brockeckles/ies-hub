@@ -21,6 +21,7 @@ import * as calc from './calc.js?v=20260704-ebr1';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
+import { computeAll } from './compute-all.js?v=20260710-m2';
 
 /**
  * @param {Object} opts
@@ -88,61 +89,14 @@ export function computeHeaderKpis({
       };
     }
 
-    // 2026-04-30 (F3) — align with renderSummary's projection inputs so the
-    // chrome KPI strip's NPV/Revenue tie to the Summary section's tiles.
-    // Prior version called buildYearlyProjections with raw model.financial
-    // and unenriched pricingBuckets; the I-02 fix that derives missing
-    // bucket rates from assigned costs only ran inside renderSummary, so
-    // chrome strip Y1 Revenue read $0 on every saved model.
-    // P1-2 (2026-07-02 assessment): calcHeur now resolved BEFORE
-    // computeSummary so the strip prices labor with the same
-    // resolveSummaryLaborOpts bag renderSummary uses (market temp premium /
-    // OT / absence / temp-share What-If) — the two surfaces must agree.
-    const opHrs = calc.operatingHours(model.shifts || {});
-    const calcHeur = applySplitMonthBilling(scenarios.resolveCalcHeuristics(
-      currentScenario,
-      currentScenarioSnapshots,
-      heuristicOverrides,
-      _heurProjectFallbacks(model),
-      whatIfTransient,
-    ), model);
-    const laborOpts = scenarios.resolveSummaryLaborOpts({
-      calcHeur, marketLaborProfile: currentMarketLaborProfile,
-    });
-
-    const summary = calc.computeSummary({
-      laborLines: model.laborLines || [],
-      indirectLaborLines: model.indirectLaborLines || [],
-      equipmentLines: model.equipmentLines || [],
-      overheadLines: model.overheadLines || [],
-      vasLines: model.vasLines || [],
-      startupLines: model.startupLines || [],
-      facility: model.facility || {},
-      shifts: model.shifts || {},
-      facilityRate: fr,
-      utilityRate: ur,
-      contractYears,
-      targetMarginPct: fin.targetMargin || 0,
-      annualOrders: orders,
-      laborOpts,
-    });
-
-    const marginFrac = (calcHeur.targetMarginPct || 0) / 100;
-    const pricingSnapshot = calc.computePricingSnapshot({ model, summary, marginFrac, opHrs, contractYears, laborOpts });
-    const enrichedPricingBuckets = pricingSnapshot.buckets;
-
-    // Phase 2a (2026-06-10): shared builder (see calc.scenarios.js).
-    const projResult = calc.buildYearlyProjections(scenarios.buildProjectionParams({
-      model, summary, calcHeur, contractYears, orders, refData,
-      pricingBuckets: enrichedPricingBuckets,
-      marketLaborProfile: currentMarketLaborProfile,
-    }));
-    const projections = (projResult && projResult.projections) || [];
+    // M2 (2026-07-10) — consume the shared recompute seam. This was the
+    // third verbatim copy of the summary pipeline; the F3 (enriched-bucket)
+    // and P1-2 (labor-basis) alignment it accumulated is now structural —
+    // compute-all.js IS renderSummary's pipeline. `scenarios` opts param
+    // retained for signature compat; the seam imports the module itself.
+    const c = computeAll({ model, refData, currentScenario, currentScenarioSnapshots, heuristicOverrides, whatIfTransient, currentMarketLaborProfile });
+    const { summary, marginFrac, projections, metrics } = c;
     const y1 = projections[0] || null;
-    // Phase 2a (2026-06-10): buildMetricsOpts — previously read the
-    // NONEXISTENT calcHeur.discountRate (vs .discountRatePct), silently
-    // falling back to fin.discountRate ?? 10 and ignoring heuristics.
-    const metrics = calc.computeFinancialMetrics(projections, scenarios.buildMetricsOpts({ summary, calcHeur }));
 
     const costPerUnit = summary.costPerOrder || 0;
     // 2026-04-30 (F3) — fall back to summary.totalRevenue when the projection
@@ -175,7 +129,7 @@ export function computeHeaderKpis({
       contractYears,
       baseOrders: orders || 1,
       computedAt: new Date().toISOString(),
-      channelLineage: channelCalc.buildChannelLineage(model),
+      channelLineage: c.channelLineage,
       // KPI-specific extras
       kpi: {
         costPerUnit,
