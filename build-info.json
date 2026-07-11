@@ -1,8 +1,8 @@
 {
-  "tag": "2026.07.11-d9370ff",
-  "sha": "d9370ff",
-  "shaFull": "d9370ff163f441c43af7b553eb2b20d093878773",
+  "tag": "2026.07.11-2d2a73a",
+  "sha": "2d2a73a",
+  "shaFull": "2d2a73a65c223b7d3bbed887042366e1088c97a6",
   "date": "2026-07-11",
-  "timestamp": "2026-07-11T00:34:55Z",
-  "builtBy": "kind-stoic-cray@claude"
+  "timestamp": "2026-07-11T01:04:29Z",
+  "builtBy": "optimistic-upbeat-shannon@claude"
 }
