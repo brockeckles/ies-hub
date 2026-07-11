@@ -34,6 +34,7 @@ import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { computeAll } from './compute-all.js?v=20260710-m2';
+import * as shellD from './shell-d.js?v=20260710-m3';
 import {
   OFP_MHE_OPTIONS as _OFP_MHE_OPTIONS,
   OFP_IT_OPTIONS as _OFP_IT_OPTIONS,
@@ -198,11 +199,93 @@ let rootEl = null;
  *  this file now resolve to this wrapper (it shadows the state.js import). */
 function resetDirty() { _stateResetDirty(); guardMarkClean('cost-model'); }
 
+// ── M3 — Concept D shell (opt-in, tier-service-pattern flag) ─────────────
+// Classic chrome stays the default. The D shell only applies to the
+// Engineering-tier editor; the Quick tier keeps its 6-step spine chrome.
+let _dScenarioFamily = [];            // scenario tabs data (fetched on load)
+const _dLastVisited = {};             // stationKey -> last section visited
+
+function _useDShell() {
+  return viewMode === 'editor'
+    && shellD.getShellPref() === 'd'
+    && !_isStdKey(activeSection);
+}
+
+/** Assemble the opts bag shell-d.js renders from (chrome opts + summaries). */
+function _buildDShellOpts() {
+  const chrome = _buildCmChromeOpts();
+  const pd = model?.projectDetails || {};
+  let subs = {}, completeness = { complete: 0, total: SECTIONS.length };
+  try {
+    const c = computeAll(_computeCtx());
+    const marketName = (refData?.markets || []).find(m => m.id === pd.market)?.city || pd.market || '';
+    const fmtM = (v) => Number.isFinite(v) && v > 0 ? (v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : Math.round(v / 1e3) + 'K') : null;
+    subs = {
+      deal: [pd.clientName, marketName, (pd.contractTerm || 5) + ' yr'].filter(Boolean).join(' - '),
+      volume: (fmtM(c.orders) ? fmtM(c.orders) + ' ' + (c.outboundUomLabel || 'unit').toLowerCase() + 's/yr' : 'no volumes yet'),
+      operation: (model?.laborLines || []).length + ' labor lines - ' + (c.summary.totalFtes || 0).toFixed(0) + ' FTE',
+      economics: (fmtM(c.summary.totalCost) ? '$' + fmtM(c.summary.totalCost) + ' cost/yr' : 'no costs yet'),
+      price: (model?.pricingBuckets || []).length + ' buckets - ' + (Number(model?.financial?.targetMargin) || 0) + '% target',
+    };
+  } catch (_) { /* chrome must render even if the seam throws */ }
+  try {
+    let done = 0;
+    for (const s of SECTIONS) if (_sectionCompleteness(s.key) === 'complete') done++;
+    completeness = { complete: done, total: SECTIONS.length };
+  } catch (_) {}
+  return {
+    chrome,
+    modelName: (pd.name || model?.name || '').trim(),
+    scenarioLabel: (_chromeScenarioRow?.scenario_label || (_chromeScenarioRow?.is_baseline ? 'Baseline' : '')).toString().trim(),
+    isBaseline: !!_chromeScenarioRow?.is_baseline,
+    scenarioStatus: _chromeScenarioRow?.status || null,
+    stationSubs: subs,
+    lastVisited: _dLastVisited,
+    scenarioFamily: _dScenarioFamily,
+    activeProjectId: model?.id || null,
+    completeness,
+  };
+}
+
+/** Live P&L rail values from the memoized seam (Y1 projection row). */
+function _dRailData() {
+  try {
+    const c = computeAll(_computeCtx());
+    const p1 = c.projections[0] || {};
+    const rev = (p1.revenue != null) ? p1.revenue : (c.summary.totalRevenue || 0);
+    const totalCost = (p1.totalCost != null) ? p1.totalCost : (c.summary.totalCost || 0);
+    const gp = (p1.grossProfit != null) ? p1.grossProfit : (rev - totalCost);
+    return {
+      ready: (c.orders > 0) && totalCost > 0,
+      revenue: rev,
+      labor: p1.labor ?? c.summary.laborCost,
+      facility: p1.facility ?? c.summary.facilityCost,
+      equipment: p1.equipment ?? c.summary.equipmentCost,
+      overhead: p1.overhead ?? c.summary.overheadCost,
+      vas: p1.vas ?? c.summary.vasCost,
+      startup: p1.startup ?? c.summary.startupAmort,
+      totalCost,
+      costPerUnit: (p1.orders > 0) ? totalCost / p1.orders : (c.summary.costPerOrder || NaN),
+      uomLabel: c.outboundUomLabel || 'unit',
+      gmPct: rev > 0 ? (gp / rev) * 100 : NaN,
+      targetPct: Number(c.calcHeur?.targetMarginPct),
+    };
+  } catch (_) { return { ready: false }; }
+}
+
+function _refreshDRail() {
+  if (!rootEl || !_useDShell()) return;
+  shellD.updateDRail(rootEl, _dRailData());
+}
+
 function _markCmDirty() {
   if (!_stateMarkDirty()) return; // already dirty — idempotent (state.js owns the flag)
   guardMarkDirty('cost-model');
   if (rootEl && viewMode === 'editor') {
-    try { refreshToolChromeActions(rootEl, _buildCmChromeOpts()); } catch (_) {}
+    try {
+      if (_useDShell()) { shellD.refreshShellD(rootEl, _buildDShellOpts()); }
+      else { refreshToolChromeActions(rootEl, _buildCmChromeOpts()); }
+    } catch (_) {}
   }
 }
 
@@ -876,7 +959,11 @@ function renderCurrentView() {
     wireLandingEvents();
   } else {
     _applyTierOpenRemap();
-    rootEl.innerHTML = renderShell();
+    // M3 — Concept D shell (opt-in). Same section renderers, same
+    // data-tc-* delegation contract, different chrome around them.
+    rootEl.innerHTML = _useDShell()
+      ? (shellD.renderShellD(_buildDShellOpts()) + _cmExtraStyles())
+      : renderShell();
     wireEditorEvents();
   }
 }
@@ -1000,9 +1087,20 @@ async function loadModelByCmId(id) {
     api.getScenarioByProject(id).then(row => {
       _chromeScenarioRow = row || null;
       if (rootEl && viewMode === 'editor') {
-        try { refreshToolChrome(rootEl, _buildCmChromeOpts()); } catch (_) {}
+        try { _refreshTopChrome(); } catch (_) {}
       }
     }).catch(() => {});
+    // M3 — D-shell scenario tab row: fetch the family only when the flag is
+    // on (2-4 light selects; classic chrome never needs them).
+    _dScenarioFamily = [];
+    if (shellD.getShellPref() === 'd') {
+      api.listScenarioFamilyForProject(id).then(rows => {
+        _dScenarioFamily = Array.isArray(rows) ? rows : [];
+        if (rootEl && viewMode === 'editor') {
+          try { _refreshTopChrome(); } catch (_) {}
+        }
+      }).catch(() => {});
+    }
   } catch (err) {
     console.error('[CM] Load failed:', err);
     showToast('Load failed: ' + err.message, 'error');
@@ -1309,8 +1407,51 @@ function wireEditorEvents() {
       if (id === 'cm-save')   return handleSave();
       if (id === 'cm-load')   return handleLoad();
       if (id === 'cm-export') return handleExportExcel();
+      if (id === 'cm-shell') {
+        const next = shellD.getShellPref() === 'd' ? 'classic' : 'd';
+        shellD.setShellPref(next);
+        // Lazy-fetch the scenario family the first time the D shell opens.
+        if (next === 'd' && model?.id && !_dScenarioFamily.length) {
+          api.listScenarioFamilyForProject(model.id).then(rows => {
+            _dScenarioFamily = Array.isArray(rows) ? rows : [];
+            try { _refreshTopChrome(); } catch (_) {}
+          }).catch(() => {});
+        }
+        renderCurrentView();
+        return;
+      }
     },
   });
+
+  // M3 — D-shell extras. Viewport fit runs every re-shell; the scenario-tab
+  // delegation binds ONCE on rootEl (listener-stacking class) and gates on
+  // _useDShell() at event time.
+  if (_useDShell()) {
+    const app = rootEl.querySelector('#cmd-app');
+    if (app) {
+      const top = Math.max(0, Math.round(app.getBoundingClientRect().top));
+      app.style.height = 'calc(100vh - ' + top + 'px)';
+    }
+  }
+  if (!rootEl.__cmdScenBound) {
+    rootEl.__cmdScenBound = true;
+    rootEl.addEventListener('click', async (e) => {
+      if (!_useDShell()) return;
+      const tab = e.target.closest('[data-cmd-scen]');
+      if (!tab) return;
+      const pid = Number(tab.dataset.cmdScen);
+      if (!pid || pid === model?.id) return;
+      if (getIsDirty() && !(await showConfirm('You have unsaved changes. Switch scenario anyway?'))) return;
+      resetDirty();
+      await loadModelByCmId(pid);
+      // Re-fetch the family so tab active-state + statuses follow the switch.
+      try {
+        const rows = await api.listScenarioFamilyForProject(pid);
+        _dScenarioFamily = Array.isArray(rows) ? rows : [];
+        _refreshTopChrome();
+      } catch (_) {}
+    });
+  }
 
   // Group toggles (collapsible nav groups in sidebar drawer) — CM-specific,
   // not in primitive's delegation surface.
@@ -1338,7 +1479,8 @@ function wireEditorEvents() {
     if (!rowKey || !Number.isFinite(year)) return;
     const isKpi = typeof rowKey === 'string' && rowKey.startsWith('kpi:');
     const isGen = typeof rowKey === 'string' && rowKey.startsWith('gen:');
-    if (!isKpi && !isGen) {
+    const isDRail = !!cell.closest('#cmd-rail'); // M3 — live P&L rail rows
+    if (!isKpi && !isGen && !isDRail) {
       // P&L cells must be inside the Summary section content (std-results
       // renders the same Summary markup — UX-2).
       if (activeSection !== 'summary' && activeSection !== 'std-results') return;
@@ -1857,7 +1999,7 @@ function _buildDiscloseHTML(key) {
  */
 function refreshSaveStateChip() {
   if (!rootEl) return;
-  refreshToolChrome(rootEl, _buildCmChromeOpts());
+  _refreshTopChrome(); // M3 — D-aware (classic path = refreshToolChrome)
   // EVE8 — Save/Load/New flows toggle this; KPI strip should follow so it
   // re-renders on the new model's data the moment a load completes.
   refreshHeaderKpis();
@@ -1897,6 +2039,10 @@ function refreshHeaderKpis(opts) {
     }
   }
   refreshKpiStrip(rootEl, kpis.items || []);
+  // M3 — the D shell's live P&L rail refreshes on the same cadence as the
+  // classic KPI strip (every section render + debounced input commits).
+  // computeAll is content-memoized, so this is a cache hit in the common case.
+  try { _refreshDRail(); } catch (_) {}
 }
 
 // ============================================================
@@ -2866,6 +3012,12 @@ function _buildCmChromeOpts() {
     { id: 'cm-save',   label: 'Save',   title: 'Save', primary: true },
     { id: 'cm-load',   label: 'Load',   title: 'Load' },
     { id: 'cm-export', label: 'Export', title: 'Export to .xlsx' },
+    // M3 — Concept D shell opt-in (tier-service-pattern preference).
+    { id: 'cm-shell',
+      label: shellD.getShellPref() === 'd' ? 'Classic layout' : 'New layout',
+      title: shellD.getShellPref() === 'd'
+        ? 'Switch back to the classic Cost Model layout'
+        : 'Try the new Cost Model layout (beta) — 5-station spine + live P&L rail' },
   ];
 
   // R1 (2026-07-06): model identity — name + scenario/status chips — now
@@ -3048,6 +3200,13 @@ function navigateSection(key) {
   }
   activeSection = key;
 
+  // M3 — remember where the user was inside each station so spine clicks
+  // return there instead of the station's first section.
+  try {
+    const st = shellD.stationForSection(key);
+    if (st) _dLastVisited[st.key] = key;
+  } catch (_) {}
+
   // Update legacy sidebar-drawer highlighting (when sidebar is open)
   rootEl?.querySelectorAll('.cm-nav-item').forEach(item => {
     item.classList.toggle('active', item.dataset.section === key);
@@ -3073,6 +3232,7 @@ function navigateSection(key) {
  */
 function _refreshTopChrome() {
   if (!rootEl) return;
+  if (_useDShell()) { shellD.refreshShellD(rootEl, _buildDShellOpts()); return; }
   refreshToolChrome(rootEl, _buildCmChromeOpts());
 }
 

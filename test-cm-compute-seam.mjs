@@ -163,9 +163,14 @@ t('ui.js: zero direct buildYearlyProjections / computeMonthlyLaborView calls', (
   assert((uiSrc.match(/monthlyCalc\.computeMonthlyLaborView\(/g) || []).length === 0, 'computeMonthlyLaborView crept back');
 });
 
-t('ui.js: the four seam consumers call computeAll(_computeCtx())', () => {
+t('ui.js: seam consumers call computeAll(_computeCtx()) — core four present', () => {
+  // Core four from M2: renderSummary, ensureMonthlyBundle, MLV card,
+  // equipment probe. Chrome-level consumers (M3 D-shell rail/subs, later
+  // rail inspector) may add more — that is the seam working as designed,
+  // so this is a floor, not an exact count. Engine creep-back is caught
+  // by the zero-direct-call asserts above.
   const n = (uiSrc.match(/computeAll\(_computeCtx\(\)\)/g) || []).length;
-  assert(n === 4, `expected 4 seam call sites (renderSummary, ensureMonthlyBundle, MLV card, equipment probe), found ${n}`);
+  assert(n >= 4, `expected >=4 seam call sites, found ${n}`);
 });
 
 t('header-kpis.js: no direct pipeline calls; consumes computeAll', () => {
