@@ -1471,6 +1471,13 @@ function wireEditorEvents() {
   // section so the panel surface follows the user.
   // Per feedback_event_delegation_pattern.md: bind at the stable root so
   // the listener survives every renderShell()/renderCurrentView() pass.
+  // M3 fix — bind ONCE per rootEl (within-mount stacking class): every
+  // renderCurrentView() re-ran wireEditorEvents and stacked a duplicate
+  // provenance listener, so an EVEN count made open+close cancel out and
+  // cell clicks silently no-op after any tier/shell re-shell. Handler reads
+  // module state (activeSection) via closure — first binding stays correct.
+  if (!rootEl.__cmProvBound) {
+  rootEl.__cmProvBound = true;
   rootEl.addEventListener('click', (e) => {
     const cell = e.target.closest('[data-cm-cell]');
     if (!cell) return;
@@ -1492,6 +1499,7 @@ function wireEditorEvents() {
       openProvenancePanel(rowKey, year);
     }
   });
+  } // __cmProvBound
 
   // Section content
   renderSection();

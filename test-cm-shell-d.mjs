@@ -194,6 +194,18 @@ t('ui.js: scenario-tab delegation binds once (listener-stacking class)', () => {
   assert(guarded, 'guard set before listener attach');
 });
 
+t('ui.js: provenance delegation binds once (M3 walk find — stacked pairs cancelled to no-op)', () => {
+  // Every renderCurrentView() used to stack a duplicate rootEl click
+  // listener; an even count made open+close cancel, so provenance clicks
+  // died after any tier/shell re-shell. Guard must wrap the attach.
+  assert(/if \(!rootEl\.__cmProvBound\) \{\s*rootEl\.__cmProvBound = true;\s*rootEl\.addEventListener\('click'/.test(uiSrc),
+    'provenance listener must be bind-once-guarded');
+  // and every rootEl-level click delegation in ui.js must carry SOME guard
+  const attaches = (uiSrc.match(/rootEl\.addEventListener\('click'/g) || []).length;
+  const guards = (uiSrc.match(/rootEl\.__cm[A-Za-z]*Bound\) \{\s*rootEl\.__cm[A-Za-z]*Bound = true;/g) || []).length;
+  assert(guards >= attaches, `unguarded rootEl click delegation: ${attaches} attaches vs ${guards} guards`);
+});
+
 t('shell-d.js: compare toggle + Review/Client-safe pills are inert placeholders (M4/M7)', () => {
   const src = readFileSync('./tools/cost-model/shell-d.js', 'utf8');
   assert(src.includes('M4'), 'compare deferral documented');
