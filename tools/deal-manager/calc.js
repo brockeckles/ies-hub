@@ -579,23 +579,40 @@ export function rankSitesByCost(siteFins) {
  * @param {import('./types.js?v=20260418-sL').Site[]} sites
  * @param {{years:number, opts:object, xAxis:string, xRange:number[], yAxis:string, yRange:number[]}} cfg
  */
+/** r4 walk fix (2026-07-10): since CM-authoritative pricing (2026-07-04),
+ *  sites with a CM-stamped annualRevenue ignore targetMarginPct — so the
+ *  sensitivity grid's margin-pts axis was a silent no-op for exactly the
+ *  linked scenarios that matter (all 5 grid rows rendered identical).
+ *  For CM-priced sites, translate a pts shift into an adjusted revenue
+ *  (rev' = cost / (1 - (currentMargin + delta))); non-CM sites keep the
+ *  original targetMarginPct shift. What-if only — base cell (0,0) unchanged. */
+function _shiftMarginPts(s, delta) {
+  if (!delta) return;
+  const rev = Number(s.annualRevenue || 0);
+  const cost = Number(s.annualCost || 0);
+  if (rev > 0 && cost > 0) {
+    const cur = ((rev - cost) / rev) * 100;
+    const tgt = Math.min(95, cur + delta);
+    if (tgt < 100) s.annualRevenue = cost / (1 - tgt / 100);
+  } else {
+    s.targetMarginPct = (s.targetMarginPct || 0) + delta;
+  }
+}
+
 export function calcDealSensitivity(sites, cfg) {
   const { years = DEFAULT_CONTRACT_YEARS, opts = {}, xAxis = 'costPct', xRange = [-10, -5, 0, 5, 10], yAxis = 'marginPct', yRange = [-3, -1.5, 0, 1.5, 3] } = cfg || {};
   const apply = (axis, delta) => {
     const out = sites.map(s => ({ ...s }));
     if (axis === 'costPct') out.forEach(s => { s.annualCost = (s.annualCost || 0) * (1 + delta / 100); });
-    else if (axis === 'marginPct') out.forEach(s => { s.targetMarginPct = (s.targetMarginPct || 0) + delta; });
+    else if (axis === 'marginPct') out.forEach(s => { _shiftMarginPts(s, delta); });
     else if (axis === 'volumePct') out.forEach(s => { s.annualVolume = (s.annualVolume || 0) * (1 + delta / 100); s.annualCost = (s.annualCost || 0) * (1 + delta / 100); });
     else if (axis === 'startupPct') out.forEach(s => { s.startupCost = (s.startupCost || 0) * (1 + delta / 100); });
     return out;
   };
   const grid = yRange.map(y => xRange.map(x => {
-    const flexed = apply(yAxis, y);
-    const flexed2 = (() => { const o = flexed.map(s => ({...s})); apply(xAxis, x).forEach((v,i) => o[i] = { ...o[i], ...v }); return o; })();
-    // Re-apply x to flexed (idempotent helper above wasn't ideal; redo cleanly):
     const sites2 = apply(yAxis, y);
     if (xAxis === 'costPct') sites2.forEach(s => { s.annualCost = (s.annualCost || 0) * (1 + x / 100); });
-    else if (xAxis === 'marginPct') sites2.forEach(s => { s.targetMarginPct = (s.targetMarginPct || 0) + x; });
+    else if (xAxis === 'marginPct') sites2.forEach(s => { _shiftMarginPts(s, x); });
     else if (xAxis === 'volumePct') sites2.forEach(s => { s.annualVolume = (s.annualVolume || 0) * (1 + x / 100); s.annualCost = (s.annualCost || 0) * (1 + x / 100); });
     else if (xAxis === 'startupPct') sites2.forEach(s => { s.startupCost = (s.startupCost || 0) * (1 + x / 100); });
     const fin = computeDealFinancials(sites2, years, opts);

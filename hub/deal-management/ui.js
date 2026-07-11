@@ -14,8 +14,8 @@ import { setActive as setDealContext } from '../../shared/deal-context.js?v=2026
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 // UX-1 D1p2 (2026-07-03): the MSA merge — deal tabs reuse the Multi-Site
 // Analyzer's pure calc + site mapping instead of duplicating the math.
-import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260704-cmp1';
-import * as msaApi from '../../tools/deal-manager/api.js?v=20260704-cmp1';
+import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260710-r4';
+import * as msaApi from '../../tools/deal-manager/api.js?v=20260710-r4';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;

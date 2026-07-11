@@ -37,6 +37,17 @@ for (const k of ['ebitdaPct', 'x', 'y']) check(`sens cell has ${k}`, Number.isFi
 check('sens cell has grade', typeof cell.grade === 'string' && cell.grade.length > 0);
 check('sens center = baseline flex', cell.x === 0 && cell.y === 0);
 
+// r4 walk fix (2026-07-10): margin-pts rows were a silent no-op for
+// CM-priced sites (CM-authoritative revenue ignores targetMarginPct).
+// Lock: (a) rows must VARY on the margin axis for CM-stamped sites,
+// (b) base cell (0,0) matches the unshifted deal financials.
+const cmSites = sites.map(s => ({ ...s, annualRevenue: s.annualCost * 1.13 }));
+const sens2 = calc.calcDealSensitivity(cmSites, { years: 5 });
+check('sens margin axis moves EBITDA for CM-priced sites', sens2.grid[0][2].ebitdaPct !== sens2.grid[4][2].ebitdaPct);
+check('sens margin axis monotonic', sens2.grid[4][2].ebitdaPct > sens2.grid[0][2].ebitdaPct);
+const baseFin = calc.computeDealFinancials(cmSites, 5);
+check('sens base cell (0,0) unchanged by fix', Math.abs(sens2.grid[2][2].ebitdaPct - baseFin.ebitdaPct) < 1e-9);
+
 // empty-sites guard (deal with no scenarios must not throw)
 const empty = calc.computeDealFinancials([], 5);
 check('empty sites → finite zeros', Number.isFinite(empty.totalAnnualRevenue));

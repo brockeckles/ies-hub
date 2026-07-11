@@ -528,6 +528,18 @@ function labelForIntelTab(k) {
  * @param {Array} items
  * @param {Array} fallbackActivity
  */
+/** r4 walk fix (2026-07-10): ingested titles/details carry HTML entities
+ *  (&nbsp;, &amp;, &#39; ...) from source feeds; escapeText re-escaped the
+ *  ampersand so items rendered literal '&nbsp;'. Decode BEFORE escaping. */
+function decodeFeedEntities(str) {
+  return String(str ?? '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&#(\d+);/g, (m, n) => { const c = Number(n); return c > 8 && c < 1114112 ? String.fromCodePoint(c) : m; })
+    .replace(/&quot;/gi, '"').replace(/&#x27;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&');
+}
+
 function renderIntelFeed(items, fallbackActivity) {
   if (!items || !items.length) {
     // 2026-06-10 (assessment hub #11): the fallback stream is curated sample
@@ -589,10 +601,10 @@ function renderIntelFeed(items, fallbackActivity) {
         <div style="flex:1;min-width:0;">
           <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:2px;">
             <span style="font-size:11px;font-weight:800;color:${categoryColor(item.category)};text-transform:uppercase;letter-spacing:.04em;">${escapeText(item.category || '')}</span>
-            <span style="font-size:13px;font-weight:600;color:${clickable ? 'var(--c-info-strong)' : 'var(--ies-gray-800)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeText(item.title)}</span>
+            <span style="font-size:13px;font-weight:600;color:${clickable ? 'var(--c-info-strong)' : 'var(--ies-gray-800)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeText(decodeFeedEntities(item.title))}</span>
             ${linkIcon}
           </div>
-          ${item.detail ? `<div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${escapeText(item.detail).slice(0, 180)}${sourceLabel}</div>` : (sourceLabel ? `<div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${sourceLabel}</div>` : '')}
+          ${item.detail ? `<div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${escapeText(decodeFeedEntities(item.detail)).slice(0, 180)}${sourceLabel}</div>` : (sourceLabel ? `<div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${sourceLabel}</div>` : '')}
         </div>
         <span style="font-size:10px;color:var(--ies-gray-400);white-space:nowrap;flex-shrink:0;">${item.relDate || ''}</span>
       ${closeTag}

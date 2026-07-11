@@ -280,7 +280,11 @@ async function openEditor(savedRow) {
   // {placeholder:...}; older engine shapes lack atriBenchmark/comparison).
   // A result the renderer can't draw is worse than none — drop it and let
   // the user re-run (caught live 2026-07-05: 'reading verdict' crash).
-  if (result && !(result.atriBenchmark && result.comparison && result.fleet)) result = null;
+  // r4 walk fix (2026-07-10): the engine's real key is fleetComposition —
+  // checking `result.fleet` (r5, 2026-07-05) rejected every VALID saved
+  // result, so scenarios opened 'Modified' with results dropped + spurious
+  // leave-guard prompts. `fleet` kept as legacy fallback (see line ~423).
+  if (result && !(result.atriBenchmark && result.comparison && (result.fleetComposition || result.fleet))) result = null;
   activeScenarioId = savedRow?.id || null;
   activeScenarioName = savedRow?.name || null;
   activeParentCmId = savedRow?.parent_cost_model_id || null;

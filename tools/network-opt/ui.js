@@ -396,6 +396,21 @@ async function renderLanding() {
   });
 }
 
+function _normalizeModeMix(m) {
+  const DEF = { tlPct: 30, ltlPct: 40, parcelPct: 30 };
+  if (!m || typeof m !== 'object') return { ...DEF };
+  if (Number.isFinite(Number(m.tlPct)) || Number.isFinite(Number(m.ltlPct)) || Number.isFinite(Number(m.parcelPct))) {
+    return { tlPct: Number(m.tlPct) || 0, ltlPct: Number(m.ltlPct) || 0, parcelPct: Number(m.parcelPct) || 0 };
+  }
+  // Legacy fraction shape {tl, ltl, parcel} summing to ~1.
+  if ([m.tl, m.ltl, m.parcel].some(v => Number.isFinite(Number(v)))) {
+    const tl = Math.round((Number(m.tl) || 0) * 100);
+    const ltl = Math.round((Number(m.ltl) || 0) * 100);
+    return { tlPct: tl, ltlPct: ltl, parcelPct: Math.max(0, 100 - tl - ltl) };
+  }
+  return { ...DEF };
+}
+
 function openEditor(savedRow) {
   if (!rootEl) return;
   activeView = 'setup';
@@ -414,7 +429,11 @@ function openEditor(savedRow) {
   // legacy rows stop tripping the Run validator.
   facilities = (d.facilities && d.facilities.length) ? d.facilities.map(f => calc.normalizeFacility({ ...f })) : [];
   demands = (d.demands && d.demands.length) ? d.demands.map(x => calc.normalizeDemand({ ...x })) : [];
-  modeMix = d.modeMix || { tlPct: 30, ltlPct: 40, parcelPct: 30 };
+  // r4 walk fix (2026-07-10): legacy rows store modeMix as FRACTIONS
+  // ({tl:.05, ltl:.1, parcel:.85}) — the {tlPct,...} read rendered
+  // 'undefined%' on Parameters. Same load-time-normalize class as
+  // facilities/demands above.
+  modeMix = _normalizeModeMix(d.modeMix);
   rateCard = calc.normalizeRateCard(d.rateCard || { ...calc.DEFAULT_RATES });
   serviceConfig = d.serviceConfig || { ...calc.DEFAULT_SERVICE };
   scenarios = [];

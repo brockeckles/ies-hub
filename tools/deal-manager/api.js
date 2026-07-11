@@ -8,7 +8,7 @@
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 // P2-1 (2026-07-03) — pure site-field→CM-column mapper
-import { siteToCmColumns, NEW_SITE_DEFAULTS } from './calc.js?v=20260704-cmp1';
+import { siteToCmColumns, NEW_SITE_DEFAULTS } from './calc.js?v=20260710-r4';
 
 // ============================================================
 // DEALS
