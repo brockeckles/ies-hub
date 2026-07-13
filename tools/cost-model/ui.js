@@ -36,6 +36,7 @@ import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { computeAll } from './compute-all.js?v=20260713-m5b';
 import * as shellD from './shell-d.js?v=20260713-m5b';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
+import * as stationEco from './station-economics.js?v=20260713-m5d';
 import {
   OFP_MHE_OPTIONS as _OFP_MHE_OPTIONS,
   OFP_IT_OPTIONS as _OFP_IT_OPTIONS,
@@ -710,7 +711,7 @@ const SECTIONS = [
  * v2 UI — five-phase grouping. Follows the actual build flow: scope the
  * deal → stand up the framework (facility/shifts/buckets/financial) → build
  * the cost lines INTO those buckets → see the output → analyze + iterate.
- * When flag off, sidebar renders as the flat 19-item list.
+ * When flag off, sidebar renders as the flat SECTIONS list (21 Engineering keys).
  */
 const SECTION_GROUPS = [
   { key: 'scope',      label: 'Scope',       description: 'Who, what, where' },
@@ -1663,7 +1664,10 @@ function wireEditorEvents() {
     const isKpi = typeof rowKey === 'string' && rowKey.startsWith('kpi:');
     const isGen = typeof rowKey === 'string' && rowKey.startsWith('gen:');
     const isDRail = !!cell.closest('#cmd-rail'); // M3 — live P&L rail rows
-    if (!isKpi && !isGen && !isDRail) {
+    // M5-Economics — cost-stack strip cards inspect their rail cell while
+    // data-tc-section (same click) navigates. Strip is D-shell-only.
+    const isEcoStrip = !!cell.closest('[data-eco-strip]');
+    if (!isKpi && !isGen && !isDRail && !isEcoStrip) {
       // P&L cells must be inside the Summary section content (std-results
       // renders the same Summary markup — UX-2).
       if (activeSection !== 'summary' && activeSection !== 'std-results') return;
@@ -3588,6 +3592,34 @@ function _refreshTopChrome() {
 // SECTION RENDERING — delegates to section-specific renderers
 // ============================================================
 
+/** M5-Economics — the four cost-block sections that get the stack strip. */
+const ECO_STRIP_SECTIONS = ['facility', 'financial', 'overhead', 'startup'];
+
+/**
+ * M5-Economics — assemble the strip's values bag from the memoized seam
+ * and hand it to the pure renderer. Chrome must survive a throwing seam
+ * (mirrors _buildDShellOpts), hence the try.
+ */
+function _ecoStripHtml() {
+  try {
+    const c = computeAll(_computeCtx());
+    const p1 = c.projections[0] || {};
+    const startupTotal = (model.startupLines || []).reduce((s, l) => s + (Number(l.cost) || 0), 0);
+    return stationEco.renderEcoStrip({
+      active: activeSection,
+      facility: { cost: p1.facility ?? c.summary.facilityCost, sqft: Number(model.facility?.totalSqft) },
+      overhead: { cost: p1.overhead ?? c.summary.overheadCost, lines: (model.overheadLines || []).length },
+      startup: { amort: p1.startup ?? c.summary.startupAmort, items: (model.startupLines || []).length, total: startupTotal },
+      financial: {
+        marginPct: Number(c.calcHeur?.targetMarginPct),
+        volGrowthPct: Number(c.calcHeur?.volGrowthPct),
+        costEscPct: Number(c.calcHeur?.costEscPct),
+        years: Number(c.contractYears),
+      },
+    }) + stationEco.ecoStyles();
+  } catch (_) { return ''; }
+}
+
 function renderSection() {
   const container = rootEl?.querySelector('#cm-section-content');
   if (!container) return;
@@ -3595,7 +3627,9 @@ function renderSection() {
   const renderers = {
     setup: renderSetup,
     volumes: renderVolumes,
-    orderProfile: renderOrderProfile,
+    // M5-Economics cleanup — Order Profile merged into Volumes 2026-04-21;
+    // the nav key aliases straight there (legacy drillback hints only).
+    orderProfile: renderVolumes,
     facility: renderFacility,
     shifts: renderShifts,
     shiftPlanning: renderShiftPlanning,
@@ -3632,7 +3666,13 @@ function renderSection() {
   }
   const render = renderers[activeSection];
   if (render) {
-    container.innerHTML = render();
+    // M5-Economics (2026-07-13) — under the D shell the four cost-block
+    // editors get the cost-stack strip on top (concept-D card grammar;
+    // navigation + inspector-follow ride the EXISTING rootEl delegations
+    // via data-tc-section + data-cm-cell on each card — no new wiring).
+    const eco = _useDShell() && ECO_STRIP_SECTIONS.includes(activeSection)
+      ? _ecoStripHtml() : '';
+    container.innerHTML = eco + render();
     bindSectionEvents(activeSection, container);
     // Keep sidebar completion dots in lockstep with the section content —
     // add/delete row actions call renderSection() after mutating model, so
@@ -4966,16 +5006,6 @@ function renderSeasonalityProfileCard(activeIdx = 0) {
       </div>
     </div>
   `;
-}
-
-// ============================================================
-// SECTION 3: ORDER PROFILE (merged into Volumes 2026-04-21 pm — stub
-// retained for the 'orderProfile' nav key in case legacy routes hit it)
-// ============================================================
-
-function renderOrderProfile() {
-  // Delegate to combined Volumes renderer — both sections live there now.
-  return renderVolumes();
 }
 
 // ============================================================
