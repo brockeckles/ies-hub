@@ -34,9 +34,10 @@ import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { computeAll } from './compute-all.js?v=20260713-m5b';
-import * as shellD from './shell-d.js?v=20260713-m5b';
+import * as shellD from './shell-d.js?v=20260713-m5g';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
 import * as stationEco from './station-economics.js?v=20260713-m5d';
+import * as stationPrice from './station-price.js?v=20260713-m5g';
 import {
   OFP_MHE_OPTIONS as _OFP_MHE_OPTIONS,
   OFP_IT_OPTIONS as _OFP_IT_OPTIONS,
@@ -1664,9 +1665,9 @@ function wireEditorEvents() {
     const isKpi = typeof rowKey === 'string' && rowKey.startsWith('kpi:');
     const isGen = typeof rowKey === 'string' && rowKey.startsWith('gen:');
     const isDRail = !!cell.closest('#cmd-rail'); // M3 — live P&L rail rows
-    // M5-Economics — cost-stack strip cards inspect their rail cell while
-    // data-tc-section (same click) navigates. Strip is D-shell-only.
-    const isEcoStrip = !!cell.closest('[data-eco-strip]');
+    // M5-Economics / M5-Price — face-strip cards inspect their rail cell
+    // while data-tc-section (same click) navigates. Strips are D-shell-only.
+    const isEcoStrip = !!cell.closest('[data-eco-strip], [data-price-strip]');
     if (!isKpi && !isGen && !isDRail && !isEcoStrip) {
       // P&L cells must be inside the Summary section content (std-results
       // renders the same Summary markup — UX-2).
@@ -2384,9 +2385,10 @@ function getCellProvenance(rowKey, year) {
   // not projections, so they bypass the guard.
   const isKpiKey = typeof rowKey === 'string' && rowKey.startsWith('kpi:');
   const isGenKey = typeof rowKey === 'string' && rowKey.startsWith('gen:');
-  // M5-Operation — dl:<idx> (labor-line drill-in) and oparea:<key> (flow
-  // area) read model state directly, like gen:*, so they bypass the guard.
-  const isOpKey = typeof rowKey === 'string' && (rowKey.startsWith('dl:') || rowKey.startsWith('oparea:'));
+  // M5-Operation/-Price — dl:<idx> (labor line), oparea:<key> (flow area)
+  // and pb:<id> (pricing bucket) read model/seam state directly, like
+  // gen:*, so they bypass the projections guard.
+  const isOpKey = typeof rowKey === 'string' && (rowKey.startsWith('dl:') || rowKey.startsWith('oparea:') || rowKey.startsWith('pb:'));
   if (!p && !(isKpiKey && (rowKey === 'kpi:contract' || rowKey === 'kpi:ebitdaMargin' || rowKey === 'kpi:ebitMargin')) && !isGenKey && !isOpKey) return null;
   const ch = ctx.calcHeur || {};
   const s = ctx.summary || {};
@@ -2895,6 +2897,41 @@ function getCellProvenance(rowKey, year) {
     const category = parts[1] || '';
     const code = parts.slice(2).join(':');
     return _getAutoGenProvenance(category, code, lineage, isMultiChannel);
+  }
+
+  // M5-Price — pb:<bucketId>: bucket-level rate/revenue provenance (the
+  // revenue atoms under CM-authoritative pricing; new cells, rail-hosted).
+  // Reads the memoized seam directly — same computeAll the strip used.
+  if (rowKey && rowKey.startsWith('pb:')) {
+    const bucketId = rowKey.slice(3);
+    let c;
+    try { c = computeAll(_computeCtx()); } catch (_) { return null; }
+    const b = (c.pricingSnapshot?.buckets || []).find(x => String(x.id) === bucketId);
+    if (!b) return null;
+    const assigned = Number(c.pricingSnapshot?.bucketCosts?.[b.id]) || 0;
+    const vol = Number(b.annualVolume) || 0;
+    const rev = (Number(b.rate) || 0) * vol;
+    const isOverride = b._rateSource === 'override' || b.overrideRate != null;
+    const unit = b.uom === 'month' ? 'mo' : (b.uom || 'unit');
+    const inputs = [
+      { label: 'Assigned cost (Y1)', value: _fmtMoney(assigned), source: 'Σ lines routed to this bucket' },
+      { label: 'Target margin gross-up', value: _fmtPct(ctx.marginFrac, 2), source: 'Financial → Target Margin' },
+      { label: 'Annual volume', value: _fmtNum(vol) + ' ' + unit, source: b.type === 'fixed' ? '12 billing months' : 'Volumes tab (UOM-matched)' },
+      { label: isOverride ? 'Override rate' : 'Recommended rate', value: '$' + (Number(b.rate) || 0).toFixed(2) + '/' + unit,
+        source: isOverride
+          ? 'Explicit override' + (b.overrideReason ? ' — ' + b.overrideReason : '') + ' (recommended $' + (Number(b.recommendedRate) || 0).toFixed(2) + ')'
+          : 'assignedCost grossed up ÷ annual volume' },
+    ];
+    return {
+      label: `${b.name || 'Bucket'} — rate card`,
+      formula: 'recommendedRate = (assignedCost ÷ (1 − margin)) ÷ annualVolume\nrevenue = effectiveRate × annualVolume',
+      value: rev,
+      valueFormat: 'currency',
+      inputs,
+      notes: currentScenarioSnapshots
+        ? 'This scenario carries a frozen rate-card snapshot — approved billing reads the snapshot, not the live derivation shown here.'
+        : 'Live derivation. Approving a scenario freezes this rate card into a snapshot.',
+    };
   }
 
   // M5-Operation — labor-line drill-in (dl:<idx>): the concept-d line
@@ -3650,6 +3687,29 @@ function _ecoStripHtml() {
   } catch (_) { return ''; }
 }
 
+/** M5-Price — the Price sections that get the rate-card strip. */
+const PRICE_STRIP_SECTIONS = ['pricingBuckets', 'pricing', 'scenarios'];
+
+/**
+ * M5-Price — rate-card strip bag from the memoized seam. Enriched buckets
+ * come from pricingSnapshot (effective/recommended/override rates); the
+ * frame card reuses the rail's Y1 revenue basis.
+ */
+function _priceStripHtml() {
+  try {
+    const c = computeAll(_computeCtx());
+    const p1 = c.projections[0] || {};
+    const rev = (p1.revenue != null) ? p1.revenue : (c.summary.totalRevenue || 0);
+    const totalCost = (p1.totalCost != null) ? p1.totalCost : (c.summary.totalCost || 0);
+    return stationPrice.renderPriceStrip({
+      buckets: c.pricingSnapshot?.buckets || [],
+      revenue: rev,
+      gmPct: rev > 0 ? ((rev - totalCost) / rev) * 100 : NaN,
+      targetPct: Number(c.calcHeur?.targetMarginPct),
+    }) + stationPrice.priceStyles();
+  } catch (_) { return ''; }
+}
+
 function renderSection() {
   const container = rootEl?.querySelector('#cm-section-content');
   if (!container) return;
@@ -3702,7 +3762,10 @@ function renderSection() {
     // via data-tc-section + data-cm-cell on each card — no new wiring).
     const eco = _useDShell() && ECO_STRIP_SECTIONS.includes(activeSection)
       ? _ecoStripHtml() : '';
-    container.innerHTML = eco + render();
+    // M5-Price — same pattern for the Price station's three sections.
+    const price = _useDShell() && PRICE_STRIP_SECTIONS.includes(activeSection)
+      ? _priceStripHtml() : '';
+    container.innerHTML = eco + price + render();
     bindSectionEvents(activeSection, container);
     // Keep sidebar completion dots in lockstep with the section content —
     // add/delete row actions call renderSection() after mutating model, so

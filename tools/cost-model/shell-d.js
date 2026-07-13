@@ -432,6 +432,8 @@ export const WHATIF_BY_CELL = {
 export function whatIfKeysForCell(rowKey) {
   if (typeof rowKey !== 'string') return [];
   if (rowKey.startsWith('dl:') || rowKey.startsWith('oparea:')) return WHATIF_BY_CELL.labor;
+  // M5-Price — bucket cells are revenue atoms: pricing levers.
+  if (rowKey.startsWith('pb:')) return WHATIF_BY_CELL.revenue;
   return WHATIF_BY_CELL[rowKey] || [];
 }
 

@@ -25,7 +25,7 @@ globalThis.window = globalThis.window || { location: { hostname: '', pathname: '
 
 // ?v= pin MUST match ui.js's import (feedback_test_cache_bust_match — a
 // mismatched pin loads a SECOND module instance with its own state).
-const shellD = await import('./tools/cost-model/shell-d.js?v=20260713-m5b');
+const shellD = await import('./tools/cost-model/shell-d.js?v=20260713-m5g');
 const { getShellPref, setShellPref, D_STATIONS, stationForSection, renderShellD, renderDSpine,
         renderDScenarioRow, updateDRail, RAIL_ROW_KEYS, WHATIF_BY_CELL, railWhatIfSection,
         whatIfKeysForCell } = shellD;
@@ -384,6 +384,7 @@ t('ui.js: Labor V1 retired — no V1 renderer, no escape hatch, no V1 path', () 
 t('whatIfKeysForCell: dl:/oparea: inherit the labor levers; static keys pass through', () => {
   assert(whatIfKeysForCell('dl:3') === WHATIF_BY_CELL.labor, 'dl:<idx> → labor levers');
   assert(whatIfKeysForCell('oparea:outbound') === WHATIF_BY_CELL.labor, 'oparea:<key> → labor levers');
+  assert(whatIfKeysForCell('pb:each_pick') === WHATIF_BY_CELL.revenue, 'pb:<id> → pricing/revenue levers (M5-Price)');
   assert(whatIfKeysForCell('revenue') === WHATIF_BY_CELL.revenue, 'static key passes through');
   assert(Array.isArray(whatIfKeysForCell('nope')) && whatIfKeysForCell('nope').length === 0, 'unknown → []');
   assert(Array.isArray(whatIfKeysForCell(null)) && whatIfKeysForCell(null).length === 0, 'non-string → []');

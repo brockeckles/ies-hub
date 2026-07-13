@@ -90,12 +90,12 @@ t('ui.js: strip prepends in renderSection for the four block sections, D shell o
     'strip section list pinned');
   assert(/_useDShell\(\) && ECO_STRIP_SECTIONS\.includes\(activeSection\)/.test(uiSrc),
     'strip renders under the D shell only');
-  assert(uiSrc.includes('container.innerHTML = eco + render()'), 'strip PREPENDS the section body');
+  assert(uiSrc.includes('container.innerHTML = eco + price + render()'), 'strips PREPEND the section body (eco + price, M5-Price extended)');
   assert(uiSrc.includes('stationEco.renderEcoStrip({'), 'values bag feeds the pure renderer');
 });
 
 t('ui.js: prov delegation admits strip cells; strip bag rides the seam', () => {
-  assert(uiSrc.includes("cell.closest('[data-eco-strip]')"), 'guard admits strip cells');
+  assert(uiSrc.includes("cell.closest('[data-eco-strip], [data-price-strip]')"), 'guard admits eco + price strip cells');
   // Mutation probe found the weak version of this pin: the closest() call
   // existing is NOT enough — it must gate the actual bail condition.
   assert(uiSrc.includes('!isKpi && !isGen && !isDRail && !isEcoStrip'),
