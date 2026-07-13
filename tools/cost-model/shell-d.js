@@ -300,9 +300,12 @@ export function renderShellD(opts) {
       '<button class="cmd-back" data-tc-back title="' + escapeAttr(opts.chrome.backTitle || 'Back') + '">←</button>' +
       '<span class="cmd-mark">CM</span><b class="cmd-title">Cost Model</b>' +
       '<span id="cmd-topmeta">' + renderDTopMeta(opts) + '</span>' +
+      // M7 — Review / Client-safe are LIVE: they open the print-grade
+      // document (concept-C face, WSC N6 popup pattern) via ui.js's
+      // data-cmd-mode delegation. Model stays the active workspace.
       '<span class="cmd-mode"><span class="cmd-mode--on">Model</span>' +
-      '<span class="cmd-mode--off" title="Review mode — the document face arrives in M7">Review</span>' +
-      '<span class="cmd-mode--off" title="Client-safe export view — arrives in M7">Client-safe</span></span>' +
+      '<button type="button" class="cmd-mode--doc" data-cmd-mode="review" title="Review document — P&amp;L Y1/Y3/Y5, rate card, assumptions register (print-grade)">Review</button>' +
+      '<button type="button" class="cmd-mode--doc" data-cmd-mode="clientsafe" title="Client-safe document — rate card only; internal economics never render">Client-safe</button></span>' +
       '<span class="cmd-spacer"></span>' +
       actions +
     '</div>' +
@@ -548,6 +551,8 @@ function _dStyles() {
   '.cmd-mode span{font-size:10.5px;font-weight:600;padding:3.5px 11px;border-radius:999px;}' +
   '.cmd-mode--on{background:var(--ies-orange,#ff3a00);color:#fff;}' +
   '.cmd-mode--off{color:#78716c;cursor:not-allowed;}' +
+  '.cmd-mode--doc{background:transparent;border:none;font-size:10.5px;font-weight:600;padding:3.5px 11px;border-radius:999px;color:#a8a29e;cursor:pointer;}' +
+  '.cmd-mode--doc:hover{color:#fff;background:#3a3633;}' +
   '.cmd-spacer{flex:1;}' +
   '.cmd-btn{font-size:12px;font-weight:600;border-radius:8px;border:1px solid #44403c;background:transparent;color:#d6d3d1;padding:5px 12px;cursor:pointer;white-space:nowrap;}' +
   '.cmd-btn:hover{background:#292524;}' +

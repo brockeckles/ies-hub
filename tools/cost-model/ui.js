@@ -34,10 +34,11 @@ import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { computeAll } from './compute-all.js?v=20260713-m5b';
-import * as shellD from './shell-d.js?v=20260713-m6a';
+import * as shellD from './shell-d.js?v=20260713-m7a';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
 import * as stationEco from './station-economics.js?v=20260713-m5d';
 import * as stationPrice from './station-price.js?v=20260713-m5g';
+import * as reviewDoc from './review-doc.js?v=20260713-m7a';
 import {
   OFP_MHE_OPTIONS as _OFP_MHE_OPTIONS,
   OFP_IT_OPTIONS as _OFP_IT_OPTIONS,
@@ -1626,6 +1627,10 @@ function wireEditorEvents() {
     rootEl.__cmdScenBound = true;
     rootEl.addEventListener('click', async (e) => {
       if (!_useDShell()) return;
+      // M7 — Review / Client-safe mode pills open the print-grade document
+      // (concept-C face, WSC N6 popup pattern — print popups are blessed).
+      const modeBtn = e.target.closest('[data-cmd-mode]');
+      if (modeBtn) { _openReviewDoc(modeBtn.dataset.cmdMode === 'clientsafe'); return; }
       // M6 — depth pill (Essentials|Engineering). Writes the SAME tier
       // preference classic's Quick button uses; union rule in
       // sectionsForDepth means the active section never disappears, so a
@@ -3682,6 +3687,36 @@ function _refreshTopChrome() {
 // ============================================================
 // SECTION RENDERING — delegates to section-specific renderers
 // ============================================================
+
+/**
+ * M7 — open the Review / Client-safe document in a print popup (WSC N6
+ * pattern: window.open + document.write, printFontCss inlined by the pure
+ * builder). Read-only by construction: everything comes from the memoized
+ * seam + in-memory model; nothing writes, nothing mutates.
+ */
+function _openReviewDoc(clientSafe) {
+  try {
+    const c = computeAll(_computeCtx());
+    const pd = model?.projectDetails || {};
+    const fr = (refData?.facilityRates || []).find(r => r.market_id === pd.market) || null;
+    const marketCity = (refData?.markets || []).find(mk => mk.id === pd.market)?.city || pd.market || '';
+    const rm = reviewDoc.buildReviewModel({
+      c, model,
+      extras: {
+        facilityRateRow: fr,
+        marketLaborProfile: currentMarketLaborProfile,
+        heuristicOverrides,
+        scenarioLabel: _chromeScenarioRow?.scenario_label || (_chromeScenarioRow?.is_baseline ? 'Baseline' : ''),
+        scenarioStatus: _chromeScenarioRow?.status || 'draft',
+        marketCity,
+      },
+    });
+    const win = window.open('', '_blank');
+    if (!win) { console.warn('[CM] review doc popup blocked'); return; }
+    win.document.write(reviewDoc.renderReviewHtml(rm, { clientSafe }));
+    win.document.close();
+  } catch (e) { console.warn('[CM] review doc failed', e); }
+}
 
 /** M5-Economics — the four cost-block sections that get the stack strip. */
 const ECO_STRIP_SECTIONS = ['facility', 'financial', 'overhead', 'startup'];

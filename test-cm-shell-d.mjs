@@ -25,7 +25,7 @@ globalThis.window = globalThis.window || { location: { hostname: '', pathname: '
 
 // ?v= pin MUST match ui.js's import (feedback_test_cache_bust_match — a
 // mismatched pin loads a SECOND module instance with its own state).
-const shellD = await import('./tools/cost-model/shell-d.js?v=20260713-m6a');
+const shellD = await import('./tools/cost-model/shell-d.js?v=20260713-m7a');
 const { getShellPref, setShellPref, D_STATIONS, stationForSection, renderShellD, renderDSpine,
         renderDScenarioRow, updateDRail, RAIL_ROW_KEYS, WHATIF_BY_CELL, railWhatIfSection,
         whatIfKeysForCell } = shellD;
@@ -211,10 +211,21 @@ t('ui.js: provenance delegation binds once (M3 walk find — stacked pairs cance
   assert(guards >= attaches, `unguarded rootEl click delegation: ${attaches} attaches vs ${guards} guards`);
 });
 
-t('shell-d.js: Review/Client-safe pills stay inert (M7); module stays render-only', () => {
+t('shell-d.js: Review/Client-safe pills are LIVE (M7); module stays render-only', () => {
   const src = readFileSync('./tools/cost-model/shell-d.js', 'utf8');
-  assert(src.includes('M7'), 'review mode deferral documented');
+  assert(src.includes('data-cmd-mode="review"') && src.includes('data-cmd-mode="clientsafe"'),
+    'mode pills carry the M7 document delegation attrs');
+  assert(!src.includes('arrives in M7'), 'inert-pill placeholders retired');
   assert(!src.includes("addEventListener"), 'shell-d renders HTML only — all events ride existing delegation');
+});
+
+t('ui.js: M7 mode pills open the review doc via the bind-once delegation', () => {
+  assert(uiSrc.includes("e.target.closest('[data-cmd-mode]')"), 'mode delegation bound');
+  assert(uiSrc.includes('function _openReviewDoc'), 'popup opener exists');
+  const fn = uiSrc.slice(uiSrc.indexOf('function _openReviewDoc'), uiSrc.indexOf('function _openReviewDoc') + 1600);
+  assert(fn.includes('computeAll(_computeCtx())'), 'doc data comes from the memoized seam');
+  assert(fn.includes('reviewDoc.buildReviewModel') && fn.includes('reviewDoc.renderReviewHtml'), 'pure builder pattern (WSC N6)');
+  assert(fn.includes("window.open('', '_blank')") && fn.includes('document.write'), 'popup document pattern');
 });
 
 // ---- 6. M4: compare-vs-baseline toggle ----
