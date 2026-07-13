@@ -13,8 +13,8 @@
 //      renderers + bindToolChromeEvents host unchanged. Rail rows carry
 //      data-cm-cell/year for the CM-PROV-1 panel.
 //   4. updateDRail formatting + not-ready blanking (uses a DOM stub).
-//   5. ui.js integration pins — classic stays default; D branch exists in
-//      renderCurrentView; rail refresh rides refreshHeaderKpis; provenance
+//   5. ui.js integration pins — D is the default shell (M8a); classic
+//      survives behind the pref. Rail refresh rides refreshHeaderKpis; provenance
 //      delegation admits #cmd-rail cells; scenario-tab delegation binds once.
 //
 // Run: node test-cm-shell-d.mjs
@@ -25,7 +25,7 @@ globalThis.window = globalThis.window || { location: { hostname: '', pathname: '
 
 // ?v= pin MUST match ui.js's import (feedback_test_cache_bust_match — a
 // mismatched pin loads a SECOND module instance with its own state).
-const shellD = await import('./tools/cost-model/shell-d.js?v=20260713-m7a');
+const shellD = await import('./tools/cost-model/shell-d.js?v=20260713-m8a');
 const { getShellPref, setShellPref, D_STATIONS, stationForSection, renderShellD, renderDSpine,
         renderDScenarioRow, updateDRail, RAIL_ROW_KEYS, WHATIF_BY_CELL, railWhatIfSection,
         whatIfKeysForCell } = shellD;
@@ -39,14 +39,14 @@ function t(name, fn) {
 function assert(cond, msg = 'assertion failed') { if (!cond) throw new Error(msg); }
 
 // ---- 1. Preference service ----
-t('shell pref defaults to classic; set/get round-trips; invalid ignored', () => {
-  assert(getShellPref() === 'classic', 'default must be classic (old chrome stays default)');
-  assert(setShellPref('d') === 'd', 'set d');
-  assert(getShellPref() === 'd', 'persisted d');
-  assert(setShellPref('bogus') === 'd', 'invalid ignored, current returned');
-  assert(getShellPref() === 'd', 'still d after invalid set');
-  setShellPref('classic');
-  assert(getShellPref() === 'classic', 'back to classic');
+t('M8a: shell pref defaults to D; explicit classic honored; invalid ignored', () => {
+  assert(getShellPref() === 'd', 'default must be d (M8a flip — Brock decision 2026-07-13)');
+  assert(setShellPref('classic') === 'classic', 'escape hatch: explicit classic sticks');
+  assert(getShellPref() === 'classic', 'persisted classic');
+  assert(setShellPref('bogus') === 'classic', 'invalid ignored, current returned');
+  assert(getShellPref() === 'classic', 'still classic after invalid set');
+  setShellPref('d');
+  assert(getShellPref() === 'd', 'back to d');
 });
 
 // ---- 2. Station map vs ui.js SECTIONS ----

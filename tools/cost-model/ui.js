@@ -34,7 +34,7 @@ import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { computeAll } from './compute-all.js?v=20260713-m5b';
-import * as shellD from './shell-d.js?v=20260713-m7a';
+import * as shellD from './shell-d.js?v=20260713-m8a';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
 import * as stationEco from './station-economics.js?v=20260713-m5d';
 import * as stationPrice from './station-price.js?v=20260713-m5g';
@@ -3467,8 +3467,8 @@ function _buildCmChromeOpts() {
     { id: 'cm-shell',
       label: shellD.getShellPref() === 'd' ? 'Classic layout' : 'New layout',
       title: shellD.getShellPref() === 'd'
-        ? 'Switch back to the classic Cost Model layout'
-        : 'Try the new Cost Model layout (beta) — 5-station spine + live P&L rail' },
+        ? 'Switch to the classic Cost Model layout (kept during the transition)'
+        : 'Back to the standard Cost Model layout — 5-station spine + live P&L rail' },
   ];
 
   // R1 (2026-07-06): model identity — name + scenario/status chips — now

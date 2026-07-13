@@ -35,7 +35,11 @@ import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 
 const STORAGE_KEY = 'ies_cm_shell';
 export const SHELLS = ['classic', 'd'];
-const DEFAULT_SHELL = 'classic';
+// M8a (2026-07-13, Brock decision): Concept D is THE Cost Model. Users
+// with no stored preference get the D shell; an explicit 'classic' pref
+// (the escape-hatch button) is always honored. Classic + the std spine
+// stay in the codebase until the post-soak M8b cleanup.
+const DEFAULT_SHELL = 'd';
 
 /** In-memory fallback so the module works under node (pure suite). */
 const _mem = new Map();
