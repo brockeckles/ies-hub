@@ -2495,7 +2495,11 @@ function getCellProvenance(rowKey, year) {
 
     case 'overhead':
     case 'sga': {
-      const v = p.sga ?? p.overhead;
+      // M5-Economics walk find (m5e): after the EBITDA reclass p.sga can be
+      // a legitimate 0 while p.overhead carries the cost — `p.sga ?? p.overhead`
+      // masked the overhead row behind that 0 (rail + strip cells showed
+      // $0.00). Resolve by the rowKey the user actually clicked.
+      const v = rowKey === 'sga' ? (p.sga ?? p.overhead) : (p.overhead ?? p.sga);
       const inputs = [
         { label: 'Base Overhead Cost', value: _fmtMoney(s.overheadCost), source: 'Sum of overheadLines (annualized)' },
         { label: 'Cost Escalation', value: ((ch.costEscPct || 0).toFixed(1) + '%/yr'), source: 'Heuristics' },

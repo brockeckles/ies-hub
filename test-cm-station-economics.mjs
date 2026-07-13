@@ -104,6 +104,13 @@ t('ui.js: prov delegation admits strip cells; strip bag rides the seam', () => {
   assert(fn.includes('computeAll(_computeCtx())'), 'strip values come from the memoized seam');
 });
 
+t('ui.js: overhead vs sga provenance resolves by rowKey (m5e walk find)', () => {
+  // p.sga can be a legitimate 0 post-EBITDA-reclass; `p.sga ?? p.overhead`
+  // masked the overhead cell behind it (rail + strip showed $0.00).
+  assert(uiSrc.includes("rowKey === 'sga' ? (p.sga ?? p.overhead) : (p.overhead ?? p.sga)"),
+    'overhead cell reads p.overhead first; sga cell reads p.sga first');
+});
+
 t('ui.js: orderProfile orphan renderer stays deleted (nav key aliases Volumes)', () => {
   assert(!/function renderOrderProfile/.test(uiSrc), 'renderOrderProfile deleted');
   assert(/orderProfile: renderVolumes/.test(uiSrc), 'legacy nav key aliases straight to Volumes');
