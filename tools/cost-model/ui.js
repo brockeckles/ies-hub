@@ -791,9 +791,10 @@ let _planningRatiosLoadInFlight = false;
 /** UI-only: which category card is expanded. Null = all collapsed. */
 let _planningRatioOpenCategory = null;
 
-// v2 UI redesign (2026-04-19) — feature-flagged redesign of sidebar nav +
-// Labor section. Flip off via `window.COST_MODEL_V2_UI = false` in console
-// to compare against the old layout.
+// v2 UI redesign (2026-04-19). M5 (2026-07-13, Brock decision): Labor is
+// V2-ONLY — renderLaborV1 + the COST_MODEL_V2_UI escape hatch are retired
+// (pre-delete audit in project_decision_labor_v2_only_2026_07_13: V2 covers
+// every V1 field + seasonality editor; V1 was unreachable without the flag).
 /** Groups the user has collapsed in the grouped sidebar. */
 let _collapsedNavGroups = new Set();
 /** Which Direct Labor line is currently selected in the master-detail view. */
@@ -823,10 +824,6 @@ let _pricingAuditSnapshot = null;
  * with volume growth.
  */
 let _mlvViewYear = 1;
-
-function isCmV2UiOn() {
-  return typeof window === 'undefined' || window.COST_MODEL_V2_UI !== false;
-}
 
 // ============================================================
 // LIFECYCLE
@@ -5723,138 +5720,8 @@ function renderShiftPlanning() {
 }
 
 function renderLabor() {
-  if (isCmV2UiOn()) return renderLaborV2();
-  return renderLaborV1();
-}
-
-function renderLaborV1() {
-  const lines = model.laborLines || [];
-  const opHrs = calc.operatingHours(model.shifts || {});
-  const lc = model.laborCosting || (model.laborCosting = {});
-  const totalDirect = lines.reduce((s, l) => s + calc.directLineAnnualSimple(l, lc), 0);
-  const totalIndirect = (model.indirectLaborLines || []).reduce((s, l) => s + calc.indirectLineAnnualSimple(l, opHrs, lc), 0);
-
-  return `
-    <div class="cm-section-header">
-      <div>
-        <div class="cm-section-title">Labor</div>
-        <div class="cm-section-desc">Direct labor (MOST-driven) and indirect/management labor. Cost factors below are global.</div>
-      </div>
-    </div>
-
-    <!-- Brock 2026-04-20: collapsed to a read-only banner linking to Labor
-         Factors. Burden/Benefits were double-counting; canonical lives on
-         Labor Factors now. See renderLaborFactorsBanner. -->
-    ${renderLaborFactorsBanner(lc, model.shifts)}
-
-    <div style="display: flex; gap: 8px; margin: 16px 0;">
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">Auto-Generate Indirect Labor</button>
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-pfd-haircut" title="Recompute annual_hours using effective UPH (base_uph × Direct Utilization × productivity_pct) per Labor Build-Up Logic doc §2.1. Corrects the ~15% under-staffing the doc identifies.">Apply PF&amp;D Haircut to Hours</button>
-    </div>
-
-    <div class="text-subtitle mb-2">Direct Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Pick a <strong>Position</strong> (rate / employment / markup pull from Labor Factors) · Volume from Volumes tab · MHE and IT/Device separate</span></div>
-    <table class="cm-grid-table">
-      <thead>
-        <tr><th style="min-width:180px;">MOST Template</th><th>Activity</th><th style="min-width:150px;" title="Pick a role from the Labor Factors catalog. Rate/employment/markup pull from the position — edit those centrally.">Position</th><th>MHE</th><th>IT / Device</th><th>Volume</th><th>UPH</th><th>Hrs/Yr</th><th>FTE</th><th>Rate</th><th>Employment</th><th title="Phase 4e: % of this line's hours staffed by permanent employees. The remainder is temp-agency at the markup (line value, else market profile, else heuristic default 38%). Permanent lines only.">Perm %</th><th>Markup %</th><th title="Productivity variance for Monte Carlo sensitivity">Var %</th><th class="cm-num">Annual Cost</th><th title="Monthly OT/absence seasonality">Seasonality</th><th></th></tr>
-      </thead>
-      <tbody>
-        ${lines.map((l, i) => `
-          <tr>
-            <td>${renderMostCell(l, i)}</td>
-            <td><input value="${l.activity_name || ''}" style="width:110px;" data-array="laborLines" data-idx="${i}" data-field="activity_name" /></td>
-            <td>${renderPositionCell(l, i, 'direct')}</td>
-            <td>
-              <select style="width:95px;font-size:11px;" data-array="laborLines" data-idx="${i}" data-field="mhe_type" title="Material handling equipment (MHE) assigned to this activity">
-                <option value=""${!l.mhe_type && !['reach_truck','sit_down_forklift','stand_up_forklift','order_picker','walkie_rider','pallet_jack','electric_pallet_jack','turret_truck','amr','conveyor','manual'].includes(l.equipment_type) ? ' selected' : ''}>None</option>
-                <option value="reach_truck"${(l.mhe_type === 'reach_truck' || l.equipment_type === 'reach_truck') ? ' selected' : ''}>Reach Truck</option>
-                <option value="sit_down_forklift"${(l.mhe_type === 'sit_down_forklift' || l.equipment_type === 'sit_down_forklift') ? ' selected' : ''}>Sit-Down FL</option>
-                <option value="stand_up_forklift"${(l.mhe_type === 'stand_up_forklift' || l.equipment_type === 'stand_up_forklift') ? ' selected' : ''}>Stand-Up FL</option>
-                <option value="order_picker"${(l.mhe_type === 'order_picker' || l.equipment_type === 'order_picker') ? ' selected' : ''}>Order Picker</option>
-                <option value="walkie_rider"${(l.mhe_type === 'walkie_rider' || l.equipment_type === 'walkie_rider') ? ' selected' : ''}>Walkie Rider</option>
-                <option value="pallet_jack"${(l.mhe_type === 'pallet_jack' || l.equipment_type === 'pallet_jack') ? ' selected' : ''}>Pallet Jack</option>
-                <option value="electric_pallet_jack"${(l.mhe_type === 'electric_pallet_jack' || l.equipment_type === 'electric_pallet_jack') ? ' selected' : ''}>Elec Pallet Jack</option>
-                <option value="turret_truck"${(l.mhe_type === 'turret_truck' || l.equipment_type === 'turret_truck') ? ' selected' : ''}>Turret Truck</option>
-                <option value="amr"${(l.mhe_type === 'amr' || l.equipment_type === 'amr') ? ' selected' : ''}>AMR/Robot</option>
-                <option value="conveyor"${(l.mhe_type === 'conveyor' || l.equipment_type === 'conveyor') ? ' selected' : ''}>Conveyor</option>
-                <option value="manual"${(l.mhe_type === 'manual' || l.equipment_type === 'manual') ? ' selected' : ''}>Manual / Walk</option>
-              </select>
-            </td>
-            <td>
-              <select style="width:95px;font-size:11px;" data-array="laborLines" data-idx="${i}" data-field="it_device" title="IT / scanning device assigned to this activity">
-                <option value=""${!l.it_device && !['rf_scanner','voice_pick'].includes(l.equipment_type) ? ' selected' : ''}>None</option>
-                <option value="rf_scanner"${(l.it_device === 'rf_scanner' || l.equipment_type === 'rf_scanner') ? ' selected' : ''}>RF Scanner</option>
-                <option value="voice_pick"${(l.it_device === 'voice_pick' || l.equipment_type === 'voice_pick') ? ' selected' : ''}>Voice Pick</option>
-                <option value="wearable"${l.it_device === 'wearable' ? ' selected' : ''}>Wearable</option>
-                <option value="tablet"${l.it_device === 'tablet' ? ' selected' : ''}>Tablet</option>
-                <option value="vision_system"${l.it_device === 'vision_system' ? ' selected' : ''}>Vision System</option>
-                <option value="pick_to_light"${l.it_device === 'pick_to_light' ? ' selected' : ''}>Pick-to-Light</option>
-                <option value="pick_to_display"${l.it_device === 'pick_to_display' ? ' selected' : ''}>Pick-to-Display</option>
-              </select>
-            </td>
-            <td>${renderLaborVolumeCell(l, i)}</td>
-            <td><input type="number" value="${l.base_uph || 0}" style="width:55px;" data-array="laborLines" data-idx="${i}" data-field="base_uph" data-type="number" /></td>
-            <td class="cm-num">${(l.annual_hours || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-            <td class="cm-num">${calc.fte(l, opHrs).toFixed(1)}</td>
-            <td><input type="number" value="${l.hourly_rate || 0}" style="width:55px;" step="0.5" data-array="laborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" /></td>
-            <td>
-              <select style="width:110px;" data-array="laborLines" data-idx="${i}" data-field="employment_type">
-                <option value="permanent"${(l.employment_type || 'permanent') === 'permanent' ? ' selected' : ''}>Permanent</option>
-                <option value="temp_agency"${l.employment_type === 'temp_agency' ? ' selected' : ''}>Temp Agency</option>
-                <option value="contractor"${l.employment_type === 'contractor' ? ' selected' : ''}>Contractor</option>
-              </select>
-            </td>
-            <td>
-              <input type="number" value="${l.retention_mix_pct ?? 100}" style="width:55px;" step="5" min="0" max="100"
-                data-array="laborLines" data-idx="${i}" data-field="retention_mix_pct" data-type="number"
-                ${(l.employment_type || 'permanent') !== 'permanent' ? 'disabled title="Mix applies to Permanent lines only"' : 'title="% of hours staffed permanent; remainder priced as temp agency"'} />
-            </td>
-            <td>
-              <input type="number" value="${l.temp_agency_markup_pct || 0}" style="width:55px;" step="1" min="0" max="100"
-                data-array="laborLines" data-idx="${i}" data-field="temp_agency_markup_pct" data-type="number"
-                ${(l.employment_type || 'permanent') === 'contractor' ? 'disabled title="N/A for contractors"' : 'title="Agency markup. Temp lines: on the whole line. Permanent lines: on the temp share when Perm % < 100 (0 = inherit market/heuristic default)."'} />
-            </td>
-            <td>
-              <input type="number" value="${l.performance_variance_pct || 0}" style="width:50px;" step="1" min="0" max="50"
-                data-array="laborLines" data-idx="${i}" data-field="performance_variance_pct" data-type="number"
-                title="Productivity variance (% std dev) for the Monte Carlo sensitivity card" />
-            </td>
-            <td class="cm-num">${calc.formatCurrency(calc.directLineAnnualSimple(l, lc))}</td>
-            <td>
-              <button class="hub-btn" style="padding:2px 6px;font-size:11px;" data-cm-action="edit-labor-seasonality" data-idx="${i}" title="Edit monthly OT/absence seasonality">
-                ${(Array.isArray(l.monthly_overtime_profile) || Array.isArray(l.monthly_absence_profile)) ? icon('chart') + '*' : icon('chart')}
-              </button>
-            </td>
-            <td><button class="cm-delete-btn" data-action="delete-labor" data-idx="${i}">Del</button></td>
-          </tr>
-        `).join('')}
-        <tr class="cm-total-row"><td colspan="13">Total Direct Labor</td><td class="cm-num">${calc.formatCurrency(totalDirect)}</td><td colspan="2"></td></tr>
-      </tbody>
-    </table>
-    <button class="cm-add-row-btn" data-action="add-labor">+ Add Labor Line</button>
-
-    <div class="text-subtitle mb-2 mt-6">Indirect Labor <span style="font-size:11px;color:var(--ies-gray-400);font-weight:500;">— Burden % set in Labor Costing Factors above</span></div>
-    <table class="cm-grid-table">
-      <thead>
-        <tr><th>Role</th><th>Headcount</th><th>Rate</th><th class="cm-num">Annual Cost</th><th></th></tr>
-      </thead>
-      <tbody>
-        ${(model.indirectLaborLines || []).map((l, i) => `
-          <tr>
-            <td class="u-nowrap">
-              <input value="${l.role_name || ''}" style="width:140px;" data-array="indirectLaborLines" data-idx="${i}" data-field="role_name" />
-              ${renderHeuristicChip(l, { category: 'indirect-labor' })}
-            </td>
-            <td><input type="number" value="${l.headcount || 0}" style="width:50px;" data-array="indirectLaborLines" data-idx="${i}" data-field="headcount" data-type="number" /></td>
-            <td><input type="number" value="${l.hourly_rate || 0}" style="width:60px;" step="0.5" data-array="indirectLaborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" /></td>
-            <td class="cm-num">${calc.formatCurrency(calc.indirectLineAnnualSimple(l, opHrs, lc))}</td>
-            <td><button class="cm-delete-btn" data-action="delete-indirect" data-idx="${i}">Del</button></td>
-          </tr>
-        `).join('')}
-        <tr class="cm-total-row"><td colspan="3">Total Indirect Labor</td><td class="cm-num">${calc.formatCurrency(totalIndirect)}</td><td></td></tr>
-      </tbody>
-    </table>
-    <button class="cm-add-row-btn" data-action="add-indirect">+ Add Indirect Line</button>
-  `;
+  // M5 — Labor is V2-only (Brock decision 2026-07-13); V1 retired.
+  return renderLaborV2();
 }
 
 // ============================================================
@@ -9128,7 +8995,7 @@ function bindSectionEvents(section, container) {
 
   // v2 Labor — up/down arrow keys on the master pane cycle selection
   // (ignored when focus is inside an input/select/textarea so typing isn't hijacked)
-  if (section === 'labor' && isCmV2UiOn()) {
+  if (section === 'labor') {
     const masterBody = container.querySelector('.hub-master-detail__master-body');
     if (masterBody) {
       // Make focusable so it can receive keydown

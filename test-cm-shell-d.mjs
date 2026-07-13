@@ -368,6 +368,13 @@ t('ui.js: D shell keeps the inspector across section nav; rail levers ride whatI
   assert(wireBlock.includes('setWhatIfTransient({})'), 'reset clears the overlay');
 });
 
+// ---- 10. M5 slice 1: Labor is V2-only (Brock decision 2026-07-13) ----
+t('ui.js: Labor V1 retired — no V1 renderer, no escape hatch, renderLabor is V2-only', () => {
+  assert(!/function renderLaborV1/.test(uiSrc), 'renderLaborV1 must stay deleted');
+  assert(!/isCmV2UiOn\(\)/.test(uiSrc), 'COST_MODEL_V2_UI escape hatch must stay deleted');
+  assert(/function renderLabor\(\) \{[\s\S]{0,120}?return renderLaborV2\(\);\s*\}/.test(uiSrc), 'renderLabor routes to V2 unconditionally');
+});
+
 // ---- Summary ----
 console.log('\n');
 if (failures.length) { console.log('\nFailures:'); for (const f of failures) console.log(f); }
