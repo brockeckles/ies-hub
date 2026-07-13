@@ -23,7 +23,7 @@ globalThis.window = globalThis.window || { location: { hostname: '', pathname: '
 // NOTE: the ?v= pin MUST match ui.js/header-kpis.js's import URL — ES modules
 // key on the full URL, and a bare import would create a SECOND compute-all
 // instance with its own memo (feedback_test_cache_bust_match class).
-const { computeAll, invalidateComputeAll } = await import('./tools/cost-model/compute-all.js?v=20260710-m2');
+const { computeAll, invalidateComputeAll } = await import('./tools/cost-model/compute-all.js?v=20260713-m5b');
 const { computeHeaderKpis } = await import('./tools/cost-model/header-kpis.js');
 const scenarios = await import('./tools/cost-model/calc.scenarios.js');
 
@@ -130,6 +130,28 @@ t('refData is identity-keyed: replacing the bag recomputes', () => {
   const base = computeAll(ctx);
   const ctx3 = { ...ctx, refData: { ...refData } };
   assert(computeAll(ctx3) !== base, 'new refData object must recompute');
+});
+
+// M5-Operation (2026-07-13) — the transient dl-productivity lever now
+// feeds the MAIN pipeline (closes the M4 "chip moves, rail doesn't" wart).
+// Transient-only by design: persisted overrides don't move saved numbers.
+t('M5 — transient dl-productivity scales pipeline labor; idle lever is a zero-diff no-op', () => {
+  invalidateComputeAll();
+  const base = computeAll(makeCtx(makeModel()));
+  const worse = computeAll({ ...makeCtx(makeModel()), whatIfTransient: { direct_labor_productivity_pct: 90 } });
+  assert(worse.summary.laborCost > base.summary.laborCost * 1.02,
+    `90% productivity must raise labor cost (${worse.summary.laborCost} vs ${base.summary.laborCost})`);
+  const at100 = computeAll({ ...makeCtx(makeModel()), whatIfTransient: { direct_labor_productivity_pct: 100 } });
+  assert(Math.abs(at100.summary.laborCost - base.summary.laborCost) < 1, '100% = no scaling');
+  // Persisted override must NOT move the pipeline (saved numbers pinned).
+  const ovr = computeAll({ ...makeCtx(makeModel()), heuristicOverrides: { direct_labor_productivity_pct: 90 } });
+  assert(Math.abs(ovr.summary.laborCost - base.summary.laborCost) < 1,
+    'persisted override stays preview-only — pipeline labor unchanged');
+  // The input model object is never mutated (zero writes, engines frozen).
+  const m = makeModel();
+  const before = JSON.stringify(m.laborLines);
+  computeAll({ ...makeCtx(m), whatIfTransient: { direct_labor_productivity_pct: 85 } });
+  assert(JSON.stringify(m.laborLines) === before, 'ctx.model.laborLines untouched by the scaling');
 });
 
 // ---- 3. Header KPIs ride the same seam ----

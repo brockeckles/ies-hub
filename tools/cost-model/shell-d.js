@@ -423,6 +423,19 @@ export const WHATIF_BY_CELL = {
 };
 
 /**
+ * M5-Operation — resolve the quick what-if levers for ANY inspector cell,
+ * including the Operation face's prefixed keys: dl:<idx> (labor-line
+ * drill-in) and oparea:<key> (flow area) inherit the labor levers, since
+ * every one of those objects is a labor-cost object. Static keys fall
+ * through to WHATIF_BY_CELL.
+ */
+export function whatIfKeysForCell(rowKey) {
+  if (typeof rowKey !== 'string') return [];
+  if (rowKey.startsWith('dl:') || rowKey.startsWith('oparea:')) return WHATIF_BY_CELL.labor;
+  return WHATIF_BY_CELL[rowKey] || [];
+}
+
+/**
  * Per-object quick what-if section for the rail inspector. Pure render —
  * ui.js assembles the rows (current values via whatIfCurrentValue, source
  * via whatIfSource, isolated Δ NI impact via computeWhatIfPreview) and

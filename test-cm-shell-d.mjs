@@ -25,9 +25,10 @@ globalThis.window = globalThis.window || { location: { hostname: '', pathname: '
 
 // ?v= pin MUST match ui.js's import (feedback_test_cache_bust_match — a
 // mismatched pin loads a SECOND module instance with its own state).
-const shellD = await import('./tools/cost-model/shell-d.js?v=20260713-m4');
+const shellD = await import('./tools/cost-model/shell-d.js?v=20260713-m5b');
 const { getShellPref, setShellPref, D_STATIONS, stationForSection, renderShellD, renderDSpine,
-        renderDScenarioRow, updateDRail, RAIL_ROW_KEYS, WHATIF_BY_CELL, railWhatIfSection } = shellD;
+        renderDScenarioRow, updateDRail, RAIL_ROW_KEYS, WHATIF_BY_CELL, railWhatIfSection,
+        whatIfKeysForCell } = shellD;
 
 let passed = 0, failed = 0;
 const failures = [];
@@ -369,10 +370,53 @@ t('ui.js: D shell keeps the inspector across section nav; rail levers ride whatI
 });
 
 // ---- 10. M5 slice 1: Labor is V2-only (Brock decision 2026-07-13) ----
-t('ui.js: Labor V1 retired — no V1 renderer, no escape hatch, renderLabor is V2-only', () => {
+t('ui.js: Labor V1 retired — no V1 renderer, no escape hatch, no V1 path', () => {
   assert(!/function renderLaborV1/.test(uiSrc), 'renderLaborV1 must stay deleted');
   assert(!/isCmV2UiOn\(\)/.test(uiSrc), 'COST_MODEL_V2_UI escape hatch must stay deleted');
-  assert(/function renderLabor\(\) \{[\s\S]{0,120}?return renderLaborV2\(\);\s*\}/.test(uiSrc), 'renderLabor routes to V2 unconditionally');
+  // M5-Operation: renderLabor branches D-shell → Operation face, classic →
+  // V2. Either way there is NO V1 anywhere in the function body.
+  assert(/function renderLabor\(\) \{[\s\S]{0,600}?return renderLaborV2\(\);\s*\}/.test(uiSrc), 'classic path still routes to V2');
+  const rl = uiSrc.slice(uiSrc.indexOf('function renderLabor()'), uiSrc.indexOf('function renderLabor()') + 700);
+  assert(!rl.includes('renderLaborV1'), 'no V1 call inside renderLabor (comments may mention the retirement)');
+});
+
+// ---- 11. M5-Operation: flow-as-face (2026-07-13) ----
+t('whatIfKeysForCell: dl:/oparea: inherit the labor levers; static keys pass through', () => {
+  assert(whatIfKeysForCell('dl:3') === WHATIF_BY_CELL.labor, 'dl:<idx> → labor levers');
+  assert(whatIfKeysForCell('oparea:outbound') === WHATIF_BY_CELL.labor, 'oparea:<key> → labor levers');
+  assert(whatIfKeysForCell('revenue') === WHATIF_BY_CELL.revenue, 'static key passes through');
+  assert(Array.isArray(whatIfKeysForCell('nope')) && whatIfKeysForCell('nope').length === 0, 'unknown → []');
+  assert(Array.isArray(whatIfKeysForCell(null)) && whatIfKeysForCell(null).length === 0, 'non-string → []');
+});
+
+t('ui.js: Operation face wired — D branch, area delegation, inspector-follow', () => {
+  assert(/function renderLabor\(\) \{[\s\S]{0,600}?if \(_useDShell\(\)\) return renderOperationFace\(\);/.test(uiSrc),
+    'renderLabor branches to the Operation face under the D shell');
+  assert(uiSrc.includes('function renderOperationFace()'), 'face renderer exists');
+  assert(uiSrc.includes("container.querySelectorAll('[data-op-area]')"), 'area-card delegation bound in bindSectionEvents');
+  assert(uiSrc.includes("openProvenancePanel('dl:' + idx, 1)"), 'line select follows into the rail inspector');
+  assert(uiSrc.includes("openProvenancePanel('oparea:' + key, 1)"), 'area select follows into the rail inspector');
+  assert(uiSrc.includes('stationOp.renderFlowStrip'), 'face renders the flow strip from station-operation.js');
+  assert(uiSrc.includes('stationOp.renderLinesTable'), 'face renders the lines table from station-operation.js');
+  assert(uiSrc.includes('renderIndirectLaborBlock(opHrs, lc, totalIndirect)'), 'indirect block shared by both faces');
+});
+
+t('ui.js: _opSelectedArea resets in the PRE-renderCurrentView block (M4c ordering lesson)', () => {
+  const loadIdx = uiSrc.indexOf('_opSelectedArea = null; // M5');
+  assert(loadIdx > 0, 'per-project reset exists in the load path');
+  const window2k = uiSrc.slice(loadIdx, loadIdx + 2000);
+  const rcv = window2k.indexOf('renderCurrentView()');
+  assert(rcv > 0, 'renderCurrentView follows the reset within the load block');
+  assert(window2k.slice(0, rcv).includes('_activeProvCell = null'),
+    'reset sits in the same pre-render block as the M4c inspector reset');
+});
+
+t('ui.js: dl:/oparea: provenance cells bypass the projections guard + rail levers use the helper', () => {
+  assert(/const isOpKey = [^\n]*'dl:'[^\n]*'oparea:'[^\n]*/.test(uiSrc), 'guard bypass for Operation-face cells');
+  assert(uiSrc.includes("rowKey.startsWith('dl:')"), 'dl: provenance branch exists');
+  assert(uiSrc.includes("rowKey.startsWith('oparea:')"), 'oparea: provenance branch exists');
+  assert(uiSrc.includes('shellD.whatIfKeysForCell(_activeProvCell.rowKey)'),
+    'rail what-if resolves levers via whatIfKeysForCell, not the raw map');
 });
 
 // ---- Summary ----

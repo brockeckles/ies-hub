@@ -73,13 +73,38 @@ function _fingerprint(ctx) {
  *   until any input changes, so downstream consumers MUST NOT mutate it.
  */
 export function computeAll(ctx) {
-  const { model, refData } = ctx;
+  const { refData } = ctx;
+  let model = ctx.model;
 
   let fp = null;
   try { fp = _fingerprint(ctx); } catch (_) { /* recompute-always fallback */ }
   if (fp && _memo && _memo.fp === fp &&
       _memo.refData === refData && _memo.snaps === ctx.currentScenarioSnapshots) {
     return _memo.result;
+  }
+
+  // ── M5-Operation (2026-07-13): Direct-Labor Productivity lever ─────────
+  // Closes the M4 wart ("chip moves, Y1 rail doesn't"): the TRANSIENT
+  // dl-productivity lever now feeds the main pipeline exactly the way
+  // what-if-preview.js scales it (annual_hours × 100/prod, base_uph kept
+  // in sync — see the 2026-04-21 monthly-engine note there). TRANSIENT
+  // ONLY, deliberately: persisted overrides keep today's saved numbers
+  // byte-identical; the lever is a preview overlay and nothing here writes.
+  // When the lever is idle, `model` is ctx.model UNTOUCHED (same object) —
+  // zero-diff by construction. Engines stay frozen: this scales an INPUT.
+  const _dlProdT = ctx.whatIfTransient?.direct_labor_productivity_pct;
+  if (_dlProdT != null && _dlProdT !== '' && Number.isFinite(Number(_dlProdT))
+      && Number(_dlProdT) !== 100 && (model?.laborLines || []).length) {
+    const _dlClamped = Math.max(1, Math.min(150, Number(_dlProdT)));
+    const _dlScale = 100 / _dlClamped; // 90 → 1.111× hours, 110 → 0.909×
+    model = {
+      ...model,
+      laborLines: model.laborLines.map(l => ({
+        ...l,
+        annual_hours: (l.annual_hours || 0) * _dlScale,
+        base_uph: (l.base_uph || 0) / _dlScale,
+      })),
+    };
   }
 
   // ── Shared input resolution (verbatim from renderSummary) ──────────────

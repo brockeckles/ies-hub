@@ -21,7 +21,7 @@ import * as calc from './calc.js?v=20260704-ebr1';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeAll } from './compute-all.js?v=20260710-m2';
+import { computeAll } from './compute-all.js?v=20260713-m5b';
 
 /**
  * @param {Object} opts

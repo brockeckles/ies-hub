@@ -33,8 +33,9 @@ import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
-import { computeAll } from './compute-all.js?v=20260710-m2';
-import * as shellD from './shell-d.js?v=20260713-m4';
+import { computeAll } from './compute-all.js?v=20260713-m5b';
+import * as shellD from './shell-d.js?v=20260713-m5b';
+import * as stationOp from './station-operation.js?v=20260713-m5b';
 import {
   OFP_MHE_OPTIONS as _OFP_MHE_OPTIONS,
   OFP_IT_OPTIONS as _OFP_IT_OPTIONS,
@@ -105,7 +106,7 @@ import {
 } from './operational-flow-render.js?v=20260710-r2';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260710-m2';
+import { computeHeaderKpis } from './header-kpis.js?v=20260713-m5b';
 import { computeWhatIfPreview } from './what-if-preview.js?v=20260704-ebr1';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
@@ -232,7 +233,18 @@ function _buildDShellOpts() {
     subs = {
       deal: [pd.clientName, marketName, (pd.contractTerm || 5) + ' yr'].filter(Boolean).join(' - '),
       volume: (fmtM(c.orders) ? fmtM(c.orders) + ' ' + (c.outboundUomLabel || 'unit').toLowerCase() + 's/yr' : 'no volumes yet'),
-      operation: (model?.laborLines || []).length + ' labor lines - ' + (c.summary.totalFtes || 0).toFixed(0) + ' FTE',
+      operation: (() => {
+        // M5 — count non-empty flow areas (mirrors the face's binning).
+        try {
+          const keys = new Set((model?.laborLines || []).map(l => _classifyAreaFromLine(l)));
+          if ((model?.indirectLaborLines || []).length) keys.add('support');
+          const n = keys.size;
+          return (n ? n + ' area' + (n === 1 ? '' : 's') + ' - ' : '')
+            + (c.summary.totalFtes || 0).toFixed(0) + ' FTE';
+        } catch (_) {
+          return (model?.laborLines || []).length + ' labor lines - ' + (c.summary.totalFtes || 0).toFixed(0) + ' FTE';
+        }
+      })(),
       economics: (fmtM(c.summary.totalCost) ? '$' + fmtM(c.summary.totalCost) + ' cost/yr' : 'no costs yet'),
       price: (model?.pricingBuckets || []).length + ' buckets - ' + (Number(model?.financial?.targetMargin) || 0) + '% target',
     };
@@ -801,6 +813,15 @@ let _collapsedNavGroups = new Set();
 let _selectedLaborIdx = 0;
 
 /**
+ * M5-Operation (2026-07-13) — which flow area is open on the D-shell
+ * Operation face. null = derive (follow the selected line's area, else the
+ * biggest direct area). Reset alongside _selectedLaborIdx in BOTH reset
+ * sites (mount + the pre-renderCurrentView load block — see
+ * feedback_state_reset_before_render).
+ */
+let _opSelectedArea = null;
+
+/**
  * Indirect Labor seasonal-uplift sub-totals — computed inline via an IIFE
  * inside the tbody render and read by the <tfoot> template literal a few
  * rows later. Kept module-scope so the two spots don't have to re-run the
@@ -860,6 +881,7 @@ export async function mount(el) {
   _planningRatiosLoadInFlight = false;
   // v2 UI — reset transient selection state
   _selectedLaborIdx = 0;
+  _opSelectedArea = null;
   _collapsedNavGroups = new Set();
 
   // Load reference data + saved models + saved deals + ref_periods in parallel
@@ -1197,6 +1219,7 @@ async function loadModelByCmId(id) {
     planningRatioOverrides = {};
     _planningRatioOpenCategory = null;
     _selectedLaborIdx = 0;
+    _opSelectedArea = null; // M5 — Operation-face area selection is per-project
     linkedDesigns = null;
     _linkedDesignsLoadInFlight = false;
     // Reset scenario family cache so the new project's family loads
@@ -2357,7 +2380,10 @@ function getCellProvenance(rowKey, year) {
   // not projections, so they bypass the guard.
   const isKpiKey = typeof rowKey === 'string' && rowKey.startsWith('kpi:');
   const isGenKey = typeof rowKey === 'string' && rowKey.startsWith('gen:');
-  if (!p && !(isKpiKey && (rowKey === 'kpi:contract' || rowKey === 'kpi:ebitdaMargin' || rowKey === 'kpi:ebitMargin')) && !isGenKey) return null;
+  // M5-Operation — dl:<idx> (labor-line drill-in) and oparea:<key> (flow
+  // area) read model state directly, like gen:*, so they bypass the guard.
+  const isOpKey = typeof rowKey === 'string' && (rowKey.startsWith('dl:') || rowKey.startsWith('oparea:'));
+  if (!p && !(isKpiKey && (rowKey === 'kpi:contract' || rowKey === 'kpi:ebitdaMargin' || rowKey === 'kpi:ebitMargin')) && !isGenKey && !isOpKey) return null;
   const ch = ctx.calcHeur || {};
   const s = ctx.summary || {};
   const mFrac = ctx.marginFrac;
@@ -2841,6 +2867,76 @@ function getCellProvenance(rowKey, year) {
     return _getAutoGenProvenance(category, code, lineage, isMultiChannel);
   }
 
+  // M5-Operation — labor-line drill-in (dl:<idx>): the concept-d line
+  // inspector. Reads live model state, not projections (year-agnostic).
+  if (rowKey && rowKey.startsWith('dl:')) {
+    const i = parseInt(rowKey.slice(3), 10);
+    const l = (model?.laborLines || [])[i];
+    if (!l) return null;
+    const opHrs = calc.operatingHours(model.shifts || {});
+    const lc = model.laborCosting || {};
+    const fte = calc.fte(l, opHrs);
+    const cost = calc.directLineAnnualSimple(l, lc);
+    const effUph = effectiveUphForLine(l);
+    const tpl = l.most_template_id
+      ? (refData.mostTemplates || []).find(t => String(t.id) === String(l.most_template_id))
+      : null;
+    return {
+      label: `${l.activity_name || 'Labor line ' + (i + 1)} — direct labor`,
+      formula: 'annual_hours = volume ÷ base_uph\nFTE = annual_hours ÷ hours-per-FTE\ncost = annual_hours × rate × (1 + burden)',
+      value: cost,
+      valueFormat: 'currency',
+      inputs: [
+        { label: 'Annual volume', value: _fmtNum(l.volume || 0), source: 'Volumes tab' + (l.volume_source_idx != null && l.volume_source_idx !== '' ? ' (linked line)' : ' (custom)') },
+        { label: 'Base UPH', value: _fmtNum(l.base_uph || 0), source: tpl ? `MOST standard: ${tpl.code || tpl.name}` : 'Manual estimate — no MOST standard' },
+        { label: 'Effective UPH', value: effUph.toLocaleString(undefined, { maximumFractionDigits: 1 }), source: 'base_uph × direct utilization × productivity (Labor Build-Up §2.1)' },
+        { label: 'Annual hours', value: _fmtNum(l.annual_hours || 0), source: 'volume ÷ base UPH' },
+        { label: 'Hourly rate', value: '$' + (l.hourly_rate || 0).toFixed(2), source: (l.employment_type === 'temp_agency' ? 'Temp agency (+markup)' : 'Permanent') },
+        { label: 'FTEs', value: fte.toFixed(2), source: 'annual hours ÷ operating hours per FTE' },
+      ],
+      notes: tpl
+        ? 'MOST-engineered line — UPH traces to an engineered standard. Edit UPH inline to override (the pill stays, the detail pane flags the override).'
+        : 'Manual estimate — consider backing this line with a MOST standard so the UPH survives scrutiny.',
+    };
+  }
+
+  // M5-Operation — flow-area rollup (oparea:<key>).
+  if (rowKey && rowKey.startsWith('oparea:')) {
+    const key = rowKey.slice(7);
+    const meta = _ofpAreaMeta(key);
+    const opHrs = calc.operatingHours(model.shifts || {});
+    const lc = model.laborCosting || {};
+    const direct = (model?.laborLines || [])
+      .map((l, i) => ({ l, i }))
+      .filter(x => _classifyAreaFromLine(x.l) === key);
+    const isSupport = key === 'support';
+    const indirects = isSupport ? (model?.indirectLaborLines || []) : [];
+    const dCost = direct.reduce((s, x) => s + calc.directLineAnnualSimple(x.l, lc), 0);
+    const iCost = indirects.reduce((s, l) => s + calc.indirectLineAnnualBreakdown(l, opHrs, lc).total, 0);
+    const dFte = direct.reduce((s, x) => s + calc.fte(x.l, opHrs), 0);
+    const most = direct.filter(x => x.l.most_template_id).length;
+    const inputs = direct.slice(0, 12).map(x => ({
+      label: `↳ ${x.l.activity_name || 'Line ' + (x.i + 1)}`,
+      value: _fmtMoney(calc.directLineAnnualSimple(x.l, lc)),
+      source: x.l.most_template_id ? 'MOST-backed' : 'manual estimate',
+    }));
+    if (indirects.length) {
+      inputs.push({ label: 'Indirect / management', value: _fmtMoney(iCost), source: indirects.length + ' role(s)' });
+    }
+    return {
+      label: `${meta.label} — flow area`,
+      formula: 'area cost = Σ line costs (lines bin by activity-name keywords;\nflowLane override wins — set it in Operational Flow → line menu)',
+      value: dCost + iCost,
+      valueFormat: 'currency',
+      inputs: [
+        { label: 'Direct lines', value: String(direct.length), source: most + ' MOST-backed · ' + (direct.length - most) + ' manual' },
+        { label: 'Direct FTE', value: dFte.toFixed(1), source: 'Σ line FTEs' },
+        ...inputs,
+      ],
+      notes: 'Click a row in the lines table to drill into a single line.',
+    };
+  }
+
   return null;
 }
 
@@ -3097,7 +3193,9 @@ function renderProvenancePanelInner() {
 
     <div style="padding:10px 16px;font-size:10.5px;color:var(--ies-gray-500);line-height:1.4;">
       Computed ${computedAtStr}<br>
-      ${_activeProvCell.rowKey.startsWith('kpi:')
+      ${_activeProvCell.rowKey.startsWith('dl:') || _activeProvCell.rowKey.startsWith('oparea:')
+        ? `Operation face · row key <code style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;background:var(--ies-gray-100);padding:1px 4px;border-radius:3px;">${_activeProvCell.rowKey}</code>`
+        : _activeProvCell.rowKey.startsWith('kpi:')
         ? `KPI tile · row key <code style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;background:var(--ies-gray-100);padding:1px 4px;border-radius:3px;">${_activeProvCell.rowKey}</code>`
         : (_activeProvCell.rowKey.startsWith('gen:')
             ? `Auto-gen line · row key <code style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;background:var(--ies-gray-100);padding:1px 4px;border-radius:3px;">${_activeProvCell.rowKey}</code>`
@@ -3157,7 +3255,8 @@ function refreshProvenancePanel() {
  */
 function _railWhatIfHtml() {
   if (!_activeProvCell) return '';
-  const keys = shellD.WHATIF_BY_CELL[_activeProvCell.rowKey] || [];
+  // M5 — dl:/oparea: cells inherit the labor levers (whatIfKeysForCell).
+  const keys = shellD.whatIfKeysForCell(_activeProvCell.rowKey);
   const sliders = keys.map(k => WHATIF_SLIDERS.find(s => s.key === k)).filter(Boolean);
   if (!sliders.length) return '';
   const previewOpts = { model, refData, whatIfTransient, heuristicOverrides, currentScenario, currentScenarioSnapshots, currentMarketLaborProfile, scenarios };
@@ -5721,7 +5820,120 @@ function renderShiftPlanning() {
 
 function renderLabor() {
   // M5 — Labor is V2-only (Brock decision 2026-07-13); V1 retired.
+  // M5-Operation — under the D shell the station face is flow-as-face
+  // (concept-d Operation canvas); classic keeps the V2 master-detail.
+  // Either way there is NO V1 path.
+  if (_useDShell()) return renderOperationFace();
   return renderLaborV2();
+}
+
+// ============================================================
+// M5-OPERATION — flow-as-face (D shell only, 2026-07-13)
+// ============================================================
+
+/**
+ * Build the per-line entry bags the station-operation module aggregates
+ * and renders. Direct lines bin via the OFP classifier (flowLane override
+ * → keywords → unclassified); indirect is forced to 'support', mirroring
+ * renderOperationalFlow's rule.
+ */
+function _opBuildEntries(lines, indirects, opHrs, lc) {
+  const supportKey = (model.ofpAreas || []).some(a => a.key === 'support') ? 'support' : 'unclassified';
+  const direct = lines.map((l, i) => {
+    const tpl = l.most_template_id
+      ? (refData.mostTemplates || []).find(t => String(t.id) === String(l.most_template_id))
+      : null;
+    return {
+      idx: i,
+      areaKey: _classifyAreaFromLine(l),
+      isIndirect: false,
+      name: l.activity_name || '',
+      mostLabel: tpl ? ('MOST · ' + (tpl.code || tpl.name || 'template')) : null,
+      hasStandard: !!tpl,
+      uph: l.base_uph || 0,
+      volume: l.volume || 0,
+      fte: calc.fte(l, opHrs),
+      cost: calc.directLineAnnualSimple(l, lc),
+    };
+  });
+  const indirect = indirects.map((l, i) => ({
+    idx: i,
+    areaKey: supportKey,
+    isIndirect: true,
+    name: l.role_name || '',
+    mostLabel: null, hasStandard: false, uph: 0, volume: 0,
+    fte: l.headcount || 0,
+    cost: calc.indirectLineAnnualBreakdown(l, opHrs, lc).total,
+  }));
+  return direct.concat(indirect);
+}
+
+/** Resolve the effective selected area for the Operation face. */
+function _opEffectiveArea(agg, entries) {
+  if (_opSelectedArea && agg.areas.some(a => a.key === _opSelectedArea)) return _opSelectedArea;
+  // Follow the selected labor line's area (covers the just-added-a-line
+  // case, where the add handler nulls _opSelectedArea), else biggest
+  // direct area by cost, else whatever is first in flow order.
+  const selEntry = entries.find(e => !e.isIndirect && e.idx === _selectedLaborIdx);
+  if (selEntry && agg.areas.some(a => a.key === selEntry.areaKey)) return selEntry.areaKey;
+  const direct = agg.areas.filter(a => !a.isIndirect);
+  if (direct.length) return direct.reduce((m, a) => (a.cost > m.cost ? a : m), direct[0]).key;
+  return agg.areas[0]?.key || null;
+}
+
+/**
+ * The Operation station face: flow strip → selected-area lines table →
+ * drill-in detail pane (existing Labor V2 detail pane, full-width) →
+ * indirect block when Support is selected → Monthly Labor View. The rail
+ * inspector follows area/line selection via dl:/oparea: provenance cells.
+ */
+function renderOperationFace() {
+  const lines = model.laborLines || [];
+  const indirects = model.indirectLaborLines || [];
+  const opHrs = calc.operatingHours(model.shifts || {});
+  const lc = model.laborCosting || (model.laborCosting = {});
+  _ofpEnsureAreaRegistry();
+  const registry = _ofpRegistry();
+  const entries = _opBuildEntries(lines, indirects, opHrs, lc);
+  const agg = stationOp.aggregateAreas(entries, registry);
+  const areaKey = _opEffectiveArea(agg, entries);
+  const area = agg.areas.find(a => a.key === areaKey) || null;
+  const areaEntries = entries.filter(e => e.areaKey === areaKey && !e.isIndirect);
+
+  // Clamp line selection into the open area so the drill-in matches the table.
+  if (areaEntries.length && !areaEntries.some(e => e.idx === _selectedLaborIdx)) {
+    _selectedLaborIdx = areaEntries[0].idx;
+  }
+  const showIndirect = area ? area.isIndirect : false;
+  const drill = (!showIndirect && areaEntries.length && lines[_selectedLaborIdx])
+    ? `<div class="hub-master-detail cmop-drill">${renderLaborDetailPane(lines, opHrs, lc)}</div>`
+    : '';
+  const headerActions =
+    `<button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="apply-pfd-haircut" title="Recompute annual_hours using effective UPH (base_uph × Direct Utilization × productivity_pct) per Labor Build-Up Logic doc §2.1.">Apply PF&amp;D Haircut</button>` +
+    `<button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="add-labor" title="Add a direct labor line">+ Line</button>`;
+
+  const totalIndirect = indirects.reduce((s, l) => s + calc.indirectLineAnnualSimple(l, opHrs, lc), 0);
+
+  return `
+    <div class="cm-section-header">
+      <div>
+        <div class="cm-section-title">Operation</div>
+        <div class="cm-section-desc">The flow is the labor model — click an area, or any P&amp;L line on the right, and the inspector follows.</div>
+      </div>
+    </div>
+
+    ${renderLaborFactorsBanner(lc, model.shifts)}
+    ${stationOp.renderFlowStrip(agg, areaKey)}
+    ${(!showIndirect || areaEntries.length)
+      ? stationOp.renderLinesTable(areaEntries, _selectedLaborIdx, {
+          areaLabel: area ? area.label : 'Direct labor',
+          headerActions,
+        }) + drill
+      : ''}
+    ${showIndirect ? renderIndirectLaborBlock(opHrs, lc, totalIndirect) : ''}
+    ${renderMonthlyLaborViewCard()}
+    ${stationOp.operationStyles()}
+  `;
 }
 
 // ============================================================
@@ -5778,6 +5990,20 @@ function renderLaborV2() {
       </div>
     </div>
 
+    ${renderIndirectLaborBlock(opHrs, lc, totalIndirect)}
+
+    ${renderMonthlyLaborViewCard()}
+  `;
+}
+
+/**
+ * M5-Operation (2026-07-13) — Indirect / Management labor block, extracted
+ * verbatim from renderLaborV2 so BOTH faces share it: the classic V2
+ * master-detail AND the D-shell Operation face (where it renders when the
+ * Support / Indirect area card is selected).
+ */
+function renderIndirectLaborBlock(opHrs, lc, totalIndirect) {
+  return `
     <!-- Indirect Labor — keeps the dense table, which fits fine at 4 columns -->
     <div style="margin-top:28px;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
@@ -5873,8 +6099,6 @@ function renderLaborV2() {
       </div>
       <div class="u-mt-2"><button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="add-indirect">+ Add Indirect Role</button></div>
     </div>
-
-    ${renderMonthlyLaborViewCard()}
   `;
 }
 
@@ -8981,6 +9205,8 @@ function bindSectionEvents(section, container) {
   });
 
   // v2 Labor — click a master-detail item to select it (updates detail pane)
+  // M5-Operation — same delegation drives the face's lines-table rows; under
+  // the D shell the rail inspector follows the selection (dl:<idx> cell).
   container.querySelectorAll('[data-labor-select]').forEach(item => {
     item.addEventListener('click', (e) => {
       // Don't hijack clicks on inputs/buttons/selects inside the item
@@ -8990,6 +9216,20 @@ function bindSectionEvents(section, container) {
         _selectedLaborIdx = idx;
         renderSection();
       }
+      if (_useDShell() && !Number.isNaN(idx)) openProvenancePanel('dl:' + idx, 1);
+    });
+  });
+
+  // M5-Operation — flow-area cards select the open area; inspector follows.
+  container.querySelectorAll('[data-op-area]').forEach(card => {
+    card.addEventListener('click', () => {
+      const key = card.dataset.opArea;
+      if (!key) return;
+      if (key !== _opSelectedArea) {
+        _opSelectedArea = key;
+        renderSection();
+      }
+      if (_useDShell()) openProvenancePanel('oparea:' + key, 1);
     });
   });
 
@@ -11743,6 +11983,10 @@ async function handleAction(action, idx, btn) {
       model.laborLines.push({ activity_name: '', volume: 0, base_uph: 0, annual_hours: 0, hourly_rate: 0, burden_pct: 30, employment_type: 'permanent', temp_agency_markup_pct: 0, performance_variance_pct: 0, pricing_bucket: defaultBucketFor('labor') });
       // v2 UI — select the newly added line so the detail pane opens to it
       _selectedLaborIdx = model.laborLines.length - 1;
+      // M5-Operation — let the face follow the new line's area (a fresh
+      // line classifies to 'unclassified' until named; pinning the old
+      // area would hide the row the user just added).
+      _opSelectedArea = null;
       break;
     case 'delete-labor':
       model.laborLines.splice(idx, 1);
