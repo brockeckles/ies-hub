@@ -14,7 +14,7 @@
 //
 // Run: node test-cm-review-doc.mjs
 
-const reviewDoc = await import('./tools/cost-model/review-doc.js?v=20260713-m7a');
+const reviewDoc = await import('./tools/cost-model/review-doc.js?v=20260713-m7c');
 const { buildReviewModel, renderReviewHtml } = reviewDoc;
 
 let passed = 0, failed = 0;

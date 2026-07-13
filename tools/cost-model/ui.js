@@ -38,7 +38,7 @@ import * as shellD from './shell-d.js?v=20260713-m7a';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
 import * as stationEco from './station-economics.js?v=20260713-m5d';
 import * as stationPrice from './station-price.js?v=20260713-m5g';
-import * as reviewDoc from './review-doc.js?v=20260713-m7a';
+import * as reviewDoc from './review-doc.js?v=20260713-m7c';
 import {
   OFP_MHE_OPTIONS as _OFP_MHE_OPTIONS,
   OFP_IT_OPTIONS as _OFP_IT_OPTIONS,
