@@ -166,7 +166,7 @@ export function renderLinesTable(entries, selectedIdx, opts = {}) {
       + '<td>' + std + '</td>'
       + '<td class="hub-num"><input class="hub-input hub-num cmop-uph" type="number" step="1" min="0"'
       + ' value="' + escapeAttr(String(e.uph || 0)) + '"'
-      + ' data-array="laborLines" data-idx="' + escapeAttr(String(e.idx)) + '" data-field="base_uph" data-type="number"'
+      + ' data-array="laborLines" data-idx="' + escapeAttr(String(e.idx)) + '" data-field="base_uph" data-type="number" data-field-commit="change"'
       + ' title="Base UPH — edit and watch the rail" /></td>'
       + '<td class="hub-num">' + fmtCount(e.volume) + '</td>'
       + '<td class="hub-num">' + fmtFte(e.fte) + '</td>'

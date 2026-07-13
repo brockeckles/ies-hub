@@ -14,7 +14,7 @@
 //
 // Run: node test-cm-station-operation.mjs
 
-const stationOp = await import('./tools/cost-model/station-operation.js?v=20260713-m5b');
+const stationOp = await import('./tools/cost-model/station-operation.js?v=20260713-m5c');
 const { aggregateAreas, renderFlowStrip, renderLinesTable, operationStyles } = stationOp;
 
 let passed = 0, failed = 0;
@@ -109,6 +109,9 @@ t('lines table: rows on data-labor-select, UPH input rides the data-array machin
   assert(/cmop-row--sel"[^>]*data-labor-select="1"/.test(html), 'selected row highlighted');
   assert(html.includes('data-array="laborLines"') && html.includes('data-field="base_uph"')
     && html.includes('data-type="number"'), 'UPH input commits via the existing machinery');
+  // Live-walk find (m5c): per-keystroke commit re-renders the section and
+  // steals focus mid-edit ("90" landed as "9") — the focus-loss class.
+  assert(html.includes('data-field-commit="change"'), 'UPH input MUST commit on change, not per keystroke');
   assert(html.includes('MOST · EP-104'), 'MOST pill');
   assert(html.includes('Manual est.'), 'manual pill');
   assert(html.includes('8.8M'), 'volume formatted');
