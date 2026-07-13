@@ -34,7 +34,7 @@ import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { computeAll } from './compute-all.js?v=20260710-m2';
-import * as shellD from './shell-d.js?v=20260710-m3';
+import * as shellD from './shell-d.js?v=20260713-m4';
 import {
   OFP_MHE_OPTIONS as _OFP_MHE_OPTIONS,
   OFP_IT_OPTIONS as _OFP_IT_OPTIONS,
@@ -205,6 +205,15 @@ function resetDirty() { _stateResetDirty(); guardMarkClean('cost-model'); }
 let _dScenarioFamily = [];            // scenario tabs data (fetched on load)
 const _dLastVisited = {};             // stationKey -> last section visited
 
+// M4 — compare-vs-baseline (rail inline deltas). The baseline Y1 bag is
+// computed ONCE per family baseline (saved scenarios don't change while you
+// edit a sibling) via computeWhatIfPreview on the fetched baseline project —
+// a pure preview compute that never touches computeAll's single-slot memo.
+let _dCompareOn = false;
+/** @type {null | { pid:number, data:Object|null, loading:boolean }} */
+let _dBaselineCmp = null;
+let _railWiDebounce = null;           // rail quick what-if commit debounce
+
 function _useDShell() {
   return viewMode === 'editor'
     && shellD.getShellPref() === 'd'
@@ -244,6 +253,7 @@ function _buildDShellOpts() {
     scenarioFamily: _dScenarioFamily,
     activeProjectId: model?.id || null,
     completeness,
+    compareOn: _dCompareOn,
   };
 }
 
@@ -269,8 +279,112 @@ function _dRailData() {
       uomLabel: c.outboundUomLabel || 'unit',
       gmPct: rev > 0 ? (gp / rev) * 100 : NaN,
       targetPct: Number(c.calcHeur?.targetMarginPct),
+      // M4 — inline compare deltas when the toggle is on and the baseline
+      // bag has resolved (null while loading → rows just show no delta).
+      compare: (_dCompareOn && _dBaselineCmp && _dBaselineCmp.data) ? _dBaselineCmp.data : null,
     };
   } catch (_) { return { ready: false }; }
+}
+
+/**
+ * M4 — fetch + compute the family ★ baseline's Y1 P&L for compare mode.
+ * Mirrors the compute-relevant slice of loadModelByCmId's hydration (see
+ * there for the full story); legacy rows fall back to
+ * reconstructModelFromFlatRow. Pure preview compute — computeWhatIfPreview
+ * with an empty overlay — so the current model's computeAll memo is
+ * untouched and nothing is written anywhere.
+ */
+async function _computeBaselineY1(famRow) {
+  const pid = famRow.project_id;
+  const full = await api.getModel(pid);
+  if (!full) throw new Error('baseline project not found');
+  let bm;
+  if (full.project_data) {
+    bm = { ...createEmptyModel(), ...full.project_data, id: full.id };
+    if (!bm.projectDetails) bm.projectDetails = createEmptyModel().projectDetails;
+    const pd = bm.projectDetails;
+    if (!pd.market && full.market_id) pd.market = full.market_id;
+    if (!pd.contractTerm && full.contract_term_years) pd.contractTerm = full.contract_term_years;
+    if (pd.taxRate == null && full.tax_rate_pct != null) pd.taxRate = Number(full.tax_rate_pct);
+    if (!bm.financial) bm.financial = createEmptyModel().financial;
+    const fin = bm.financial;
+    if (fin.gaMargin == null || Number(fin.gaMargin) === 0) {
+      fin.gaMargin = full.ga_margin_pct != null
+        ? Number(full.ga_margin_pct)
+        : Number((Number(fin.targetMargin || 16) * 0.375).toFixed(2));
+    }
+    if (fin.mgmtFeeMargin == null || Number(fin.mgmtFeeMargin) === 0) {
+      fin.mgmtFeeMargin = full.mgmt_fee_margin_pct != null
+        ? Number(full.mgmt_fee_margin_pct)
+        : Number((Number(fin.targetMargin || 16) * 0.625).toFixed(2));
+    }
+    fin.targetMargin = Number((Number(fin.gaMargin || 0) + Number(fin.mgmtFeeMargin || 0)).toFixed(2));
+    if (fin.sgaOverlayPct == null && full.sga_overlay_pct != null) fin.sgaOverlayPct = Number(full.sga_overlay_pct);
+    if (fin.sgaAppliesTo == null && full.sga_applies_to != null) fin.sgaAppliesTo = full.sga_applies_to;
+  } else {
+    bm = reconstructModelFromFlatRow(full);
+  }
+  (bm.laborLines || []).forEach(l => {
+    if ((l.annual_hours || 0) === 0 && (l.volume || 0) > 0 && (l.base_uph || 0) > 0) recomputeLineHours(l);
+  });
+  migrateLaborLinesToPositions(bm);
+  api.backfillEquipmentLineTypes(bm);
+  api.backfillChannelsFromLegacy(bm);
+  // Baseline pricing context — its scenario row + frozen snapshots (pricing
+  // is CM-authoritative through the scenario snapshot bag).
+  let bScen = null, bSnaps = null;
+  try {
+    bScen = await api.getScenarioByProject(pid);
+    if (bScen?.id) bSnaps = await api.fetchSnapshots(bScen.id);
+  } catch (_) { /* defensive — preview still runs on catalog defaults */ }
+  // Market labor profile is market-scoped: reuse the loaded one only when
+  // the baseline sits in the same market as the open scenario.
+  const sameMarket = (bm.projectDetails?.market || null) === (model?.projectDetails?.market || null);
+  const preview = computeWhatIfPreview({}, {
+    model: bm, refData, whatIfTransient: {},
+    heuristicOverrides: full.heuristic_overrides || {},
+    currentScenario: bScen, currentScenarioSnapshots: bSnaps,
+    currentMarketLaborProfile: sameMarket ? currentMarketLaborProfile : null,
+    scenarios,
+  });
+  if (!preview) throw new Error('baseline compute failed');
+  const p1 = (preview.projections || [])[0] || {};
+  const rev = p1.revenue || 0;
+  const tc = p1.totalCost || 0;
+  const gp = (p1.grossProfit != null) ? p1.grossProfit : (rev - tc);
+  return {
+    label: famRow.scenario_label || 'Baseline',
+    revenue: rev,
+    labor: p1.labor, facility: p1.facility, equipment: p1.equipment,
+    overhead: p1.overhead, vas: p1.vas, startup: p1.startup,
+    totalCost: tc,
+    gmPct: rev > 0 ? (gp / rev) * 100 : NaN,
+  };
+}
+
+/** M4 — compare toggle click (delegated via data-cmd-cmp). */
+async function _toggleDCompare() {
+  _dCompareOn = !_dCompareOn;
+  try { _refreshTopChrome(); } catch (_) {}
+  if (_dCompareOn) {
+    const base = (_dScenarioFamily || []).find(r => r.is_baseline);
+    if (!base || base.project_id === model?.id) { _dCompareOn = false; return; }
+    if (!_dBaselineCmp || _dBaselineCmp.pid !== base.project_id || (!_dBaselineCmp.data && !_dBaselineCmp.loading)) {
+      _dBaselineCmp = { pid: base.project_id, data: null, loading: true };
+      try {
+        _dBaselineCmp.data = await _computeBaselineY1(base);
+      } catch (err) {
+        console.warn('[CM] baseline compare failed:', err);
+        showToast('Could not compute the baseline scenario for comparison.', 'error');
+        _dCompareOn = false;
+        _dBaselineCmp = null;
+        try { _refreshTopChrome(); } catch (_) {}
+      } finally {
+        if (_dBaselineCmp) _dBaselineCmp.loading = false;
+      }
+    }
+  }
+  _refreshDRail();
 }
 
 function _refreshDRail() {
@@ -711,6 +825,9 @@ export async function mount(el) {
   _scenariosLoadedOnce = false;
   _scenariosLoadInFlight = false;
   _heuristicsLoadInFlight = false;
+  // M4 — compare mode + baseline cache are per-project
+  _dCompareOn = false;
+  _dBaselineCmp = null;
   heuristicOverrides = setHeuristicOverrides({});
   currentMarketLaborProfile = setCurrentMarketLaborProfile(null);
   // Phase 6 — planning ratios reset (catalog is shared across projects, don't
@@ -1090,6 +1207,10 @@ async function loadModelByCmId(id) {
         try { _refreshTopChrome(); } catch (_) {}
       }
     }).catch(() => {});
+    // M4 — compare mode is per-project: reset on every load (scenario tab
+    // switches route through here too).
+    _dCompareOn = false;
+    _dBaselineCmp = null;
     // M3 — D-shell scenario tab row: fetch the family only when the flag is
     // on (2-4 light selects; classic chrome never needs them).
     _dScenarioFamily = [];
@@ -1437,6 +1558,9 @@ function wireEditorEvents() {
     rootEl.__cmdScenBound = true;
     rootEl.addEventListener('click', async (e) => {
       if (!_useDShell()) return;
+      // M4 — compare-vs-baseline toggle rides the same delegation.
+      const cmpBtn = e.target.closest('[data-cmd-cmp]');
+      if (cmpBtn) { await _toggleDCompare(); return; }
       const tab = e.target.closest('[data-cmd-scen]');
       if (!tab) return;
       const pid = Number(tab.dataset.cmdScen);
@@ -2965,22 +3089,110 @@ function closeProvenancePanel() {
   refreshProvenancePanel();
 }
 
-/** Re-render panel contents. Safe to call when no panel exists in the DOM. */
+/** Re-render panel contents. Safe to call when no panel exists in the DOM.
+ *  M4 — under the D shell the inspector lives IN the rail (Concept D:
+ *  follow-your-selection zone under the P&L): the same CM-PROV-1 content
+ *  renders into #cmd-izbody with a per-object quick what-if section below
+ *  it, and the classic slide-over stays parked off-screen. */
 function refreshProvenancePanel() {
+  const izBody = _useDShell() ? rootEl?.querySelector('#cmd-izbody') : null;
   const panel = rootEl?.querySelector('#cm-provenance-panel');
   const inner = rootEl?.querySelector('#cm-provenance-panel-inner');
-  if (!panel || !inner) return;
-  inner.innerHTML = renderProvenancePanelInner();
-  panel.dataset.cmOpen = _activeProvCell ? 'true' : 'false';
-  panel.style.transform = _activeProvCell ? 'translateX(0)' : 'translateX(110%)';
+  if (izBody) {
+    izBody.innerHTML = renderProvenancePanelInner() + _railWhatIfHtml();
+    if (panel) { panel.dataset.cmOpen = 'false'; panel.style.transform = 'translateX(110%)'; }
+    _wireRailWhatIf(izBody);
+  } else {
+    if (!panel || !inner) return;
+    inner.innerHTML = renderProvenancePanelInner();
+    panel.dataset.cmOpen = _activeProvCell ? 'true' : 'false';
+    panel.style.transform = _activeProvCell ? 'translateX(0)' : 'translateX(110%)';
+  }
   // Highlight the active cell
   rootEl.querySelectorAll('[data-cm-cell].is-active').forEach(el => el.classList.remove('is-active'));
   if (_activeProvCell) {
     const sel = `[data-cm-cell="${_activeProvCell.rowKey}"][data-cm-year="${_activeProvCell.year}"]`;
     rootEl.querySelector(sel)?.classList.add('is-active');
   }
-  // Wire close button (rebuilt every time inner is rebuilt)
+  // Wire close button (rebuilt every time inner is rebuilt; lives in izBody
+  // under the D shell, in the slide-over otherwise — either way there is
+  // exactly one #cm-prov-close in the DOM).
   rootEl.querySelector('#cm-prov-close')?.addEventListener('click', closeProvenancePanel);
+}
+
+/**
+ * M4 — per-object quick what-if for the rail inspector. Maps the selected
+ * cell to its relevant What-If Studio levers (shellD.WHATIF_BY_CELL) and
+ * renders them with current effective values + isolated Δ NI impact chips
+ * for levers that are live in the transient overlay.
+ */
+function _railWhatIfHtml() {
+  if (!_activeProvCell) return '';
+  const keys = shellD.WHATIF_BY_CELL[_activeProvCell.rowKey] || [];
+  const sliders = keys.map(k => WHATIF_SLIDERS.find(s => s.key === k)).filter(Boolean);
+  if (!sliders.length) return '';
+  const previewOpts = { model, refData, whatIfTransient, heuristicOverrides, currentScenario, currentScenarioSnapshots, currentMarketLaborProfile, scenarios };
+  let baseNI = null;
+  try { baseNI = computeWhatIfPreview({}, previewOpts)?.totalNI ?? null; } catch (_) {}
+  const fmtNI = (n) => Math.abs(n) >= 1e6 ? '$' + (Math.abs(n) / 1e6).toFixed(2) + 'M'
+    : Math.abs(n) >= 1e3 ? '$' + Math.round(Math.abs(n) / 1e3) + 'K' : '$' + Math.round(Math.abs(n));
+  const rows = sliders.map(s => {
+    let impact = null;
+    // Isolated impact only for levers the user has actually moved (live) —
+    // one preview compute per live lever, not per lever.
+    if (baseNI != null && whatIfSource(s.key) === 'transient') {
+      try {
+        const p = computeWhatIfPreview({ [s.key]: whatIfTransient[s.key] }, previewOpts);
+        const dNI = (p?.totalNI ?? baseNI) - baseNI;
+        if (Math.abs(dNI) >= 1000) {
+          impact = { good: dNI >= 0, text: (dNI >= 0 ? '+' : '−') + fmtNI(dNI) + ' NI' };
+        }
+      } catch (_) {}
+    }
+    return { key: s.key, label: s.label, min: s.min, max: s.max, step: s.step,
+      unit: s.unit, value: whatIfCurrentValue(s.key), src: whatIfSource(s.key), impact };
+  });
+  const anyLive = Object.keys(whatIfTransient).some(k => whatIfTransient[k] !== '' && whatIfTransient[k] !== undefined);
+  return shellD.railWhatIfSection(rows, { anyLive });
+}
+
+/** M4 — wire the rail quick what-if inputs. Zone innerHTML is rebuilt on
+ *  every refresh so these bindings never stack (fresh nodes each time). */
+function _wireRailWhatIf(izBody) {
+  const apply = (key, raw) => {
+    const v = raw === '' ? '' : Number(raw);
+    whatIfTransient = setWhatIfTransient({ ...whatIfTransient, [key]: v });
+    // Mirror the paired input immediately for responsiveness…
+    const slider = izBody.querySelector(`[data-cmd-izs="${key}"]`);
+    const number = izBody.querySelector(`[data-cmd-izn="${key}"]`);
+    if (slider && String(slider.value) !== String(raw)) slider.value = raw;
+    if (number && String(number.value) !== String(raw)) number.value = raw;
+    // …then debounce the recompute fan-out (rail + provenance context +
+    // inspector re-render; Studio section too if it's open behind us).
+    if (_railWiDebounce) clearTimeout(_railWiDebounce);
+    _railWiDebounce = setTimeout(() => {
+      _railWiDebounce = null;
+      refreshHeaderKpis();            // refreshes prov context + rides _refreshDRail
+      refreshProvenancePanel();       // re-render inspector values + impact chips
+      if (activeSection === 'whatif') renderSection();
+    }, 140);
+  };
+  izBody.querySelectorAll('[data-cmd-izs]').forEach(inp => {
+    inp.addEventListener('change', () => apply(inp.dataset.cmdIzs, inp.value));
+    inp.addEventListener('input', () => {
+      const number = izBody.querySelector(`[data-cmd-izn="${inp.dataset.cmdIzs}"]`);
+      if (number) number.value = inp.value;
+    });
+  });
+  izBody.querySelectorAll('[data-cmd-izn]').forEach(inp => {
+    inp.addEventListener('change', () => apply(inp.dataset.cmdIzn, inp.value));
+  });
+  izBody.querySelector('[data-cmd-izreset]')?.addEventListener('click', () => {
+    whatIfTransient = setWhatIfTransient({});
+    refreshHeaderKpis();
+    refreshProvenancePanel();
+    if (activeSection === 'whatif') renderSection();
+  });
 }
 
 function renderShell() {
@@ -9370,7 +9582,12 @@ function bindSectionEvents(section, container) {
   // refresh the panel state on each Summary render (so active-cell outline
   // re-applies after innerHTML replacement) and close the panel when the
   // user navigates away from Summary.
-  if (section === 'summary') {
+  if (_useDShell()) {
+    // M4 — the rail inspector follows the user across sections (rail rows
+    // are clickable everywhere), so section navigation refreshes it instead
+    // of force-closing. Classic keeps the Summary-scoped behavior.
+    refreshProvenancePanel();
+  } else if (section === 'summary') {
     refreshProvenancePanel();
   } else if (_activeProvCell) {
     closeProvenancePanel();

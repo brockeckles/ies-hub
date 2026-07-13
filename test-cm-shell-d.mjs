@@ -1,4 +1,5 @@
 // test-cm-shell-d.mjs — M3: Concept D shell behind a flag (2026-07-10)
+//                       M4: rail inspector + per-object what-if + compare (2026-07-13)
 //
 // Locks the D-shell contract:
 //   1. Shell preference service — tier-service pattern: default 'classic',
@@ -22,8 +23,11 @@ import { readFileSync } from 'node:fs';
 
 globalThis.window = globalThis.window || { location: { hostname: '', pathname: '/', search: '' } };
 
-const shellD = await import('./tools/cost-model/shell-d.js?v=20260710-m3');
-const { getShellPref, setShellPref, D_STATIONS, stationForSection, renderShellD, renderDSpine, updateDRail } = shellD;
+// ?v= pin MUST match ui.js's import (feedback_test_cache_bust_match — a
+// mismatched pin loads a SECOND module instance with its own state).
+const shellD = await import('./tools/cost-model/shell-d.js?v=20260713-m4');
+const { getShellPref, setShellPref, D_STATIONS, stationForSection, renderShellD, renderDSpine,
+        renderDScenarioRow, updateDRail, RAIL_ROW_KEYS, WHATIF_BY_CELL, railWhatIfSection } = shellD;
 
 let passed = 0, failed = 0;
 const failures = [];
@@ -206,11 +210,146 @@ t('ui.js: provenance delegation binds once (M3 walk find — stacked pairs cance
   assert(guards >= attaches, `unguarded rootEl click delegation: ${attaches} attaches vs ${guards} guards`);
 });
 
-t('shell-d.js: compare toggle + Review/Client-safe pills are inert placeholders (M4/M7)', () => {
+t('shell-d.js: Review/Client-safe pills stay inert (M7); module stays render-only', () => {
   const src = readFileSync('./tools/cost-model/shell-d.js', 'utf8');
-  assert(src.includes('M4'), 'compare deferral documented');
   assert(src.includes('M7'), 'review mode deferral documented');
   assert(!src.includes("addEventListener"), 'shell-d renders HTML only — all events ride existing delegation');
+});
+
+// ---- 6. M4: compare-vs-baseline toggle ----
+t('compare toggle: LIVE on a child scenario, off/on states, inert on the baseline itself', () => {
+  const child = { ...makeOpts(), activeProjectId: 101 };
+  let html = renderDScenarioRow(child);
+  assert(html.includes('data-cmd-cmp'), 'child scenario gets a live toggle');
+  assert(html.includes('aria-pressed="false"') && !html.includes('cmd-toggle--on'), 'off state');
+  html = renderDScenarioRow({ ...child, compareOn: true });
+  assert(html.includes('aria-pressed="true"') && html.includes('cmd-toggle--on'), 'on state');
+  // Active project IS the baseline → inert (comparing baseline to itself is a zero row)
+  html = renderDScenarioRow(makeOpts());
+  assert(!html.includes('data-cmd-cmp'), 'baseline project: no live toggle');
+  assert(html.includes('aria-disabled="true"'), 'inert toggle rendered');
+  // No baseline in family at all → inert
+  html = renderDScenarioRow({ ...makeOpts(), scenarioFamily: [{ project_id: 101, scenario_label: 'X', is_baseline: false, status: 'draft' }], activeProjectId: 101 });
+  assert(!html.includes('data-cmd-cmp'), 'no baseline in family: no live toggle');
+});
+
+// ---- 7. M4: updateDRail inline compare deltas ----
+function railStub2() {
+  const values = {}, cls = {};
+  const el = (bag, k) => ({
+    set textContent(v) { values[k] = v; }, get textContent() { return values[k]; },
+    set className(v) { cls[k] = v; }, get className() { return cls[k]; },
+  });
+  return {
+    values, cls,
+    querySelector(sel) {
+      if (sel === '#cmd-rail') return this;
+      let m = sel.match(/data-cmd-railc="([^"]+)"/);
+      if (m) return el(cls, 'c:' + m[1]);
+      m = sel.match(/data-cmd-rail="([^"]+)"/);
+      return m ? el(values, m[1]) : null;
+    },
+  };
+}
+
+const RAIL_DATA = {
+  ready: true, revenue: 11200000, labor: 4400000, facility: 1400000,
+  equipment: 800000, overhead: 730000, vas: 0, startup: 44000,
+  totalCost: 8000000, costPerUnit: 5.71, uomLabel: 'Order',
+  gmPct: 28.6, targetPct: 12,
+};
+
+t('updateDRail compare: favorability directions + pp delta + badge', () => {
+  const stub = railStub2();
+  updateDRail(stub, { ...RAIL_DATA, compare: {
+    label: 'Baseline', revenue: 12800000, labor: 4900000, facility: 1400200,
+    equipment: 900000, overhead: 700000, vas: 0, startup: 44000,
+    totalCost: 8600000, gmPct: 32.8,
+  } });
+  assert(stub.values.cmpBadge === 'Δ vs ★ Baseline', `badge: ${stub.values.cmpBadge}`);
+  // labor $4.4M vs $4.9M base → cost DOWN → good
+  assert(stub.values['c:labor'] === '▼ −$500K', `labor delta: ${stub.values['c:labor']}`);
+  assert(stub.cls['c:labor'].includes('cmd-plc--good'), 'cost down = favorable');
+  // revenue $11.2M vs $12.8M base → revenue DOWN → bad
+  assert(stub.values['c:revenue'] === '▼ −$1.60M', `revenue delta: ${stub.values['c:revenue']}`);
+  assert(stub.cls['c:revenue'].includes('cmd-plc--bad'), 'revenue down = unfavorable');
+  // overhead UP $30K → bad
+  assert(stub.values['c:overhead'] === '▲ +$30K' && stub.cls['c:overhead'].includes('cmd-plc--bad'), 'cost up = unfavorable');
+  // within $500 → "= base"
+  assert(stub.values['c:facility'] === '= base' && stub.cls['c:facility'].includes('cmd-plc--eq'), `near-equal: ${stub.values['c:facility']}`);
+  // GM 28.6 vs 32.8 → −4.2pp bad
+  assert(stub.values['c:gmPct'] === '−4.2pp vs base' && stub.cls['c:gmPct'].includes('cmd-plc--bad'), `gm pp: ${stub.values['c:gmPct']}`);
+  assert(stub.cls['c:totalCost'].includes('cmd-plc--good'), 'total cost down = favorable');
+});
+
+t('updateDRail compare: slots + badge cleared when compare off or not ready', () => {
+  const stub = railStub2();
+  updateDRail(stub, { ...RAIL_DATA, compare: { label: 'B', revenue: 12800000, labor: 4900000, gmPct: 32.8, totalCost: 8600000, facility: 1, equipment: 1, overhead: 1, vas: 0, startup: 0 } });
+  updateDRail(stub, RAIL_DATA); // compare gone
+  assert(stub.values['c:labor'] === '' && stub.values.cmpBadge === '', 'deltas cleared');
+  assert(stub.cls['c:labor'] === 'cmd-plc', 'stale favorability class dropped');
+  updateDRail(stub, { ...RAIL_DATA, compare: { label: 'B', revenue: 1, labor: 1, facility: 1, equipment: 1, overhead: 1, vas: 0, startup: 0, totalCost: 1, gmPct: 1 } });
+  updateDRail(stub, { ready: false });
+  assert(stub.values['c:revenue'] === '' && stub.values.cmpBadge === '', 'not-ready clears compare too');
+});
+
+// ---- 8. M4: per-object what-if map + section renderer ----
+t('WHATIF_BY_CELL: every lever exists in ui.js WHATIF_SLIDERS; every rail row is mapped', () => {
+  const m = uiSrc.match(/const WHATIF_SLIDERS = \[([\s\S]*?)\n\];/);
+  assert(m, 'WHATIF_SLIDERS not found in ui.js');
+  const sliderKeys = new Set([...m[1].matchAll(/key:\s*'([a-z0-9_]+)'/g)].map(x => x[1]));
+  assert(sliderKeys.size >= 15, `implausible WHATIF_SLIDERS parse: ${sliderKeys.size}`);
+  for (const [cell, levers] of Object.entries(WHATIF_BY_CELL)) {
+    for (const k of levers) assert(sliderKeys.has(k), `WHATIF_BY_CELL.${cell} references unknown lever '${k}'`);
+  }
+  for (const rowKey of RAIL_ROW_KEYS) {
+    assert(Object.prototype.hasOwnProperty.call(WHATIF_BY_CELL, rowKey), `rail row '${rowKey}' has no lever mapping`);
+  }
+  // and the rail rows the map promises actually render
+  const html = renderShellD(makeOpts());
+  for (const rowKey of RAIL_ROW_KEYS) {
+    assert(html.includes(`data-cm-cell="${rowKey}"`), `rail row '${rowKey}' missing from shell markup`);
+    assert(html.includes(`data-cmd-railc="${rowKey}"`), `rail row '${rowKey}' missing its compare-delta slot`);
+  }
+});
+
+t('railWhatIfSection: inputs + escaping + studio link + reset gating', () => {
+  const rows = [{ key: 'tax_rate_pct', label: 'Tax <Rate>', min: 0, max: 50, step: 0.5, unit: '%',
+    value: 25, src: 'transient', impact: { good: false, text: '−$120K NI' } }];
+  const html = railWhatIfSection(rows, { anyLive: true });
+  assert(html.includes('data-cmd-izs="tax_rate_pct"') && html.includes('data-cmd-izn="tax_rate_pct"'), 'slider + number inputs');
+  assert(html.includes('Tax &lt;Rate&gt;'), 'label escaped');
+  assert(html.includes('cmd-wisrc--live'), 'live source badge');
+  assert(html.includes('cmd-wichip--bad') && html.includes('−$120K NI'), 'impact chip');
+  assert(html.includes('data-tc-section="whatif"'), 'studio link rides existing tool-chrome delegation');
+  assert(html.includes('data-cmd-izreset'), 'reset shown when a lever is live');
+  assert(!railWhatIfSection(rows, { anyLive: false }).includes('data-cmd-izreset'), 'reset hidden when nothing live');
+  assert(railWhatIfSection([], {}) === '', 'no levers (e.g. startup amort) → empty string');
+});
+
+// ---- 9. M4: ui.js integration pins ----
+t('ui.js: refreshProvenancePanel routes into #cmd-izbody under the D shell', () => {
+  assert(uiSrc.includes("_useDShell() ? rootEl?.querySelector('#cmd-izbody')") , 'iz routing gated on D shell');
+  assert(uiSrc.includes('renderProvenancePanelInner() + _railWhatIfHtml()'), 'same CM-PROV-1 builder + quick what-if in the rail');
+  assert(uiSrc.includes('_wireRailWhatIf(izBody)'), 'rail what-if inputs wired after render');
+});
+
+t('ui.js: compare toggle wired + per-project reset + rail data carries compare bag', () => {
+  assert(uiSrc.includes("e.target.closest('[data-cmd-cmp]')"), 'toggle handled in scen delegation');
+  assert(uiSrc.includes('async function _toggleDCompare'), 'toggle impl');
+  assert(uiSrc.includes('computeWhatIfPreview({}, {') && uiSrc.includes('async function _computeBaselineY1'), 'baseline computed via pure preview (no computeAll memo thrash)');
+  const resets = (uiSrc.match(/_dCompareOn = false;/g) || []).length;
+  assert(resets >= 3, `compare reset on mount + load + failure (found ${resets})`);
+  assert(uiSrc.includes('compare: (_dCompareOn && _dBaselineCmp && _dBaselineCmp.data)'), 'rail data attaches compare bag');
+});
+
+t('ui.js: D shell keeps the inspector across section nav; rail levers ride whatIfTransient', () => {
+  assert(/if \(_useDShell\(\)\) \{[\s\S]{0,400}?refreshProvenancePanel\(\);[\s\S]{0,200}?\} else if \(section === 'summary'\)/.test(uiSrc),
+    'section nav refreshes (not closes) the rail inspector under D shell');
+  assert(uiSrc.includes('function _wireRailWhatIf'), 'wire helper exists');
+  const wireBlock = uiSrc.slice(uiSrc.indexOf('function _wireRailWhatIf'), uiSrc.indexOf('function _wireRailWhatIf') + 2200);
+  assert(wireBlock.includes('setWhatIfTransient({ ...whatIfTransient, [key]: v })'), 'rail levers write the SAME transient overlay as the studio');
+  assert(wireBlock.includes('setWhatIfTransient({})'), 'reset clears the overlay');
 });
 
 // ---- Summary ----

@@ -13,11 +13,18 @@
  * localStorage preference, classic chrome stays the default. Node-safe
  * in-memory fallback mirrors shared/tier.js so the pure suite can exercise it.
  *
- * Deferred by design: compare-vs-baseline toggle is INERT (M4 wires it to the
- * rail inspector); Review / Client-safe mode pills are INERT (M7 document
- * face); the rail's inspector zone is a hint panel until M4. The rail P&L
- * lines carry data-cm-cell/data-cm-year so the EXISTING provenance panel
- * (CM-PROV-1) answers clicks today.
+ * M4 (2026-07-13) — the rail inspector is LIVE: the inspector zone under the
+ * P&L hosts the CM-PROV-1 provenance content (ui.js routes
+ * refreshProvenancePanel into #cmd-izbody under this shell), plus a
+ * per-object quick what-if section (WHATIF_BY_CELL maps each P&L line to its
+ * relevant What-If Studio levers, riding the same whatIfTransient overlay),
+ * plus the compare-vs-baseline toggle (inline Δ vs the family's ★ baseline
+ * on every rail row — ui.js computes the baseline Y1 via
+ * computeWhatIfPreview and passes it as data.compare to updateDRail).
+ *
+ * Deferred by design: Review / Client-safe mode pills are INERT (M7 document
+ * face). This module stays render-only — no event binding here; all events
+ * ride ui.js's existing rootEl delegation (bind-once guarded).
  *
  * @module tools/cost-model/shell-d
  */
@@ -135,10 +142,26 @@ export function renderDScenarioRow(opts) {
     tabs = '<button class="cmd-stab cmd-stab--on">' + star + label + ' '
       + _statusChip(opts.scenarioStatus) + '</button>';
   }
+  // M4 — live compare-vs-baseline toggle. Available only when the family has
+  // a ★ baseline AND the open project is a child (comparing baseline to
+  // itself is a zero row). Click handling rides ui.js's scenario-row
+  // delegation via data-cmd-cmp.
+  const baseRow = fam.find(r => r.is_baseline);
+  const baseLabel = escapeAttr(String(baseRow?.scenario_label || 'Baseline'));
+  const canCompare = !!(baseRow && baseRow.project_id !== opts.activeProjectId);
+  const cmp = canCompare
+    ? '<button type="button" class="cmd-cmp cmd-cmp--live" data-cmd-cmp aria-pressed="' + (opts.compareOn ? 'true' : 'false') + '"'
+      + ' title="' + (opts.compareOn
+        ? 'Comparing against ★ ' + baseLabel + ' — click to turn off'
+        : 'Show inline Δ vs ★ ' + baseLabel + ' on the P&L rail') + '">'
+      + 'Compare vs baseline <span class="cmd-toggle' + (opts.compareOn ? ' cmd-toggle--on' : '') + '"></span></button>'
+    : '<span class="cmd-cmp" title="' + (baseRow
+        ? 'This is the ★ baseline — open a child scenario to compare against it'
+        : 'No baseline scenario in this family yet') + '">'
+      + 'Compare vs baseline <span class="cmd-toggle" aria-disabled="true"></span></span>';
   return tabs
     + '<button class="cmd-stab cmd-stab--add" data-tc-section="scenarios" title="Scenario lifecycle — clone, review, approve">+</button>'
-    + '<span class="cmd-cmp" title="Compare vs baseline — arrives with the rail inspector (M4)">'
-    + 'Compare vs baseline <span class="cmd-toggle" aria-disabled="true"></span></span>';
+    + cmp;
 }
 
 /** Spine (A): 5 stations with progress rings + one-line subs. */
@@ -195,12 +218,19 @@ export function renderDTopMeta(opts) {
     + (ss.when ? ' · ' + escapeHtml(ss.when) : '') + '</span>';
 }
 
-/** Rail P&L rows — values filled by updateDRail (surgical, no re-render). */
+/** The 7 rail P&L line keys, in render order. Exported so tests can pin
+ *  WHATIF_BY_CELL coverage against the actual rows. */
+export const RAIL_ROW_KEYS = ['revenue', 'labor', 'facility', 'equipment', 'overhead', 'vas', 'startup'];
+
+/** Rail P&L rows — values filled by updateDRail (surgical, no re-render).
+ *  M4: each row carries a compare-delta slot (data-cmd-railc) that
+ *  updateDRail fills when compare-vs-baseline is on. */
 function _railRows() {
   const line = (key, label) =>
     '<div class="cmd-pl" data-cm-cell="' + key + '" data-cm-year="1" title="Click for provenance">'
     + '<span class="cmd-plnm">' + label + '</span>'
-    + '<span class="cmd-plval" data-cmd-rail="' + key + '">—</span></div>';
+    + '<span class="cmd-plv"><span class="cmd-plval" data-cmd-rail="' + key + '">—</span>'
+    + '<small class="cmd-plc" data-cmd-railc="' + key + '"></small></span></div>';
   return line('revenue', 'Revenue')
     + line('labor', 'Direct + indirect labor')
     + line('facility', 'Facility & occupancy')
@@ -236,18 +266,23 @@ export function renderShellD(opts) {
     '</div>' +
     '<aside class="cmd-rail" id="cmd-rail">' +
       '<div class="cmd-plz">' +
-        '<div class="cmd-rt"><h2>P&amp;L — Year 1</h2><span class="cmd-live">LIVE</span></div>' +
+        '<div class="cmd-rt"><h2>P&amp;L — Year 1</h2><span class="cmd-cmpbadge" data-cmd-rail="cmpBadge"></span><span class="cmd-live">LIVE</span></div>' +
         _railRows() +
         '<div class="cmd-pltotal">' +
-          '<div class="cmd-plr"><span>Total cost</span><b data-cmd-rail="totalCost">—</b></div>' +
+          '<div class="cmd-plr"><span>Total cost</span><b><span data-cmd-rail="totalCost">—</span><small class="cmd-plc" data-cmd-railc="totalCost"></small></b></div>' +
           '<div class="cmd-plr"><span data-cmd-rail="cpuLabel">Cost / unit</span><b data-cmd-rail="costPerUnit">—</b></div>' +
-          '<div class="cmd-plr cmd-plr--big"><span>Gross margin</span><b><span data-cmd-rail="gm">—</span> <small data-cmd-rail="gmDelta"></small></b></div>' +
+          '<div class="cmd-plr cmd-plr--big"><span>Gross margin</span><b><span data-cmd-rail="gm">—</span> <small data-cmd-rail="gmDelta"></small><small class="cmd-plc" data-cmd-railc="gmPct"></small></b></div>' +
         '</div>' +
       '</div>' +
       '<div class="cmd-iz">' +
         '<div class="cmd-izk">INSPECTOR</div>' +
-        '<p class="cmd-izhint">Click any P&amp;L line above for its provenance chain. ' +
-        'The full follow-your-selection inspector (per-object what-if, source pills, tornado) lands in the next milestone.</p>' +
+        // M4 — ui.js refreshProvenancePanel() routes the CM-PROV-1 content
+        // (plus the per-object quick what-if) into this body under the D
+        // shell. The hint below is the empty-selection state.
+        '<div id="cmd-izbody">' +
+        '<p class="cmd-izhint">Click any P&amp;L line above — or any Summary cell or KPI tile — ' +
+        'for its provenance chain and quick what-if levers for that line.</p>' +
+        '</div>' +
       '</div>' +
     '</aside>' +
   '</div>' +
@@ -275,6 +310,12 @@ export function refreshShellD(rootEl, opts) {
  * computeAll's memoized result — Y1 projection row + summary):
  * { revenue, labor, facility, equipment, overhead, vas, startup,
  *   totalCost, costPerUnit, uomLabel, gmPct, targetPct, ready }
+ *
+ * M4 — optional data.compare = the ★ baseline's Y1 bag
+ * ({ label, revenue…startup, totalCost, gmPct }, computed once by ui.js via
+ * computeWhatIfPreview on the baseline project). When present, every row's
+ * data-cmd-railc slot gets an inline Δ (current − baseline), colored by
+ * whether the delta is favorable: revenue/GM up = good, costs up = bad.
  */
 export function updateDRail(rootEl, data) {
   if (!rootEl) return;
@@ -291,9 +332,22 @@ export function updateDRail(rootEl, data) {
     const el = rail.querySelector('[data-cmd-rail="' + key + '"]');
     if (el) el.textContent = text;
   };
+  // M4 — compare-delta slots. Sets text + favorability class together so a
+  // cleared slot never keeps a stale color.
+  const setCmp = (key, text, cls) => {
+    const el = rail.querySelector('[data-cmd-railc="' + key + '"]');
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'cmd-plc' + (cls ? ' ' + cls : '');
+  };
+  const clearCmp = () => {
+    ['revenue','labor','facility','equipment','overhead','vas','startup','totalCost','gmPct'].forEach(k => setCmp(k, ''));
+    set('cmpBadge', '');
+  };
   if (!data || !data.ready) {
     ['revenue','labor','facility','equipment','overhead','vas','startup','totalCost','costPerUnit'].forEach(k => set(k, '—'));
     set('gm', '—'); set('gmDelta', '');
+    clearCmp();
     return;
   }
   set('revenue', fmt(data.revenue));
@@ -312,6 +366,101 @@ export function updateDRail(rootEl, data) {
     ? data.gmPct - data.targetPct : null;
   set('gmDelta', d == null ? ''
     : (d >= 0 ? 'meets target ✓' : d.toFixed(1) + ' vs target'));
+
+  // M4 — inline compare deltas vs the ★ baseline. dir: +1 = higher is
+  // favorable (revenue), −1 = lower is favorable (every cost row).
+  const cmp = data.compare;
+  if (!cmp) { clearCmp(); return; }
+  set('cmpBadge', 'Δ vs ★ ' + (cmp.label || 'Baseline'));
+  const CMP_DIR = [['revenue', 1], ['labor', -1], ['facility', -1], ['equipment', -1],
+    ['overhead', -1], ['vas', -1], ['startup', -1], ['totalCost', -1]];
+  for (const [k, dir] of CMP_DIR) {
+    const cur = data[k], base = cmp[k];
+    if (!Number.isFinite(cur) || !Number.isFinite(base)) { setCmp(k, ''); continue; }
+    const dd = cur - base;
+    if (Math.abs(dd) < 500) { setCmp(k, '= base', 'cmd-plc--eq'); continue; }
+    setCmp(k, (dd > 0 ? '▲ +' : '▼ −') + fmt(Math.abs(dd)),
+      (dd * dir > 0) ? 'cmd-plc--good' : 'cmd-plc--bad');
+  }
+  if (Number.isFinite(data.gmPct) && Number.isFinite(cmp.gmPct)) {
+    const gd = data.gmPct - cmp.gmPct;
+    setCmp('gmPct', (gd >= 0 ? '+' : '−') + Math.abs(gd).toFixed(1) + 'pp vs base',
+      gd >= 0 ? 'cmd-plc--good' : 'cmd-plc--bad');
+  } else { setCmp('gmPct', ''); }
+}
+
+// ─── M4: per-object quick what-if (rail inspector) ────────────────────────
+//
+// Maps every provenance cell key to the What-If Studio levers that actually
+// move that line, so the rail inspector can offer "the sliders for THIS
+// selection" instead of the full 17-lever studio. Keys must exist in ui.js
+// WHATIF_SLIDERS — test-cm-shell-d pins this against drift. Escalation
+// levers move years 2+ (the Y1 rail line holds still) — their feedback
+// surface is the per-lever Δ NI chip, which is horizon-total.
+export const WHATIF_BY_CELL = {
+  // Rail rows (Y1 P&L)
+  revenue:   ['pricing_discount_pct', 'annual_volume_growth_pct', 'target_margin_pct'],
+  labor:     ['direct_labor_productivity_pct', 'overtime_pct', 'absence_allowance_pct', 'temp_share_delta_pp'],
+  facility:  ['facility_escalation_pct'],
+  equipment: ['equipment_escalation_pct'],
+  overhead:  ['cost_escalation_pct'],
+  vas:       ['annual_volume_growth_pct'],
+  startup:   [],
+  // Summary P&L rows (same inspector, clicked from the Summary table)
+  orders:    ['annual_volume_growth_pct'],
+  cogs:      ['direct_labor_productivity_pct', 'annual_volume_growth_pct'],
+  grossProfit: ['pricing_discount_pct', 'target_margin_pct', 'direct_labor_productivity_pct'],
+  sga:       ['cost_escalation_pct'],
+  ebitda:    ['pricing_discount_pct', 'annual_volume_growth_pct', 'labor_escalation_pct'],
+  depreciation: [],
+  ebit:      ['pricing_discount_pct', 'equipment_escalation_pct'],
+  taxes:     ['tax_rate_pct'],
+  netIncome: ['tax_rate_pct', 'pricing_discount_pct', 'target_margin_pct'],
+  capex:     [],
+  workingCapitalChange: ['dso_days', 'dpo_days'],
+  freeCashFlow: ['dso_days', 'dpo_days', 'tax_rate_pct'],
+  cumFcf:    ['dso_days', 'dpo_days', 'discount_rate_pct'],
+};
+
+/**
+ * Per-object quick what-if section for the rail inspector. Pure render —
+ * ui.js assembles the rows (current values via whatIfCurrentValue, source
+ * via whatIfSource, isolated Δ NI impact via computeWhatIfPreview) and
+ * wires the inputs after mount.
+ *
+ * @param {Array<{key,label,min,max,step,unit,value,src,impact:{good,text}|null}>} rows
+ * @param {{anyLive?:boolean}} [opts] — anyLive shows the reset action
+ * @returns {string} HTML ('' when no rows — startup amort has no lever)
+ */
+export function railWhatIfSection(rows, opts = {}) {
+  if (!Array.isArray(rows) || !rows.length) return '';
+  const items = rows.map(r => {
+    const badge = r.src === 'transient'
+      ? '<span class="cmd-wisrc cmd-wisrc--live">live</span>'
+      : (r.src === 'override' ? '<span class="cmd-wisrc">override</span>' : '');
+    const chip = r.impact
+      ? '<span class="cmd-wichip ' + (r.impact.good ? 'cmd-wichip--good' : 'cmd-wichip--bad') + '">'
+        + escapeHtml(r.impact.text) + '</span>'
+      : '';
+    const k = escapeAttr(String(r.key));
+    return '<div class="cmd-wirow">'
+      + '<div class="cmd-wihead">'
+      + '<span class="cmd-wilabel">' + escapeHtml(r.label) + '</span>' + badge + chip
+      + '<span class="cmd-wival"><input type="number" step="' + escapeAttr(String(r.step)) + '" min="' + escapeAttr(String(r.min)) + '" max="' + escapeAttr(String(r.max)) + '"'
+      + ' value="' + escapeAttr(String(r.value)) + '" data-cmd-izn="' + k + '">'
+      + '<span class="cmd-wiunit">' + escapeHtml(r.unit) + '</span></span>'
+      + '</div>'
+      + '<input type="range" min="' + escapeAttr(String(r.min)) + '" max="' + escapeAttr(String(r.max)) + '" step="' + escapeAttr(String(r.step)) + '"'
+      + ' value="' + escapeAttr(String(r.value)) + '" data-cmd-izs="' + k + '">'
+      + '</div>';
+  }).join('');
+  return '<div class="cmd-wiz">'
+    + '<div class="cmd-wik">QUICK WHAT-IF — THIS LINE</div>'
+    + items
+    + '<div class="cmd-winote">Transient preview — nothing saves. '
+    + '<button type="button" class="cmd-wilink" data-tc-section="whatif">Open What-If Studio</button>'
+    + (opts.anyLive ? ' · <button type="button" class="cmd-wilink" data-cmd-izreset>Reset all levers</button>' : '')
+    + '</div></div>';
 }
 
 // ─── Styles (scoped .cmd-*) ───────────────────────────────────────────────
@@ -350,9 +499,13 @@ function _dStyles() {
   '.cmd-st--d{background:#44403c;color:#d6d3d1;}.cmd-stab--on .cmd-st--d{background:var(--ies-gray-200,#e7e5e4);color:var(--ies-gray-600,#57534e);}' +
   '.cmd-st--r{background:rgba(180,83,9,.18);color:#fbbf24;}.cmd-stab--on .cmd-st--r{background:#fffbeb;color:#b45309;}' +
   '.cmd-st--a{background:rgba(21,128,61,.18);color:#4ade80;}.cmd-stab--on .cmd-st--a{background:#f0fdf4;color:#15803d;}' +
-  '.cmd-cmp{margin-left:auto;display:flex;align-items:center;gap:7px;color:#78716c;font-size:11.5px;padding:0 4px 7px;white-space:nowrap;cursor:not-allowed;}' +
-  '.cmd-toggle{width:30px;height:17px;border-radius:99px;background:#44403c;position:relative;display:inline-block;}' +
-  '.cmd-toggle::after{content:"";position:absolute;width:13px;height:13px;border-radius:50%;background:#78716c;top:2px;left:2px;}' +
+  '.cmd-cmp{margin-left:auto;display:flex;align-items:center;gap:7px;color:#78716c;font-size:11.5px;padding:0 4px 7px;white-space:nowrap;cursor:not-allowed;background:none;border:none;}' +
+  '.cmd-cmp--live{cursor:pointer;color:#d6d3d1;}' +
+  '.cmd-cmp--live:hover{color:#fff;}' +
+  '.cmd-toggle{width:30px;height:17px;border-radius:99px;background:#44403c;position:relative;display:inline-block;transition:background .15s ease;}' +
+  '.cmd-toggle::after{content:"";position:absolute;width:13px;height:13px;border-radius:50%;background:#78716c;top:2px;left:2px;transition:left .15s ease,background .15s ease;}' +
+  '.cmd-toggle--on{background:var(--ies-orange,#ff3a00);}' +
+  '.cmd-toggle--on::after{left:15px;background:#fff;}' +
   /* spine */
   '.cmd-spine{background:var(--ies-gray-900,#1c1917);color:#d6d3d1;padding:13px 9px;display:flex;flex-direction:column;gap:3px;overflow-y:auto;}' +
   '.cmd-label{font-size:10px;font-weight:600;letter-spacing:.09em;color:#78716c;padding:0 10px 7px;}' +
@@ -397,7 +550,19 @@ function _dStyles() {
   '.cmd-pl{display:flex;justify-content:space-between;gap:8px;padding:5.5px 7px;border-radius:7px;cursor:pointer;align-items:center;}' +
   '.cmd-pl:hover{background:var(--ies-gray-50,#fafaf9);}' +
   '.cmd-plnm{font-size:11.5px;color:var(--ies-gray-600,#57534e);}' +
+  '.cmd-plv{display:flex;flex-direction:column;align-items:flex-end;}' +
   '.cmd-plval{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ies-gray-900,#1c1917);}' +
+  /* M4 — compare-vs-baseline delta slots + badge */
+  '.cmd-plc{display:block;font-size:9.5px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.3;}' +
+  '.cmd-plc:empty{display:none;}' +
+  '.cmd-plc--good{color:var(--c-success-ink,#15803d);}' +
+  '.cmd-pltotal .cmd-plc--good{color:#4ade80;}' +
+  '.cmd-plc--bad{color:#dc2626;}' +
+  '.cmd-pltotal .cmd-plc--bad{color:#f87171;}' +
+  '.cmd-plc--eq{color:var(--ies-gray-400,#a8a29e);}' +
+  '.cmd-cmpbadge{font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:1.5px 7px;}' +
+  '.cmd-cmpbadge:empty{display:none;}' +
+  '.cmd-pltotal .cmd-plr b{text-align:right;}' +
   '.cmd-pltotal{margin:7px 0 4px;padding:9px 10px;border-radius:10px;background:var(--ies-gray-900,#1c1917);color:#fff;}' +
   '.cmd-plr{display:flex;justify-content:space-between;font-size:11.5px;padding:2px 0;color:#d6d3d1;}' +
   '.cmd-plr b{color:#fff;font-variant-numeric:tabular-nums;}' +
@@ -406,6 +571,27 @@ function _dStyles() {
   '.cmd-iz{border-top:1px solid var(--ies-gray-200,#e7e5e4);flex:1;overflow-y:auto;background:var(--ies-gray-50,#fafaf9);padding:11px 15px;}' +
   '.cmd-izk{font-size:9.5px;font-weight:700;letter-spacing:.08em;color:var(--ies-gray-400,#a8a29e);margin-bottom:5px;}' +
   '.cmd-izhint{font-size:11.5px;color:var(--ies-gray-600,#57534e);line-height:1.55;margin:0;}' +
+  /* M4 — inspector body hosts the CM-PROV-1 content (its own inline styles)
+     inside the rail; trim the panel-sized paddings down to rail scale. */
+  '#cmd-izbody{margin:0 -15px;}' +
+  '#cmd-izbody>p.cmd-izhint{margin:0 15px;}' +
+  /* per-object quick what-if */
+  '.cmd-wiz{padding:12px 16px;border-top:1px solid var(--ies-gray-200,#e7e5e4);background:#fff;}' +
+  '.cmd-wik{font-size:9.5px;font-weight:700;letter-spacing:.08em;color:var(--ies-gray-500,#78716c);margin-bottom:8px;}' +
+  '.cmd-wirow{margin-bottom:10px;}' +
+  '.cmd-wihead{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}' +
+  '.cmd-wilabel{font-size:11.5px;font-weight:600;color:var(--ies-gray-800,#292524);}' +
+  '.cmd-wisrc{font-size:8.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-radius:8px;padding:1px 6px;background:var(--ies-gray-100,#f5f5f4);color:var(--ies-gray-600,#57534e);}' +
+  '.cmd-wisrc--live{background:var(--c-info-soft,#eff6ff);color:var(--c-info-ink,#1d4ed8);}' +
+  '.cmd-wichip{font-size:10px;font-weight:700;font-variant-numeric:tabular-nums;}' +
+  '.cmd-wichip--good{color:var(--c-success-ink,#15803d);}' +
+  '.cmd-wichip--bad{color:#dc2626;}' +
+  '.cmd-wival{margin-left:auto;display:flex;align-items:center;gap:3px;}' +
+  '.cmd-wival input{width:52px;font-size:11.5px;text-align:right;padding:1px 4px;border:1px solid var(--ies-gray-200,#e7e5e4);border-radius:5px;}' +
+  '.cmd-wiunit{font-size:10px;color:var(--ies-gray-400,#a8a29e);min-width:18px;}' +
+  '.cmd-wirow input[type=range]{width:100%;margin-top:3px;accent-color:var(--ies-orange,#ff3a00);}' +
+  '.cmd-winote{font-size:10px;color:var(--ies-gray-500,#78716c);margin-top:2px;}' +
+  '.cmd-wilink{background:none;border:none;padding:0;font-size:10px;color:var(--c-info-ink,#1d4ed8);cursor:pointer;text-decoration:underline;}' +
   /* narrow screens: collapse the rail under the center column */
   '@media (max-width:1180px){.cmd-app{grid-template-columns:200px minmax(0,1fr);}.cmd-rail{display:none;}}' +
   '</style>';
