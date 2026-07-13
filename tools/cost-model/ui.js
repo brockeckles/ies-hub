@@ -2493,6 +2493,28 @@ function getCellProvenance(rowKey, year) {
       };
     }
 
+    // M5-Economics walk find (m5f): the rail has carried a 'startup' row
+    // since M3 and the eco strip now inspects it, but the switch never had
+    // a case — the inspector answered "No provenance available".
+    case 'startup': {
+      const lines = model?.startupLines || [];
+      const capital = lines.filter(l => l.billing_type !== 'as_incurred');
+      const asIncurred = lines.length - capital.length;
+      const oneTime = capital.reduce((sum, l) => sum + (Number(l.one_time_cost) || 0), 0);
+      const yrs = Math.max(1, ctx.contractYears || 5);
+      return {
+        label: `Start-up Amortization (Year ${year})`,
+        formula: 'startupAmort = Σ one_time_cost (capitalized lines) ÷ contract years\nas-incurred lines pass through at zero margin — not amortized',
+        value: p.startup ?? s.startupAmort,
+        inputs: [
+          { label: 'Capitalized one-time cost', value: _fmtMoney(oneTime), source: capital.length + ' line(s) — Start-Up section' },
+          { label: 'Contract term', value: yrs + ' yr', source: 'Setup → Contract Term' },
+          ...(asIncurred > 0 ? [{ label: 'As-incurred lines', value: String(asIncurred), source: 'Billed as incurred — pass-through, excluded from amort' }] : []),
+        ],
+        notes: 'Flat across the contract — amortization does not escalate.',
+      };
+    }
+
     case 'overhead':
     case 'sga': {
       // M5-Economics walk find (m5e): after the EBITDA reclass p.sga can be
@@ -3608,7 +3630,11 @@ function _ecoStripHtml() {
   try {
     const c = computeAll(_computeCtx());
     const p1 = c.projections[0] || {};
-    const startupTotal = (model.startupLines || []).reduce((s, l) => s + (Number(l.cost) || 0), 0);
+    // m5f — startup lines carry one_time_cost (not cost); as-incurred lines
+    // are pass-through, so the card total shows the CAPITALIZED basis that
+    // actually drives the amort (mirrors calc.totalStartupCapital).
+    const startupTotal = (model.startupLines || []).reduce((s, l) =>
+      s + (l.billing_type === 'as_incurred' ? 0 : (Number(l.one_time_cost) || 0)), 0);
     return stationEco.renderEcoStrip({
       active: activeSection,
       facility: { cost: p1.facility ?? c.summary.facilityCost, sqft: Number(model.facility?.totalSqft) },

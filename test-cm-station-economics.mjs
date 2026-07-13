@@ -104,6 +104,15 @@ t('ui.js: prov delegation admits strip cells; strip bag rides the seam', () => {
   assert(fn.includes('computeAll(_computeCtx())'), 'strip values come from the memoized seam');
 });
 
+t('ui.js: startup rail/strip cell has a provenance case (m5f walk find)', () => {
+  // The rail carried a startup row since M3 with NO case in
+  // getCellProvenance — inspector said "No provenance available".
+  assert(/case 'startup': \{\n      const lines = model\?\.startupLines/.test(uiSrc),
+    'startup provenance case exists and reads startupLines');
+  assert(uiSrc.includes("l.billing_type === 'as_incurred' ? 0 : (Number(l.one_time_cost) || 0)"),
+    'strip startup total uses one_time_cost on the capitalized basis (not the nonexistent .cost field)');
+});
+
 t('ui.js: overhead vs sga provenance resolves by rowKey (m5e walk find)', () => {
   // p.sga can be a legitimate 0 post-EBITDA-reclass; `p.sga ?? p.overhead`
   // masked the overhead cell behind it (rail + strip showed $0.00).
