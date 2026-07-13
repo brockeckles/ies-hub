@@ -144,9 +144,13 @@ export function buildReviewModel({ c, model, extras = {} }) {
   const cost = heur('cost_escalation_pct', 'costEscPct', '%/yr');
   const assumptions = [
     { label: 'Wage basis', value: '—', ...wageSrc },
-    fr ? { label: 'Lease rate', value: '$' + (Number(fr.lease_rate_sqft_yr) || 0).toFixed(2) + '/SF·yr',
+    // m7c walk find — real column is lease_rate_psf_yr (the sqft name only
+    // ever existed in a test fixture); a 0/absent rate must NOT print as
+    // "$0.00 · SOURCED" — degrade honestly.
+    (fr && Number(fr.lease_rate_psf_yr) > 0)
+      ? { label: 'Lease rate', value: '$' + Number(fr.lease_rate_psf_yr).toFixed(2) + '/SF·yr',
           source: `ref_facility_rates · ${extras.marketCity || 'market'}`, status: 'SOURCED' }
-       : { label: 'Lease rate', value: '—', source: 'no market rate row', status: 'ASSUMPTION' },
+      : { label: 'Lease rate', value: '—', source: fr ? 'market row has no lease rate' : 'no market rate row', status: 'ASSUMPTION' },
     { label: 'Labor standards', value: `${most} of ${lines.length} direct lines`,
       source: most ? 'MOST engineered standards' : 'manual estimates',
       status: lines.length === 0 ? 'ASSUMPTION' : (most === lines.length ? 'ENGINEERED' : (most > 0 ? 'PARTIAL' : 'NEEDS STANDARD')) },

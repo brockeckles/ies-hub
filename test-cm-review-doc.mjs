@@ -53,7 +53,7 @@ const MODEL = {
   ],
 };
 const EXTRAS = {
-  facilityRateRow: { market_id: 'mkt-cmh', lease_rate_sqft_yr: 6.85 },
+  facilityRateRow: { market_id: 'mkt-cmh', lease_rate_psf_yr: 6.85 },
   marketLaborProfile: { id: 1 },
   heuristicOverrides: { annual_volume_growth_pct: 4 },
   scenarioLabel: 'Baseline', scenarioStatus: 'approved', marketCity: 'Columbus, OH',
@@ -102,6 +102,12 @@ t('assumptions: no profile / no lines degrade honestly', () => {
   const by = Object.fromEntries(m.assumptions.map(a => [a.label, a]));
   assert(by['Wage basis'].status === 'ASSUMPTION', 'no profile → assumption');
   assert(by['Lease rate'].status === 'ASSUMPTION', 'no rate row → assumption');
+  // m7c — a rate row with a 0/absent lease rate must NOT print $0.00·SOURCED
+  const z = buildReviewModel({ c: makeC(), model: MODEL,
+    extras: { ...EXTRAS, facilityRateRow: { market_id: 'mkt-cmh' } } });
+  const zby = Object.fromEntries(z.assumptions.map(a => [a.label, a]));
+  assert(zby['Lease rate'].status === 'ASSUMPTION' && zby['Lease rate'].value === '—',
+    'zero-rate row degrades honestly');
   assert(by['Labor standards'].status === 'ASSUMPTION', 'no lines → assumption');
 });
 
