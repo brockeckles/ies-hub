@@ -340,7 +340,18 @@ t('ui.js: compare toggle wired + per-project reset + rail data carries compare b
   assert(uiSrc.includes('computeWhatIfPreview({}, {') && uiSrc.includes('async function _computeBaselineY1'), 'baseline computed via pure preview (no computeAll memo thrash)');
   const resets = (uiSrc.match(/_dCompareOn = false;/g) || []).length;
   assert(resets >= 3, `compare reset on mount + load + failure (found ${resets})`);
-  assert(uiSrc.includes('_activeProvCell = null;'), 'inspector selection cleared on project load (M4b walk find)');
+  // M4b walk find, round 2: the reset must run BEFORE renderCurrentView —
+  // bindSectionEvents re-renders the rail inspector during that pass, so a
+  // late reset leaves stale content on screen (exactly what the first,
+  // post-render placement did).
+  const loadFn = uiSrc.slice(uiSrc.indexOf('async function loadModelByCmId'));
+  const loadBlock = loadFn.slice(0, loadFn.indexOf('\nasync function ', 10));
+  const iReset = loadBlock.indexOf('_activeProvCell = null;');
+  const iRender = loadBlock.indexOf('renderCurrentView();');
+  assert(iReset !== -1, 'inspector selection cleared on project load (M4b walk find)');
+  assert(iRender !== -1 && iReset < iRender, 'selection reset must precede renderCurrentView in the load path');
+  const iCmpReset = loadBlock.indexOf('_dCompareOn = false;');
+  assert(iCmpReset !== -1 && iCmpReset < iRender, 'compare reset must precede renderCurrentView in the load path');
   assert(uiSrc.includes('compare: (_dCompareOn && _dBaselineCmp && _dBaselineCmp.data)'), 'rail data attaches compare bag');
 });
 

@@ -1180,6 +1180,14 @@ async function loadModelByCmId(id) {
     scenarioFamily = null;
     _scenarioFamilyLoadInFlight = false;
     _chromeScenarioRow = null;
+    // M4 — compare mode + inspector selection are per-project. MUST clear
+    // BEFORE renderCurrentView below: bindSectionEvents re-renders the rail
+    // inspector during that pass, and a surviving _activeProvCell made it
+    // keep explaining the PREVIOUS project's numbers (M4b walk find; the
+    // first fix sat after renderCurrentView and changed nothing visible).
+    _dCompareOn = false;
+    _dBaselineCmp = null;
+    _activeProvCell = null;
     renderCurrentView();
     refreshSaveStateChip();
 
@@ -1207,15 +1215,10 @@ async function loadModelByCmId(id) {
         try { _refreshTopChrome(); } catch (_) {}
       }
     }).catch(() => {});
-    // M4 — compare mode is per-project: reset on every load (scenario tab
-    // switches route through here too). The inspector selection dies with
-    // the old project too — walk find: it survived a scenario switch and
-    // kept explaining the PREVIOUS project's numbers until the next click.
-    _dCompareOn = false;
-    _dBaselineCmp = null;
-    _activeProvCell = null;
     // M3 — D-shell scenario tab row: fetch the family only when the flag is
-    // on (2-4 light selects; classic chrome never needs them).
+    // on (2-4 light selects; classic chrome never needs them). (M4 per-
+    // project resets live in the pre-render reset block above — they must
+    // run before renderCurrentView.)
     _dScenarioFamily = [];
     if (shellD.getShellPref() === 'd') {
       api.listScenarioFamilyForProject(id).then(rows => {
