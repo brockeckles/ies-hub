@@ -353,6 +353,10 @@ t('ui.js: compare toggle wired + per-project reset + rail data carries compare b
   const iCmpReset = loadBlock.indexOf('_dCompareOn = false;');
   assert(iCmpReset !== -1 && iCmpReset < iRender, 'compare reset must precede renderCurrentView in the load path');
   assert(uiSrc.includes('compare: (_dCompareOn && _dBaselineCmp && _dBaselineCmp.data)'), 'rail data attaches compare bag');
+  // M4d — baseline bag is basis-pinned to the market labor profile identity;
+  // profile drift (lazy loader resolving) forces a recompute, not a skewed delta.
+  assert(uiSrc.includes('_dBaselineCmp.profile !== currentMarketLaborProfile'), 'profile-identity guard on the compare cache');
+  assert((uiSrc.match(/profile: currentMarketLaborProfile/g) || []).length >= 2, 'cache stores the profile identity at compute time');
 });
 
 t('ui.js: D shell keeps the inspector across section nav; rail levers ride whatIfTransient', () => {

@@ -370,7 +370,7 @@ async function _toggleDCompare() {
     const base = (_dScenarioFamily || []).find(r => r.is_baseline);
     if (!base || base.project_id === model?.id) { _dCompareOn = false; return; }
     if (!_dBaselineCmp || _dBaselineCmp.pid !== base.project_id || (!_dBaselineCmp.data && !_dBaselineCmp.loading)) {
-      _dBaselineCmp = { pid: base.project_id, data: null, loading: true };
+      _dBaselineCmp = { pid: base.project_id, data: null, loading: true, profile: currentMarketLaborProfile };
       try {
         _dBaselineCmp.data = await _computeBaselineY1(base);
       } catch (err) {
@@ -389,6 +389,32 @@ async function _toggleDCompare() {
 
 function _refreshDRail() {
   if (!rootEl || !_useDShell()) return;
+  // M4d — the baseline compare bag was computed against a specific market-
+  // labor-profile identity. If the lazy profile loader has resolved since
+  // (it fires on Summary/Timeline open), recompute the baseline on the same
+  // basis — otherwise the rail would report the profile effect as a
+  // scenario difference.
+  if (_dCompareOn && _dBaselineCmp && _dBaselineCmp.data && !_dBaselineCmp.loading
+      && _dBaselineCmp.profile !== currentMarketLaborProfile) {
+    const base = (_dScenarioFamily || []).find(r => r.is_baseline);
+    if (base) {
+      _dBaselineCmp = { pid: base.project_id, data: null, loading: true, profile: currentMarketLaborProfile };
+      _computeBaselineY1(base)
+        .then(d => {
+          if (_dBaselineCmp && _dBaselineCmp.loading) {
+            _dBaselineCmp.data = d;
+            _dBaselineCmp.loading = false;
+            _refreshDRail();
+          }
+        })
+        .catch(err => {
+          console.warn('[CM] baseline compare re-basis failed:', err);
+          _dBaselineCmp = null;
+          _dCompareOn = false;
+          try { _refreshTopChrome(); } catch (_) {}
+        });
+    }
+  }
   shellD.updateDRail(rootEl, _dRailData());
 }
 
