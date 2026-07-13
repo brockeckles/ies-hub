@@ -53,5 +53,30 @@ const repinned = calc.pinHouseAssumptions(live2027, '2027-01-15');
 eq(repinned.rows[0].year_1_pct, 5.0, 'adopt: re-pin picks up new guidance');
 eq(calc.houseAssumptionsDrift(repinned, live2027).anyDrift, false, 'adopt: drift clears after re-pin');
 
+
+// ---- UI relocation + clarity pass (2026-07-13, Brock UX callout) ----
+// Source pins: the full table lives in the ASSUMPTIONS section; Setup
+// carries only the compact pin/drift chip; rows are humanized, cells are
+// signed percentages, and the two engine-feeding rows are badged.
+import { readFileSync } from 'node:fs';
+const uiSrc = readFileSync('./tools/cost-model/ui.js', 'utf8');
+
+function pin(cond, label) { eq(!!cond, true, label); }
+
+const setupBody = uiSrc.slice(uiSrc.indexOf('function renderSetup('), uiSrc.indexOf('function renderHouseGuidanceChip'));
+pin(setupBody.includes('renderHouseGuidanceChip()'), 'Setup renders the compact chip');
+pin(!setupBody.includes('renderHouseAssumptionsCard()'), 'Setup no longer renders the full table');
+
+const asmIdx = uiSrc.indexOf('function renderAssumptions(');
+const asmBody = uiSrc.slice(asmIdx, asmIdx + 12000);
+pin(asmBody.includes('renderHouseAssumptionsCard()'), 'Assumptions section hosts the full table');
+
+pin(uiSrc.includes("'labor_category|hourly|wage': 'Hourly wages'"), 'rows humanized (no raw scope/metric)');
+pin(uiSrc.includes('seeds Labor Escalation') && uiSrc.includes('seeds Cost Escalation'), 'the two engine-feeding rows are badged');
+pin(uiSrc.includes('EXPECTED YEAR-OVER-YEAR INCREASE'), 'column group states the unit in plain English');
+pin(uiSrc.includes("(v > 0 ? '+' : v < 0 ? '\u2212' : '')") || /v > 0 \? '\+' : v < 0/.test(uiSrc), 'cells are signed percentages');
+pin(uiSrc.includes("data-tc-section=\"assumptions\"") || uiSrc.includes("data-tc-section='assumptions'"), 'chip links to the Assumptions section');
+pin(!uiSrc.includes('max-width:220px;">${escapeAttr(r.notes'), 'notes no longer truncate');
+
 console.log(`test-cm-house-assumptions: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

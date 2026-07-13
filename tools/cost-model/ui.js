@@ -4530,84 +4530,165 @@ function renderSetup() {
     </div>
     ` : ''}
 
-    ${renderHouseAssumptionsCard()}
+    ${renderHouseGuidanceChip()}
   `;
 }
 
 /**
- * House Assumptions card (2026-06-12) — read-only view of the corporate
- * pricing_assumptions guidance PINNED to this project. Pinned at model
- * creation (new models also seed their escalation defaults from it) or
- * first save (legacy models). Later guidance changes show as drift; the
- * project's pinned values stay intact unless the analyst explicitly adopts.
+ * House guidance chip (2026-07-13, Brock UX callout) — the COMPACT Setup
+ * presence of corporate guidance. The full table moved to the Assumptions
+ * section (its governance home, next to the heuristics register); Setup
+ * keeps only the pin status + drift alarm, because that's all a deal's
+ * front page needs: "was this deal priced against current corporate
+ * guidance, and if not, do I care?"
+ */
+function renderHouseGuidanceChip() {
+  const live = refData?.pricingAssumptions || [];
+  const pinned = model.houseAssumptions;
+  if (!pinned && live.length === 0) return '';
+
+  if (!pinned) {
+    return `
+    <div class="cm-card" style="margin-top:16px;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-weight:700;color:var(--ies-blue);font-size:12.5px;">${icon('bank')} House guidance</span>
+      <span style="font-size:12px;color:var(--ies-gray-500);">Corporate inflation guidance will be <b>pinned to this deal on first save</b> — later corporate updates never reprice it.</span>
+    </div>`;
+  }
+
+  const drift = calc.houseAssumptionsDrift(pinned, live);
+  return `
+    <div class="cm-card" style="margin-top:16px;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-weight:700;color:var(--ies-blue);font-size:12.5px;white-space:nowrap;">${icon('bank')} House guidance</span>
+      <span style="font-size:12px;color:var(--ies-gray-600);">pinned <b>${escapeHtml(pinned.pinnedAt || '')}</b></span>
+      ${drift.anyDrift
+        ? `<span style="font-size:12px;color:var(--c-warn-strong);font-weight:700;">⚠ corporate guidance has changed since this deal was pinned</span>
+           <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="adopt-house-guidance" title="Re-pin this deal to today's corporate guidance. Your escalation inputs are not changed.">Adopt current</button>`
+        : `<span style="font-size:12px;color:#10b981;font-weight:700;">✓ matches current corporate guidance</span>`}
+      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-tc-section="assumptions" style="margin-left:auto;" title="Full guidance table — Assumptions section">View guidance table →</button>
+    </div>`;
+}
+
+/**
+ * House Assumptions table (2026-06-12; relocated + clarity pass 2026-07-13
+ * per Brock) — the corporate pricing_assumptions guidance PINNED to this
+ * project, now living in the Assumptions section beside the heuristics
+ * register. Pinned at model creation (new models also seed their two
+ * escalation defaults from it) or first save (legacy models). Later
+ * guidance changes show as drift; pinned values stay intact unless the
+ * analyst explicitly adopts.
  */
 function renderHouseAssumptionsCard() {
   const live = refData?.pricingAssumptions || [];
   const pinned = model.houseAssumptions;
   if (!pinned && live.length === 0) return '';
 
-  const fmtY = r => [1, 2, 3, 4, 5].map(i => {
-    const v = Number(r[`year_${i}_pct`]);
-    return Number.isFinite(v) ? v.toFixed(2) : '—';
-  });
-  const scopeLabel = r => r.scope === 'global' ? 'Global'
-    : r.scope === 'labor_category' ? `Labor · ${r.scope_key || ''}`
-    : r.scope === 'equipment_category' ? `Equip · ${r.scope_key || ''}`
-    : `${r.scope || ''} · ${r.scope_key || ''}`;
-
   if (!pinned) {
     return `
-    <div class="cm-card" style="margin-top:16px;padding:14px 16px;">
-      <div style="font-weight:700;color:var(--ies-blue);font-size:13px;">${icon('bank')} House Assumptions (corporate out-year guidance)</div>
+    <div class="cm-card" style="margin-top:20px;padding:14px 16px;">
+      <div style="font-weight:700;color:var(--ies-blue);font-size:13px;">${icon('bank')} House assumptions — corporate inflation guidance</div>
       <div style="font-size:12px;color:var(--ies-gray-500);margin-top:6px;">
-        Current corporate guidance will be <b>pinned to this project on first save</b> —
-        after that, later guidance changes never alter this project's assumptions.
+        Current corporate guidance will be <b>pinned to this deal on first save</b> —
+        after that, later guidance changes never alter this deal's assumptions.
       </div>
     </div>`;
   }
 
+  // ── Row clarity (Brock 2026-07-13): raw scope/metric pairs read as data-
+  // base rows. Humanize each combination, group Labor vs Capital, and badge
+  // the ONLY two rows the model actually consumes (Y1 escalation seeds —
+  // same predicates as calc.houseGuidanceSeeds).
+  const rowLabel = (r) => {
+    const key = `${r.scope}|${r.scope_key || ''}|${r.metric}`;
+    const KNOWN = {
+      'labor_category|hourly|wage': 'Hourly wages',
+      'labor_category|salary|wage': 'Salaried wages',
+      'labor_category|hourly|benefits': 'Benefits load — hourly',
+      'labor_category|salary|benefits': 'Benefits load — salaried',
+      'global||wage': 'All wages (global)',
+      'global||capex': 'All capital equipment (global)',
+      'equipment_category|Racking|capex': 'Racking & storage media',
+      'equipment_category|Conveyor|capex': 'Conveyor & sortation',
+      'equipment_category|Systems|capex': 'Systems & IT hardware',
+      'equipment_category|Facility|capex': 'Facility construction',
+      'equipment_category|MHE|capex': 'Mobile equipment (MHE)',
+    };
+    return KNOWN[key] || [r.scope, r.scope_key, r.metric].filter(Boolean).join(' · ');
+  };
+  const isLaborRow = (r) => r.scope === 'labor_category' || r.metric === 'wage' || r.metric === 'benefits';
+  const seedBadge = (r) => {
+    if (r.scope === 'labor_category' && r.metric === 'wage' && r.scope_key === 'hourly') {
+      return `<span class="cm-house-seed" title="This row's Y1 value seeded this deal's Labor Escalation default at creation. The other rows are reference only — they don't feed the engine.">→ seeds Labor Escalation</span>`;
+    }
+    if (r.scope === 'global' && r.metric === 'capex') {
+      return `<span class="cm-house-seed" title="This row's Y1 value seeded this deal's Cost Escalation default at creation. The other rows are reference only — they don't feed the engine.">→ seeds Cost Escalation</span>`;
+    }
+    return '';
+  };
+  // Signed percentages read as CHANGES at a glance; bare "3.00" reads as a
+  // mystery number. −1.0% deflation now looks like what it is.
+  const fmtPct = (v) => !Number.isFinite(v) ? '—'
+    : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + '%';
+
   const drift = calc.houseAssumptionsDrift(pinned, live);
-  const rows = drift.rows.map(r => {
-    const y = fmtY(r);
-    const curY = r.current ? fmtY(r.current) : null;
+  const renderRow = (r) => {
+    const cells = [1, 2, 3, 4, 5].map(i => {
+      const v = Number(r[`year_${i}_pct`]);
+      const cv = r.current ? Number(r.current[`year_${i}_pct`]) : NaN;
+      const cellChanged = r.changed && Number.isFinite(cv) && cv !== v;
+      return `<td class="hub-num"${cellChanged ? ` title="current corporate guidance: ${fmtPct(cv)}" style="color:var(--c-warn-strong);font-weight:700;"` : ''}>${fmtPct(v)}</td>`;
+    }).join('');
     return `
       <tr${r.changed ? ' style="background:rgba(217,119,6,0.05);"' : ''}>
-        <td>${escapeAttr(scopeLabel(r))}</td>
-        <td>${escapeAttr(r.metric || '')}</td>
-        ${y.map((v, i) => `<td class="hub-num"${r.changed && curY && curY[i] !== v ? ` title="current guidance: ${curY[i]}%" style="color:var(--c-warn-strong);font-weight:700;"` : ''}>${v}</td>`).join('')}
-        <td style="font-size:11px;color:var(--ies-gray-400);max-width:220px;">${escapeAttr(r.notes || '')}</td>
+        <td><span style="font-weight:600;">${escapeHtml(rowLabel(r))}</span>${seedBadge(r)}</td>
+        ${cells}
+        <td style="font-size:11px;color:var(--ies-gray-500);white-space:normal;">${escapeHtml(r.notes || '')}</td>
       </tr>`;
-  }).join('');
+  };
+  const groupHeader = (label) => `
+      <tr><td colspan="7" style="padding:10px 8px 4px;font-size:10px;font-weight:700;letter-spacing:.07em;color:var(--ies-gray-400);border-bottom:none;">${label}</td></tr>`;
+  const laborRows = drift.rows.filter(isLaborRow);
+  const capitalRows = drift.rows.filter(r => !isLaborRow(r));
+  const body =
+    (laborRows.length ? groupHeader('LABOR — WAGES &amp; BENEFITS') + laborRows.map(renderRow).join('') : '')
+    + (capitalRows.length ? groupHeader('CAPITAL — EQUIPMENT &amp; CONSTRUCTION') + capitalRows.map(renderRow).join('') : '');
 
   return `
-    <div class="cm-card" style="margin-top:16px;padding:14px 16px;">
+    <div class="cm-card" style="margin-top:20px;padding:14px 16px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
-        <div>
-          <div style="font-weight:700;color:var(--ies-blue);font-size:13px;">${icon('bank')} House Assumptions (corporate out-year guidance)</div>
-          <div style="font-size:11px;color:var(--ies-gray-500);margin-top:2px;">
-            Pinned to this project <b>${escapeAttr(pinned.pinnedAt || '')}</b> — read-only.
-            Later corporate guidance changes never alter this project.
+        <div style="max-width:720px;">
+          <div style="font-weight:700;color:var(--ies-blue);font-size:13px;">${icon('bank')} House assumptions — corporate inflation guidance</div>
+          <div style="font-size:12px;color:var(--ies-gray-600);margin-top:4px;line-height:1.5;">
+            How much corporate expects wages, benefits, and capital costs to rise <b>each contract year</b>
+            (year-over-year %). Pinned to this deal <b>${escapeHtml(pinned.pinnedAt || '')}</b>, so later corporate
+            updates never silently reprice it.
             ${drift.anyDrift
-              ? '<span style="color:var(--c-warn-strong);font-weight:700;"> ⚠ Current guidance has changed since this project was pinned.</span>'
-              : '<span style="color:#10b981;font-weight:700;"> ✓ Matches current guidance.</span>'}
+              ? '<span style="color:var(--c-warn-strong);font-weight:700;">⚠ Corporate guidance has changed since this deal was pinned — changed cells are highlighted (hover for the current value).</span>'
+              : '<span style="color:#10b981;font-weight:700;">✓ Matches current corporate guidance.</span>'}
           </div>
         </div>
-        ${drift.anyDrift ? `<button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="adopt-house-guidance" title="Re-pin this project to today's corporate guidance. Escalation inputs are not changed.">Adopt current guidance</button>` : ''}
+        ${drift.anyDrift ? `<button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="adopt-house-guidance" title="Re-pin this deal to today's corporate guidance. Your escalation inputs are not changed.">Adopt current guidance</button>` : ''}
       </div>
       <div class="cm-table-scroll" style="margin-top:10px;">
         <table class="hub-datatable hub-datatable--dense" style="width:100%;font-size:12px;">
           <thead>
-            <tr><th class="u-left">Scope</th><th class="u-left">Metric</th>
-            <th class="hub-num">Y1 %</th><th class="hub-num">Y2 %</th><th class="hub-num">Y3 %</th><th class="hub-num">Y4 %</th><th class="hub-num">Y5 %</th>
-            <th class="u-left">Source / Notes</th></tr>
+            <tr>
+              <th class="u-left" rowspan="2" style="vertical-align:bottom;">Cost category</th>
+              <th colspan="5" style="text-align:center;border-bottom:none;padding-bottom:0;font-size:10px;color:var(--ies-gray-400);">EXPECTED YEAR-OVER-YEAR INCREASE</th>
+              <th class="u-left" rowspan="2" style="vertical-align:bottom;">Corporate rationale</th>
+            </tr>
+            <tr>
+              <th class="hub-num">Yr 1</th><th class="hub-num">Yr 2</th><th class="hub-num">Yr 3</th><th class="hub-num">Yr 4</th><th class="hub-num">Yr 5</th>
+            </tr>
           </thead>
-          <tbody>${rows}</tbody>
+          <tbody>${body}</tbody>
         </table>
       </div>
-      <div style="font-size:11px;color:var(--ies-gray-400);margin-top:8px;">
-        New models seed Labor Escalation + Cost Escalation defaults from the hourly-wage and global-capex Y1 rows at creation.
-        Per-deal escalation stays adjustable via Setup + What-If sliders — this card records the corporate view this deal was priced against.
+      <div style="font-size:11px;color:var(--ies-gray-400);margin-top:8px;line-height:1.5;">
+        Only the two badged rows feed the model — their Yr-1 values seeded this deal's Labor Escalation and
+        Cost Escalation defaults at creation (adjustable in Financial + What-If). Every other row is reference
+        for out-year pricing reviews: it records the corporate view this deal was priced against.
       </div>
+      <style>.cm-house-seed{display:inline-block;margin-left:8px;font-size:9.5px;font-weight:700;letter-spacing:.03em;background:var(--c-info-soft,#eff6ff);color:var(--c-info-ink,#1d4ed8);border-radius:99px;padding:1.5px 8px;white-space:nowrap;}</style>
     </div>`;
 }
 
@@ -16861,6 +16942,8 @@ function renderAssumptions() {
     </div>
 
     ${renderPlanningRatios()}
+
+    ${renderHouseAssumptionsCard()}
   `;
 }
 
