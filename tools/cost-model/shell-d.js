@@ -88,6 +88,33 @@ export function stationForSection(sectionKey) {
   return D_STATIONS.find(st => st.sections.includes(sectionKey)) || null;
 }
 
+// ─── M6: progressive disclosure — Essentials per station ─────────────────
+//
+// The concept-d depth pill (Essentials | Engineering) replaces the old
+// Quick-tier std-* spine UNDER THE D SHELL: depth 'essentials' curates each
+// station's sub-nav down to the sections the retired 6-step Standard spine
+// covered (setup / volumes / labor / facility / financial / summary — plus
+// pricing, which Standard never surfaced but the Price station needs).
+// Everything else stays reachable: the active section is ALWAYS shown even
+// when it isn't an essential (union rule — deep links, strip links, and
+// drillbacks never strand the user), and Engineering shows the full set.
+// The classic shell keeps the std spine untouched until M8 cleanup.
+export const ESSENTIALS_BY_STATION = {
+  deal:      ['setup'],
+  volume:    ['volumes'],
+  operation: ['labor'],
+  economics: ['facility', 'financial', 'summary'],
+  price:     ['pricing'],
+};
+
+/** Sections to show in the sub-nav for a station at the given depth. */
+export function sectionsForDepth(station, depth, activeSection) {
+  if (!station) return [];
+  if (depth !== 'essentials') return station.sections;
+  const ess = ESSENTIALS_BY_STATION[station.key] || station.sections;
+  return station.sections.filter(k => ess.includes(k) || k === activeSection);
+}
+
 // ─── Chrome renderers ─────────────────────────────────────────────────────
 //
 // opts contract (assembled by ui.js _buildDShellOpts):
@@ -171,7 +198,12 @@ export function renderDSpine(opts) {
     const on = activeStation && activeStation.key === st.key;
     const prog = _stationProgress(st, opts.chrome.sectionCompleteness);
     const dash = (prog * RING_CIRC).toFixed(1) + ' ' + RING_CIRC;
-    const target = (opts.lastVisited && opts.lastVisited[st.key]) || st.sections[0];
+    // M6 — at Essentials depth a station click lands on its first
+    // ESSENTIAL section (Price's raw sections[0] is the buckets editor,
+    // which Essentials curates away). lastVisited still wins.
+    const firstVisible = (opts.depth === 'essentials'
+      ? (ESSENTIALS_BY_STATION[st.key] || st.sections)[0] : st.sections[0]);
+    const target = (opts.lastVisited && opts.lastVisited[st.key]) || firstVisible || st.sections[0];
     const sub = escapeHtml((opts.stationSubs && opts.stationSubs[st.key]) || '');
     return '<button class="cmd-station' + (on ? ' cmd-station--on' : '') + '" data-tc-section="' + escapeAttr(target) + '" title="' + escapeAttr(st.name) + '">'
       + '<span class="cmd-num"><svg viewBox="0 0 31 31" aria-hidden="true">'
@@ -191,17 +223,33 @@ export function renderDSpine(opts) {
   return '<div class="cmd-label">MODEL SPINE</div>' + rows + conf;
 }
 
-/** Center sub-nav: the active station's section pills (existing keys). */
+/** Center sub-nav: the active station's section pills, curated by depth
+ *  (M6), plus the Essentials|Engineering depth toggle at the row end. */
 export function renderDSubnav(opts) {
   const activeStation = stationForSection(opts.chrome.activeSection) || D_STATIONS[0];
-  const secs = opts.chrome.sections.filter(s => activeStation.sections.includes(s.key));
-  return secs.map(s => {
+  const depth = opts.depth === 'essentials' ? 'essentials' : 'engineering';
+  const visible = sectionsForDepth(activeStation, depth, opts.chrome.activeSection);
+  const secs = opts.chrome.sections.filter(s => visible.includes(s.key));
+  const pills = secs.map(s => {
     const on = s.key === opts.chrome.activeSection;
     const c = opts.chrome.sectionCompleteness ? opts.chrome.sectionCompleteness(s.key) : 'empty';
     const dot = c === 'complete' ? 'cmd-dot--g' : (c === 'partial' ? 'cmd-dot--w' : '');
     return '<button class="cmd-pill' + (on ? ' cmd-pill--on' : '') + '" data-tc-section="' + escapeAttr(s.key) + '">'
       + '<span class="cmd-dot ' + dot + '"></span>' + escapeHtml(s.label) + '</button>';
   }).join('');
+  const hiddenCount = activeStation.sections.length - visible.length;
+  // M6 — depth toggle (concept-d "depth" pill). Rides ui.js's bind-once
+  // rootEl delegation via data-cmd-depth; ONE preference (the CM tier
+  // service) backs both this and classic's Quick/Engineering button.
+  const depthPill = '<span class="cmd-depth" role="group" aria-label="Detail depth">'
+    + '<button class="cmd-depth__opt' + (depth === 'essentials' ? ' cmd-depth__opt--on' : '') + '"'
+    + ' data-cmd-depth="essentials" title="Essentials — the handful of sections most deals need'
+    + (hiddenCount > 0 && depth === 'essentials' ? ' (' + hiddenCount + ' engineering section' + (hiddenCount === 1 ? '' : 's') + ' hidden in this station)' : '')
+    + '. Everything else stays on catalog defaults.">Essentials</button>'
+    + '<button class="cmd-depth__opt' + (depth === 'engineering' ? ' cmd-depth__opt--on' : '') + '"'
+    + ' data-cmd-depth="engineering" title="Engineering — every section and knob">Engineering</button>'
+    + '</span>';
+  return pills + depthPill;
 }
 
 /** Top-bar save-state chip + crumb (dark-friendly). */
@@ -554,6 +602,10 @@ function _dStyles() {
   '.cmd-dot--w{background:var(--c-warn-ink,#b45309);}' +
   '.cmd-pill--on .cmd-dot{background:rgba(255,255,255,.55);}' +
   '.cmd-pill--on .cmd-dot--g{background:#4ade80;}.cmd-pill--on .cmd-dot--w{background:#fbbf24;}' +
+  /* M6 — depth toggle */
+  '.cmd-depth{margin-left:auto;display:inline-flex;background:var(--ies-gray-100,#f5f5f4);border:1px solid var(--ies-gray-200,#e7e5e4);border-radius:999px;padding:3px;flex:none;}' +
+  '.cmd-depth__opt{font-size:10px;font-weight:600;padding:3px 10px;border-radius:999px;border:none;background:transparent;color:var(--ies-gray-600,#57534e);cursor:pointer;}' +
+  '.cmd-depth__opt--on{background:#fff;color:var(--ies-gray-900,#1c1917);box-shadow:0 1px 3px rgba(28,25,23,.12);}' +
   /* rail */
   '.cmd-rail{background:#fff;border-left:1px solid var(--ies-gray-200,#e7e5e4);display:flex;flex-direction:column;overflow:hidden;}' +
   '.cmd-plz{padding:13px 15px 10px;overflow-y:auto;flex:none;max-height:62%;}' +

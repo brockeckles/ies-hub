@@ -25,7 +25,7 @@ globalThis.window = globalThis.window || { location: { hostname: '', pathname: '
 
 // ?v= pin MUST match ui.js's import (feedback_test_cache_bust_match — a
 // mismatched pin loads a SECOND module instance with its own state).
-const shellD = await import('./tools/cost-model/shell-d.js?v=20260713-m5g');
+const shellD = await import('./tools/cost-model/shell-d.js?v=20260713-m6a');
 const { getShellPref, setShellPref, D_STATIONS, stationForSection, renderShellD, renderDSpine,
         renderDScenarioRow, updateDRail, RAIL_ROW_KEYS, WHATIF_BY_CELL, railWhatIfSection,
         whatIfKeysForCell } = shellD;
@@ -418,6 +418,68 @@ t('ui.js: dl:/oparea: provenance cells bypass the projections guard + rail lever
   assert(uiSrc.includes("rowKey.startsWith('oparea:')"), 'oparea: provenance branch exists');
   assert(uiSrc.includes('shellD.whatIfKeysForCell(_activeProvCell.rowKey)'),
     'rail what-if resolves levers via whatIfKeysForCell, not the raw map');
+});
+
+// ---- 12. M6: progressive disclosure — Essentials/Engineering (2026-07-13) ----
+const { ESSENTIALS_BY_STATION, sectionsForDepth, renderDSubnav } = shellD;
+
+t('ESSENTIALS_BY_STATION: every station covered; every key is a real station section', () => {
+  for (const st of D_STATIONS) {
+    const ess = ESSENTIALS_BY_STATION[st.key];
+    assert(Array.isArray(ess) && ess.length >= 1, `${st.key} has no essentials`);
+    const phantom = ess.filter(k => !st.sections.includes(k));
+    assert(phantom.length === 0, `${st.key} essentials not in station: ${phantom.join(',')}`);
+  }
+  // The retired Standard spine's coverage survives as essentials.
+  const all = Object.values(ESSENTIALS_BY_STATION).flat();
+  for (const k of ['setup', 'volumes', 'labor', 'facility', 'financial', 'summary']) {
+    assert(all.includes(k), `std-spine section ${k} must stay essential`);
+  }
+});
+
+t('sectionsForDepth: essentials curates; union rule keeps the active section visible', () => {
+  const op = D_STATIONS.find(s => s.key === 'operation');
+  assert(sectionsForDepth(op, 'engineering', 'labor').length === op.sections.length, 'engineering shows all');
+  const ess = sectionsForDepth(op, 'essentials', 'labor');
+  assert(ess.includes('labor') && !ess.includes('shiftPlanning'), 'essentials curates');
+  const withActive = sectionsForDepth(op, 'essentials', 'equipment');
+  assert(withActive.includes('equipment'), 'union rule: active non-essential stays visible');
+});
+
+t('renderDSubnav: depth filters pills + emits the depth toggle', () => {
+  const opts = makeOpts();
+  opts.depth = 'essentials';
+  let html = renderDSubnav(opts);
+  assert(html.includes('data-tc-section="labor"'), 'essential pill shown');
+  assert(!html.includes('data-tc-section="flow"'), 'non-essential pill hidden at essentials depth');
+  assert(html.includes('data-cmd-depth="essentials"') && html.includes('data-cmd-depth="engineering"'), 'depth toggle present');
+  assert(/cmd-depth__opt--on"[^>]*data-cmd-depth="essentials"/.test(html), 'essentials marked active');
+  opts.depth = 'engineering';
+  html = renderDSubnav(opts);
+  assert(html.includes('data-tc-section="flow"'), 'engineering shows everything');
+  assert(/cmd-depth__opt--on"[^>]*data-cmd-depth="engineering"/.test(html), 'engineering marked active');
+});
+
+t('renderDSpine: essentials depth retargets station clicks to the first essential', () => {
+  const opts = makeOpts();
+  opts.depth = 'essentials';
+  opts.lastVisited = {};
+  const html = renderDSpine(opts);
+  // Price's sections[0] is pricingBuckets; essentials lands on pricing.
+  assert(/title="Price"/.test(html), 'price station rendered');
+  assert(/data-tc-section="pricing"[^>]*title="Price"/.test(html), 'price station targets its first ESSENTIAL');
+});
+
+t('ui.js: dual Standard nav retired under the D shell (M6)', () => {
+  assert(/if \(shellD\.getShellPref\(\) === 'd'\) \{\n    if \(_isStdKey\(activeSection\)\) activeSection = STD_TO_ENG\[activeSection\] \|\| 'setup';\n    return;\n  \}/.test(uiSrc),
+    'open-remap: std→eng under D pref, never eng→std');
+  assert(/\.\.\.\(shellD\.getShellPref\(\) === 'd' \? \[\] : \[\{ id: 'cm-tier',/.test(uiSrc),
+    'Quick/Engineering action suppressed under the D shell (depth pill owns the preference)');
+  assert(uiSrc.includes("e.target.closest('[data-cmd-depth]')"), 'depth-pill delegation bound');
+  const depthBlock = uiSrc.slice(uiSrc.indexOf("closest('[data-cmd-depth]')"), uiSrc.indexOf("closest('[data-cmd-depth]')") + 420);
+  assert(depthBlock.includes("tierSvc.setTier('cm'"), 'depth pill writes the SAME tier preference');
+  assert(uiSrc.includes("depth: tierSvc.getTier('cm') === 'quick' ? 'essentials' : 'engineering'"),
+    'depth derives from the tier service (one preference, two chromes)');
 });
 
 // ---- Summary ----

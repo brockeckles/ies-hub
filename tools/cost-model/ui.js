@@ -34,7 +34,7 @@ import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { computeAll } from './compute-all.js?v=20260713-m5b';
-import * as shellD from './shell-d.js?v=20260713-m5g';
+import * as shellD from './shell-d.js?v=20260713-m6a';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
 import * as stationEco from './station-economics.js?v=20260713-m5d';
 import * as stationPrice from './station-price.js?v=20260713-m5g';
@@ -268,6 +268,10 @@ function _buildDShellOpts() {
     activeProjectId: model?.id || null,
     completeness,
     compareOn: _dCompareOn,
+    // M6 — the CM tier preference doubles as the D-shell depth:
+    // quick ⇒ Essentials, engineering ⇒ Engineering. One preference backs
+    // classic's Quick/Engineering button AND the D sub-nav depth pill.
+    depth: tierSvc.getTier('cm') === 'quick' ? 'essentials' : 'engineering',
   };
 }
 
@@ -1110,7 +1114,17 @@ function _resolveDealTargetModel() {
  *  links to unmapped sections (whatif, scenarios, linked…) keep Engineering
  *  chrome deliberately. */
 function _applyTierOpenRemap() {
-  if (viewMode === 'editor' && !_isStdKey(activeSection)
+  if (viewMode !== 'editor') return;
+  // M6 — under the D shell the dual Standard nav is RETIRED: the quick
+  // tier maps to Essentials DEPTH (sub-nav curation), never to the std-*
+  // spine. std keys arriving from a classic session (stale lastVisited,
+  // deep links) remap to their Engineering counterpart so the D shell
+  // hosts them. Classic keeps the std spine untouched until M8.
+  if (shellD.getShellPref() === 'd') {
+    if (_isStdKey(activeSection)) activeSection = STD_TO_ENG[activeSection] || 'setup';
+    return;
+  }
+  if (!_isStdKey(activeSection)
       && tierSvc.getTier('cm') === 'quick' && ENG_TO_STD[activeSection]) {
     activeSection = ENG_TO_STD[activeSection];
   }
@@ -1612,6 +1626,17 @@ function wireEditorEvents() {
     rootEl.__cmdScenBound = true;
     rootEl.addEventListener('click', async (e) => {
       if (!_useDShell()) return;
+      // M6 — depth pill (Essentials|Engineering). Writes the SAME tier
+      // preference classic's Quick button uses; union rule in
+      // sectionsForDepth means the active section never disappears, so a
+      // chrome refresh (no section re-render) is enough.
+      const depthBtn = e.target.closest('[data-cmd-depth]');
+      if (depthBtn) {
+        const toEss = depthBtn.dataset.cmdDepth === 'essentials';
+        tierSvc.setTier('cm', toEss ? 'quick' : 'engineering');
+        shellD.refreshShellD(rootEl, _buildDShellOpts());
+        return;
+      }
       // M4 — compare-vs-baseline toggle rides the same delegation.
       const cmpBtn = e.target.closest('[data-cmd-cmp]');
       if (cmpBtn) { await _toggleDCompare(); return; }
@@ -3419,10 +3444,13 @@ function _buildCmChromeOpts() {
     : (draft ? 'Brand-new model — Save to capture an audit timestamp' : 'Save to capture the latest changes');
 
   const actions = [
-    { id: 'cm-tier',
+    // M6 — under the D shell the Quick/Engineering button is REPLACED by
+    // the sub-nav depth pill (same tier preference behind both); showing
+    // both would be two controls fighting over one setting.
+    ...(shellD.getShellPref() === 'd' ? [] : [{ id: 'cm-tier',
       label: _stdMode ? 'Engineering' : 'Quick',
       title: _stdMode ? 'Switch to Engineering mode — all sections & knobs'
-                      : 'Switch to Quick mode — 6-step Standard build (everything else stays on catalog defaults)' },
+                      : 'Switch to Quick mode — 6-step Standard build (everything else stays on catalog defaults)' }]),
     { id: 'cm-new',    label: 'New',    title: 'New model' },
     { id: 'cm-save',   label: 'Save',   title: 'Save', primary: true },
     { id: 'cm-load',   label: 'Load',   title: 'Load' },
