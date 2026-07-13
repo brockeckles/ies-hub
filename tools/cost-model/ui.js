@@ -231,7 +231,10 @@ function _buildDShellOpts() {
   let subs = {}, completeness = { complete: 0, total: SECTIONS.length };
   try {
     const c = computeAll(_computeCtx());
-    const marketName = (refData?.markets || []).find(m => m.id === pd.market)?.city || pd.market || '';
+    // m7b walk find — market rows key on market_id (not id) and label via
+    // marketLabel (name/state, not .city); the old lookup silently fell
+    // back to the raw UUID (latent since M3, exposed by the Review doc).
+    const marketName = marketLabel((refData?.markets || []).find(m => (m.market_id || m.id) === pd.market)) || '';
     const fmtM = (v) => Number.isFinite(v) && v > 0 ? (v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : Math.round(v / 1e3) + 'K') : null;
     subs = {
       deal: [pd.clientName, marketName, (pd.contractTerm || 5) + ' yr'].filter(Boolean).join(' - '),
@@ -3699,7 +3702,9 @@ function _openReviewDoc(clientSafe) {
     const c = computeAll(_computeCtx());
     const pd = model?.projectDetails || {};
     const fr = (refData?.facilityRates || []).find(r => r.market_id === pd.market) || null;
-    const marketCity = (refData?.markets || []).find(mk => mk.id === pd.market)?.city || pd.market || '';
+    // m7b — canonical market lookup (market_id + marketLabel); NEVER leak
+    // the raw UUID into a document surface.
+    const marketCity = marketLabel((refData?.markets || []).find(mk => (mk.market_id || mk.id) === pd.market)) || '';
     const rm = reviewDoc.buildReviewModel({
       c, model,
       extras: {

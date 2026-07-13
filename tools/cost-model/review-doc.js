@@ -131,7 +131,7 @@ export function buildReviewModel({ c, model, extras = {} }) {
   const lines = model?.laborLines || [];
   const most = lines.filter(l => l.most_template_id).length;
   const wageSrc = extras.marketLaborProfile
-    ? { source: `ref_labor_rates · ${extras.marketCity || pd.market || 'market'} · pinned`, status: 'SOURCED' }
+    ? { source: `ref_labor_rates · ${extras.marketCity || 'market'} · pinned`, status: 'SOURCED' }
     : { source: 'model inputs (no market profile loaded)', status: 'ASSUMPTION' };
   const fr = extras.facilityRateRow;
   const heur = (key, label, unit) => {
@@ -145,7 +145,7 @@ export function buildReviewModel({ c, model, extras = {} }) {
   const assumptions = [
     { label: 'Wage basis', value: '—', ...wageSrc },
     fr ? { label: 'Lease rate', value: '$' + (Number(fr.lease_rate_sqft_yr) || 0).toFixed(2) + '/SF·yr',
-          source: `ref_facility_rates · ${extras.marketCity || pd.market || 'market'}`, status: 'SOURCED' }
+          source: `ref_facility_rates · ${extras.marketCity || 'market'}`, status: 'SOURCED' }
        : { label: 'Lease rate', value: '—', source: 'no market rate row', status: 'ASSUMPTION' },
     { label: 'Labor standards', value: `${most} of ${lines.length} direct lines`,
       source: most ? 'MOST engineered standards' : 'manual estimates',
@@ -169,7 +169,8 @@ export function buildReviewModel({ c, model, extras = {} }) {
     meta: [
       ['Term', years + ' years'],
       ['Facility', model?.facility?.totalSqft ? count(Number(model.facility.totalSqft)) + ' SF' : '—'],
-      ['Market', extras.marketCity || pd.market || '—'],
+      // m7b — marketCity only: pd.market is a UUID and must never print.
+      ['Market', extras.marketCity || '—'],
       ['Volume Y1', (Number(c?.orders) > 0 ? count(c.orders) + ' ' + (c.outboundUomLabel || 'unit') + 's' : '—')],
     ],
     generatedAt: new Date().toLocaleString(),

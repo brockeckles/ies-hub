@@ -129,6 +129,12 @@ t('CLIENT-SAFE face: internal economics never render', () => {
   assert(html.includes('Rates apply per the governing agreement'), 'client-facing rate note');
 });
 
+t('market UUID never leaks into the document (m7b walk find)', () => {
+  const m = buildReviewModel({ c: makeC(), model: MODEL, extras: { ...EXTRAS, marketCity: '' } });
+  assert(!JSON.stringify(m).includes('mkt-cmh'), 'raw market id must not appear anywhere in the doc model');
+  assert(m.meta.find(([k]) => k === 'Market')[1] === '—', 'missing city renders as em-dash');
+});
+
 t('render escapes hostile names everywhere', () => {
   const hostileModel = { ...MODEL, projectDetails: { ...MODEL.projectDetails,
     name: '<img src=x onerror=alert(1)>', clientName: '<script>c</script>' } };
