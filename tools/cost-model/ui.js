@@ -1208,9 +1208,12 @@ async function loadModelByCmId(id) {
       }
     }).catch(() => {});
     // M4 — compare mode is per-project: reset on every load (scenario tab
-    // switches route through here too).
+    // switches route through here too). The inspector selection dies with
+    // the old project too — walk find: it survived a scenario switch and
+    // kept explaining the PREVIOUS project's numbers until the next click.
     _dCompareOn = false;
     _dBaselineCmp = null;
+    _activeProvCell = null;
     // M3 — D-shell scenario tab row: fetch the family only when the flag is
     // on (2-4 light selects; classic chrome never needs them).
     _dScenarioFamily = [];

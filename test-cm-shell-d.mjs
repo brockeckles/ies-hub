@@ -340,6 +340,7 @@ t('ui.js: compare toggle wired + per-project reset + rail data carries compare b
   assert(uiSrc.includes('computeWhatIfPreview({}, {') && uiSrc.includes('async function _computeBaselineY1'), 'baseline computed via pure preview (no computeAll memo thrash)');
   const resets = (uiSrc.match(/_dCompareOn = false;/g) || []).length;
   assert(resets >= 3, `compare reset on mount + load + failure (found ${resets})`);
+  assert(uiSrc.includes('_activeProvCell = null;'), 'inspector selection cleared on project load (M4b walk find)');
   assert(uiSrc.includes('compare: (_dCompareOn && _dBaselineCmp && _dBaselineCmp.data)'), 'rail data attaches compare bag');
 });
 
