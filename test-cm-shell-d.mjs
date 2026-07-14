@@ -503,6 +503,21 @@ t('essentials: assumptions is an economics essential (pill no longer vanishes)',
   assert(vis.includes('assumptions'), 'assumptions pill dropped when another economics section is active');
 });
 
+// ---- 2026-07-14 (Brock): Operation is flow-first; drop-to-connect retired ----
+t('operation station: flow pill leads (define the flow, then staff it)', () => {
+  const op = D_STATIONS.find(s => s.key === 'operation');
+  assert(op.sections[0] === 'flow' && op.sections[1] === 'labor', 'flow must precede labor');
+});
+
+t('ui.js: OFP drop-to-connect gesture retired — card drops MOVE the line', () => {
+  assert(!uiSrc.includes('Connected on flow'), 'connect-on-drop handler must be gone');
+  assert(uiSrc.includes('drop-to-connect RETIRED'), 'retirement documented at the bind site');
+  assert(uiSrc.includes('Already in ${meta ? meta.label : targetArea}'), 'same-area drop toasts instead of silent no-op');
+  const flowIdx = uiSrc.indexOf("{ key: 'flow',");
+  const laborIdx = uiSrc.indexOf("{ key: 'labor',");
+  assert(flowIdx !== -1 && laborIdx !== -1 && flowIdx < laborIdx, 'SECTIONS lists flow before labor');
+});
+
 // ---- Summary ----
 console.log('\n');
 if (failures.length) { console.log('\nFailures:'); for (const f of failures) console.log(f); }
