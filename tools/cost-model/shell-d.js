@@ -107,7 +107,10 @@ export const ESSENTIALS_BY_STATION = {
   deal:      ['setup'],
   volume:    ['volumes'],
   operation: ['labor'],
-  economics: ['facility', 'financial', 'summary'],
+  // 2026-07-14 (Brock): 'assumptions' is an essential — without it the pill
+  // only survived via the union rule while ACTIVE, so it vanished the moment
+  // the user clicked any other economics pill.
+  economics: ['facility', 'financial', 'assumptions', 'summary'],
   price:     ['pricing'],
 };
 

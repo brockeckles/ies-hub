@@ -34,7 +34,7 @@ import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { computeAll } from './compute-all.js?v=20260713-w1';
-import * as shellD from './shell-d.js?v=20260713-m8a';
+import * as shellD from './shell-d.js?v=20260714-a1';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
 import * as stationEco from './station-economics.js?v=20260713-m5d';
 import * as stationPrice from './station-price.js?v=20260713-m5g';
@@ -4651,12 +4651,22 @@ function renderHouseAssumptionsCard() {
     : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + '%';
 
   const drift = calc.houseAssumptionsDrift(pinned, live);
+  // 2026-07-14 (Brock feature): the pinned table is editable PER-DEAL. Edits
+  // land on model.houseAssumptions only — never the corporate
+  // pricing_assumptions table. Wiring lives in the assumptions section
+  // handler ([data-house-input]); badged rows' Yr-1 edits sync the matching
+  // engine escalation input (the badge says "seeds X", so editing moves X).
   const renderRow = (r) => {
+    const rowKey = `${r.scope}|${r.scope_key || ''}|${r.metric}`;
     const cells = [1, 2, 3, 4, 5].map(i => {
       const v = Number(r[`year_${i}_pct`]);
       const cv = r.current ? Number(r.current[`year_${i}_pct`]) : NaN;
       const cellChanged = r.changed && Number.isFinite(cv) && cv !== v;
-      return `<td class="hub-num"${cellChanged ? ` title="current corporate guidance: ${fmtPct(cv)}" style="color:var(--c-warn-strong);font-weight:700;"` : ''}>${fmtPct(v)}</td>`;
+      return `<td class="hub-num"${cellChanged ? ` title="current corporate guidance: ${fmtPct(cv)}"` : ''}>`
+        + `<input type="number" step="0.1" class="cm-house-input${cellChanged ? ' cm-house-input--drift' : ''}"`
+        + ` data-house-input data-house-row="${escapeAttr(rowKey)}" data-house-year="${i}"`
+        + ` value="${Number.isFinite(v) ? v : ''}" aria-label="Year ${i} %" />`
+        + `</td>`;
     }).join('');
     return `
       <tr${r.changed ? ' style="background:rgba(217,119,6,0.05);"' : ''}>
@@ -4682,12 +4692,13 @@ function renderHouseAssumptionsCard() {
             How much corporate expects wages, benefits, and capital costs to rise <b>each contract year</b>
             (year-over-year %). Pinned to this deal <b>${escapeHtml(pinned.pinnedAt || '')}</b>, so later corporate
             updates never silently reprice it.
+            Values are <b>editable per-deal</b> — edits stay on this deal and never touch the corporate table.
             ${drift.anyDrift
-              ? '<span style="color:var(--c-warn-strong);font-weight:700;">⚠ Corporate guidance has changed since this deal was pinned — changed cells are highlighted (hover for the current value).</span>'
+              ? '<span style="color:var(--c-warn-strong);font-weight:700;">⚠ This deal\'s pinned guidance differs from current corporate guidance (corporate update or deal-specific edit) — differing cells are highlighted; hover for the corporate value.</span>'
               : '<span style="color:#10b981;font-weight:700;">✓ Matches current corporate guidance.</span>'}
           </div>
         </div>
-        ${drift.anyDrift ? `<button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="adopt-house-guidance" title="Re-pin this deal to today's corporate guidance. Your escalation inputs are not changed.">Adopt current guidance</button>` : ''}
+        ${drift.anyDrift ? `<button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="adopt-house-guidance" title="Re-pin this deal to today's corporate guidance — overwrites any deal-specific edits in this table. Your escalation inputs are not changed.">Adopt current guidance</button>` : ''}
       </div>
       <div class="cm-table-scroll" style="margin-top:10px;">
         <table class="hub-datatable hub-datatable--dense" style="width:100%;font-size:12px;">
@@ -4705,11 +4716,14 @@ function renderHouseAssumptionsCard() {
         </table>
       </div>
       <div style="font-size:11px;color:var(--ies-gray-400);margin-top:8px;line-height:1.5;">
-        Only the two badged rows feed the model — their Yr-1 values seeded this deal's Labor Escalation and
-        Cost Escalation defaults at creation (adjustable in Financial + What-If). Every other row is reference
-        for out-year pricing reviews: it records the corporate view this deal was priced against.
+        Only the four badged rows feed the model. Editing a badged row's <b>Yr-1</b> value also updates the
+        matching escalation input (Labor / Cost / Facility / Equipment — the same knobs as Financial + What-If).
+        Every other row/year is deal-level reference for out-year pricing reviews.
       </div>
-      <style>.cm-house-seed{display:inline-block;margin-left:8px;font-size:9.5px;font-weight:700;letter-spacing:.03em;background:var(--c-info-soft,#eff6ff);color:var(--c-info-ink,#1d4ed8);border-radius:99px;padding:1.5px 8px;white-space:nowrap;}</style>
+      <style>.cm-house-seed{display:inline-block;margin-left:8px;font-size:9.5px;font-weight:700;letter-spacing:.03em;background:var(--c-info-soft,#eff6ff);color:var(--c-info-ink,#1d4ed8);border-radius:99px;padding:1.5px 8px;white-space:nowrap;}
+      .cm-house-input{width:60px;text-align:right;font-size:12px;padding:2px 6px;border:1px solid var(--ies-gray-200);border-radius:6px;background:transparent;}
+      .cm-house-input:focus{border-color:var(--ies-blue);outline:none;background:#fff;}
+      .cm-house-input--drift{color:var(--c-warn-strong);font-weight:700;border-color:var(--c-warn-strong);}</style>
     </div>`;
 }
 
@@ -10094,6 +10108,45 @@ function bindSectionEvents(section, container) {
         model.heuristicOverrides = heuristicOverrides;
       }
       renderSection();
+    });
+
+    // 2026-07-14 (Brock feature): per-deal edits to the pinned house-
+    // assumptions (corporate governance) table. Commit-on-change (blur/
+    // enter) — same pattern as the heuristics inputs, avoids the focus-
+    // loss re-render class. Badged seed rows' Yr-1 edits sync the matching
+    // engine escalation input so the display matches the mechanism.
+    container.querySelectorAll('[data-house-input]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const rowKey = inp.dataset.houseRow;
+        const yr = Number(inp.dataset.houseYear);
+        const rows = model.houseAssumptions?.rows || [];
+        const row = rows.find(r => `${r.scope}|${r.scope_key || ''}|${r.metric}` === rowKey);
+        if (!row || !(yr >= 1 && yr <= 5)) return;
+        const v = inp.value === '' ? 0 : Number(inp.value);
+        if (!Number.isFinite(v)) { renderSection(); return; }
+        if (Number(row[`year_${yr}_pct`]) === v) return;
+        row[`year_${yr}_pct`] = v;
+        let synced = null;
+        if (yr === 1) {
+          const SEED_TARGETS = {
+            'labor_category|hourly|wage': ['laborEscalation', 'Labor Escalation'],
+            'global||capex': ['annualEscalation', 'Cost Escalation'],
+            'equipment_category|Facility|capex': ['facilityEscalation', 'Facility Escalation'],
+            'equipment_category|MHE|capex': ['equipmentEscalation', 'Equipment Escalation'],
+          };
+          const t = SEED_TARGETS[rowKey];
+          if (t) {
+            model.financial = model.financial || {};
+            model.financial[t[0]] = v;
+            synced = t[1];
+          }
+        }
+        _markCmDirty();
+        renderSection();
+        showToast(synced
+          ? `Pinned guidance updated — ${synced} synced to ${v}%`
+          : 'Pinned guidance updated (deal-specific, reference only)', 'success');
+      });
     });
 
     // --------------------------------------------------------------
@@ -16894,6 +16947,14 @@ function renderAssumptions() {
     if (!grouped.has(h.category)) grouped.set(h.category, []);
     grouped.get(h.category).push(h);
   }
+  // 2026-07-14 (Brock): most impactful tables first — labor is the dominant
+  // 3PL cost driver, working capital the least-touched. Unknown categories
+  // sort after the known set, in catalog order.
+  const CAT_ORDER = ['labor', 'financial', 'ops_escalation', 'ramp_seasonality', 'working_capital'];
+  const orderedGroups = Array.from(grouped.entries()).sort((a, b) => {
+    const ia = CAT_ORDER.indexOf(a[0]), ib = CAT_ORDER.indexOf(b[0]);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
 
   const fmtEffective = (h) => {
     const eff = scenarios.heuristicEffective(h, heuristicOverrides);
@@ -16928,7 +16989,7 @@ function renderAssumptions() {
     </div>
 
     <div class="cm-assumptions-grid">
-    ${Array.from(grouped.entries()).map(([category, items]) => `
+    ${orderedGroups.map(([category, items]) => `
       <div class="cm-card">
         <h3>${HEURISTIC_CATEGORY_LABELS[category] || category}</h3>
         <table class="cm-table">
@@ -16959,7 +17020,9 @@ function renderAssumptions() {
                   }
                 </td>
                 <td class="u-center">
-                  ${isOverride(h) ? `<button class="hub-btn hub-btn-sm" data-cm-action="reset-heuristic" data-heuristic-key="${h.key}" title="Reset to default">↺</button>` : ''}
+                  ${isOverride(h)
+                    ? `<button class="hub-btn hub-btn-sm" data-cm-action="reset-heuristic" data-heuristic-key="${h.key}" title="Reset to standard value (${fmtDefault(h)})">↺</button>`
+                    : `<button class="hub-btn hub-btn-sm" disabled title="At standard value — edit Your Value to override; this button then reverts it" style="opacity:.35;cursor:default;">↺</button>`}
                 </td>
               </tr>
             `).join('')}
@@ -16969,9 +17032,9 @@ function renderAssumptions() {
     `).join('')}
     </div>
 
-    ${renderPlanningRatios()}
-
     ${renderHouseAssumptionsCard()}
+
+    ${renderPlanningRatios()}
   `;
 }
 
@@ -17062,7 +17125,7 @@ function renderPlanningRatios() {
                   <th class="cm-th-num" style="width:110px;">Default</th>
                   <th class="cm-th-num" style="width:150px;">Your Value</th>
                   <th style="width:160px;">Source</th>
-                  <th class="cm-th-center" style="width:50px;"></th>
+                  <th class="cm-th-center" style="width:50px;">Reset</th>
                 </tr>
               </thead>
               <tbody>
@@ -17104,7 +17167,9 @@ function renderPlanningRatios() {
                       </td>
                       <td class="u-center">
                         <div class="cm-row-actions">
-                          ${isOver && !reviewedAt ? `<button class="hub-btn hub-btn-sm" data-cm-action="reset-planning-ratio" data-pr-code="${escapeHtml(r.ratio_code)}" title="Reset to default">↺</button>` : ''}
+                          ${isOver
+                            ? `<button class="hub-btn hub-btn-sm" data-cm-action="reset-planning-ratio" data-pr-code="${escapeHtml(r.ratio_code)}" title="Reset to default">↺</button>`
+                            : (structured ? '' : `<button class="hub-btn hub-btn-sm" disabled title="At standard value" style="opacity:.35;cursor:default;">↺</button>`)}
                           ${stale ? `<button class="hub-btn hub-btn-sm" data-cm-action="mark-ratio-reviewed" data-pr-code="${escapeHtml(r.ratio_code)}" title="Confirm you've audited this pre-2022 value for this deal." style="background:#d1fae5;color:#065f46;border-color:#a7f3d0;">✓ Mark reviewed</button>` : ''}
                         </div>
                       </td>

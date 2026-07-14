@@ -91,5 +91,16 @@ pin(uiSrc.includes("(v > 0 ? '+' : v < 0 ? '\u2212' : '')") || /v > 0 \? '\+' : 
 pin(uiSrc.includes("data-tc-section=\"assumptions\"") || uiSrc.includes("data-tc-section='assumptions'"), 'chip links to the Assumptions section');
 pin(!uiSrc.includes('max-width:220px;">${escapeAttr(r.notes'), 'notes no longer truncate');
 
+// ---- Per-deal editability (2026-07-14, Brock feature) ----
+pin(uiSrc.includes('data-house-input data-house-row='), 'house table cells are editable inputs');
+pin(uiSrc.includes("querySelectorAll('[data-house-input]')"), 'assumptions section wires the house inputs');
+// Badged seed rows' Yr-1 edits sync the engine escalation inputs — all four.
+const seedBlock = uiSrc.slice(uiSrc.indexOf('const SEED_TARGETS'), uiSrc.indexOf('const SEED_TARGETS') + 600);
+pin(seedBlock.includes("'labor_category|hourly|wage': ['laborEscalation'"), 'hourly wage Yr-1 syncs laborEscalation');
+pin(seedBlock.includes("'global||capex': ['annualEscalation'"), 'global capex Yr-1 syncs annualEscalation');
+pin(seedBlock.includes("'equipment_category|Facility|capex': ['facilityEscalation'"), 'Facility Yr-1 syncs facilityEscalation');
+pin(seedBlock.includes("'equipment_category|MHE|capex': ['equipmentEscalation'"), 'MHE Yr-1 syncs equipmentEscalation');
+pin(uiSrc.includes('editable per-deal'), 'card states per-deal editability');
+
 console.log(`test-cm-house-assumptions: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

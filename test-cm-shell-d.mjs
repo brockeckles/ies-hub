@@ -25,7 +25,7 @@ globalThis.window = globalThis.window || { location: { hostname: '', pathname: '
 
 // ?v= pin MUST match ui.js's import (feedback_test_cache_bust_match — a
 // mismatched pin loads a SECOND module instance with its own state).
-const shellD = await import('./tools/cost-model/shell-d.js?v=20260713-m8a');
+const shellD = await import('./tools/cost-model/shell-d.js?v=20260714-a1');
 const { getShellPref, setShellPref, D_STATIONS, stationForSection, renderShellD, renderDSpine,
         renderDScenarioRow, updateDRail, RAIL_ROW_KEYS, WHATIF_BY_CELL, railWhatIfSection,
         whatIfKeysForCell } = shellD;
@@ -491,6 +491,16 @@ t('ui.js: dual Standard nav retired under the D shell (M6)', () => {
   assert(depthBlock.includes("tierSvc.setTier('cm'"), 'depth pill writes the SAME tier preference');
   assert(uiSrc.includes("depth: tierSvc.getTier('cm') === 'quick' ? 'essentials' : 'engineering'"),
     'depth derives from the tier service (one preference, two chromes)');
+});
+
+// ---- 2026-07-14 (Brock): assumptions pill must SURVIVE economics navigation ----
+t('essentials: assumptions is an economics essential (pill no longer vanishes)', () => {
+  assert(ESSENTIALS_BY_STATION.economics.includes('assumptions'),
+    'assumptions missing from economics essentials');
+  const econ = D_STATIONS.find(st => st.key === 'economics');
+  // Active on facility (another economics pill) — assumptions must still show.
+  const vis = sectionsForDepth(econ, 'essentials', 'facility');
+  assert(vis.includes('assumptions'), 'assumptions pill dropped when another economics section is active');
 });
 
 // ---- Summary ----
