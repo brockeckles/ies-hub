@@ -1954,9 +1954,20 @@ export function houseGuidanceSeeds(pinned) {
     r.scope === scope && r.metric === metric && (key === undefined || r.scope_key === key));
   const wage  = find('labor_category', 'wage', 'hourly') || find('global', 'wage', null) || find('global', 'wage');
   const capex = find('global', 'capex', null) || find('global', 'capex');
+  // W3 (2026-07-13, Brock ruling — minimal per-category wiring): the
+  // projection engine has had facilityEscPct / equipmentEscPct seams since
+  // 2026-04-21 (default → costEscPct); guidance now seeds them on NEW models.
+  // Facility ← the Facility-construction capex row; Equipment ← the MHE row
+  // (dominant equipment category — the engine has ONE equipment escalation,
+  // the table has five), falling back to global capex. Existing models are
+  // untouched: seeds apply at creation only, never on adopt/re-pin.
+  const fac = find('equipment_category', 'capex', 'Facility');
+  const mhe = find('equipment_category', 'capex', 'MHE') || capex;
   const out = {};
   if (wage  && Number.isFinite(wage.year_1_pct))  out.laborEscalation  = wage.year_1_pct;
   if (capex && Number.isFinite(capex.year_1_pct)) out.annualEscalation = capex.year_1_pct;
+  if (fac   && Number.isFinite(fac.year_1_pct))   out.facilityEscalation  = fac.year_1_pct;
+  if (mhe   && Number.isFinite(mhe.year_1_pct))   out.equipmentEscalation = mhe.year_1_pct;
   return out;
 }
 

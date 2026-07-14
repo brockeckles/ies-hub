@@ -18,8 +18,9 @@
  * single what-if slider value (or full whatIfTransient when called
  * without an arg).
  */
-import * as calc from './calc.js?v=20260704-ebr1';
+import * as calc from './calc.js?v=20260713-w1';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
+import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 
 /**
  * @param {Object|undefined} overlay — what-if slider overlay (defaults to opts.whatIfTransient)
@@ -50,7 +51,12 @@ export function computeWhatIfPreview(overlay, {
     const fr = (refData.facilityRates || []).find(r => r.market_id === market);
     const ur = (refData.utilityRates || []).find(r => r.market_id === market);
     const opHrs = calc.operatingHours(model.shifts || {});
-    const orders = (model.volumeLines || []).find(v => v.isOutboundPrimary)?.volume || 0;
+    // W2 (2026-07-13): mirror compute-all's channel-aggregate orders basis —
+    // the compare-vs-baseline path must re-base identically or per-order
+    // rows would skew between rail and baseline.
+    const _chanOrders = channelCalc.getAggregateDerived(model || {}, 'orders');
+    const orders = _chanOrders > 0 ? _chanOrders
+      : ((model.volumeLines || []).find(v => v.isOutboundPrimary)?.volume || 0);
     const contractYears = model.projectDetails?.contractTerm || 5;
     const fin = model.financial || {};
     // P1-2 (2026-07-02 assessment): calcHeur (with the What-If overlay)

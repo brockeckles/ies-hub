@@ -30,6 +30,17 @@ eq(seeds.laborEscalation, 4.5, 'seed: laborEscalation from hourly wage Y1');
 eq(seeds.annualEscalation, 3.0, 'seed: annualEscalation from global capex Y1');
 eq(Object.keys(calc.houseGuidanceSeeds({ rows: [] })).length, 0, 'seed: empty pin → no seeds');
 
+// 2b. W3 (2026-07-13, Brock ruling): per-category seeds — Facility row →
+// facilityEscalation, MHE row → equipmentEscalation (global capex fallback).
+eq(seeds.equipmentEscalation, 3.5, 'seed W3: equipmentEscalation from MHE capex Y1');
+eq('facilityEscalation' in seeds, false, 'seed W3: no Facility row → no facility seed');
+const pinnedFac = calc.pinHouseAssumptions([...live2026,
+  { scope: 'equipment_category', scope_key: 'Facility', metric: 'capex', year_1_pct: 3.5, year_2_pct: 3.5, year_3_pct: 3.0, year_4_pct: 3.0, year_5_pct: 3.0, effective_date: '2026-04-16', notes: 'facility' },
+], '2026-06-12');
+eq(calc.houseGuidanceSeeds(pinnedFac).facilityEscalation, 3.5, 'seed W3: facilityEscalation from Facility construction Y1');
+const pinnedNoMhe = calc.pinHouseAssumptions(live2026.filter(r => r.scope_key !== 'MHE'), '2026-06-12');
+eq(calc.houseGuidanceSeeds(pinnedNoMhe).equipmentEscalation, 3.0, 'seed W3: no MHE row → equipment falls back to global capex');
+
 // 3. THE core requirement: guidance moves 3%→5%, pinned project keeps 3%
 const live2027 = live2026.map(r => r.scope === 'global'
   ? { ...r, year_1_pct: 5.0, year_2_pct: 5.0, effective_date: '2027-01-01' } : r);
@@ -72,7 +83,9 @@ const asmBody = uiSrc.slice(asmIdx, asmIdx + 12000);
 pin(asmBody.includes('renderHouseAssumptionsCard()'), 'Assumptions section hosts the full table');
 
 pin(uiSrc.includes("'labor_category|hourly|wage': 'Hourly wages'"), 'rows humanized (no raw scope/metric)');
-pin(uiSrc.includes('seeds Labor Escalation') && uiSrc.includes('seeds Cost Escalation'), 'the two engine-feeding rows are badged');
+pin(uiSrc.includes('seeds Labor Escalation') && uiSrc.includes('seeds Cost Escalation'), 'labor + cost seed rows are badged');
+pin(uiSrc.includes('seeds Facility Escalation') && uiSrc.includes('seeds Equipment Escalation'), 'W3: facility + equipment seed rows are badged');
+pin(uiSrc.includes('seeds.facilityEscalation') && uiSrc.includes('seeds.equipmentEscalation'), 'W3: ensureHouseAssumptions applies the per-category seeds');
 pin(uiSrc.includes('EXPECTED YEAR-OVER-YEAR INCREASE'), 'column group states the unit in plain English');
 pin(uiSrc.includes("(v > 0 ? '+' : v < 0 ? '\u2212' : '')") || /v > 0 \? '\+' : v < 0/.test(uiSrc), 'cells are signed percentages');
 pin(uiSrc.includes("data-tc-section=\"assumptions\"") || uiSrc.includes("data-tc-section='assumptions'"), 'chip links to the Assumptions section');

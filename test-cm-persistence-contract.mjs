@@ -159,15 +159,23 @@ t('margin split fallback: no ga/mgmt columns → 37.5/62.5 of target_margin_pct'
   eq(m.financial.targetMargin, 20, 'target preserved');
 });
 
-t('margin split fallback: no margin columns at all → 16-based split (documented wart: targetMargin stays at empty-model 12)', () => {
-  // Locks CURRENT behavior. The ga/mgmt fallback assumes 16 while
-  // targetMargin falls back to createEmptyModel()'s 12 — inconsistent but
-  // frozen until M2. If this test breaks because the two were reconciled,
-  // update deliberately.
+t('margin split fallback: no margin columns at all → 12-based split, target = derived sum (W1 2026-07-13)', () => {
+  // The 16-vs-12 wart is CLOSED (Brock ruling 2026-07-13): fallbacks
+  // standardized on the empty-model default 12, and reconstruct now ALWAYS
+  // derives targetMargin = ga + mgmt, so header and components cannot
+  // disagree on column-less legacy rows.
   const m = reconstructModelFromFlatRow({ id: 5 });
-  eq(m.financial.gaMargin, 6, 'ga = 16 × .375');
-  eq(m.financial.mgmtFeeMargin, 10, 'mgmt = 16 × .625');
-  eq(m.financial.targetMargin, createEmptyModel().financial.targetMargin, 'target = empty-model default');
+  eq(m.financial.gaMargin, 4.5, 'ga = 12 × .375');
+  eq(m.financial.mgmtFeeMargin, 7.5, 'mgmt = 12 × .625');
+  eq(m.financial.targetMargin, 12, 'target = derived ga + mgmt sum');
+  eq(m.financial.targetMargin, m.financial.gaMargin + m.financial.mgmtFeeMargin, 'header ≡ components by construction');
+});
+
+t('margin consistency: explicit ga/mgmt columns with a stale target column → target = derived sum', () => {
+  // Mirrors the prod Hearthwood rows pre-scrub: flat ga=6/mgmt=10 with a
+  // stale target_margin_pct=12 — the derived sum (16) must win.
+  const m = reconstructModelFromFlatRow({ id: 51, ga_margin_pct: 6, mgmt_fee_margin_pct: 10, target_margin_pct: 12 });
+  eq(m.financial.targetMargin, 16, 'derived sum beats the stale flat column');
 });
 
 t('empty row: no volume columns → empty-model volumeLines; defaults survive', () => {

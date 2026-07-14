@@ -13,7 +13,7 @@ import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=2026070
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import ofpStyles from './operational-flow-styles.js?v=20260705-r1';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
-import * as calc from './calc.js?v=20260704-ebr1';
+import * as calc from './calc.js?v=20260713-w1';
 import * as api from './api.js?v=20260704-cmp1';
 import * as scenarios from './calc.scenarios.js?v=20260704-ebr1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260705-u3d';
@@ -33,7 +33,7 @@ import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
-import { computeAll } from './compute-all.js?v=20260713-m5b';
+import { computeAll } from './compute-all.js?v=20260713-w1';
 import * as shellD from './shell-d.js?v=20260713-m8a';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
 import * as stationEco from './station-economics.js?v=20260713-m5d';
@@ -106,11 +106,11 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260710-r2';
+} from './operational-flow-render.js?v=20260713-w1';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260713-m5b';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260704-ebr1';
+import { computeHeaderKpis } from './header-kpis.js?v=20260713-w1';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260713-w1';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -333,12 +333,12 @@ async function _computeBaselineY1(famRow) {
     if (fin.gaMargin == null || Number(fin.gaMargin) === 0) {
       fin.gaMargin = full.ga_margin_pct != null
         ? Number(full.ga_margin_pct)
-        : Number((Number(fin.targetMargin || 16) * 0.375).toFixed(2));
+        : Number((Number(fin.targetMargin || 12) * 0.375).toFixed(2));
     }
     if (fin.mgmtFeeMargin == null || Number(fin.mgmtFeeMargin) === 0) {
       fin.mgmtFeeMargin = full.mgmt_fee_margin_pct != null
         ? Number(full.mgmt_fee_margin_pct)
-        : Number((Number(fin.targetMargin || 16) * 0.625).toFixed(2));
+        : Number((Number(fin.targetMargin || 12) * 0.625).toFixed(2));
     }
     fin.targetMargin = Number((Number(fin.gaMargin || 0) + Number(fin.mgmtFeeMargin || 0)).toFixed(2));
     if (fin.sgaOverlayPct == null && full.sga_overlay_pct != null) fin.sgaOverlayPct = Number(full.sga_overlay_pct);
@@ -1198,12 +1198,12 @@ async function loadModelByCmId(id) {
       if (gaMissing) {
         fin.gaMargin = full.ga_margin_pct != null
           ? Number(full.ga_margin_pct)
-          : Number((Number(fin.targetMargin || 16) * 0.375).toFixed(2));
+          : Number((Number(fin.targetMargin || 12) * 0.375).toFixed(2));
       }
       if (mgmtMissing) {
         fin.mgmtFeeMargin = full.mgmt_fee_margin_pct != null
           ? Number(full.mgmt_fee_margin_pct)
-          : Number((Number(fin.targetMargin || 16) * 0.625).toFixed(2));
+          : Number((Number(fin.targetMargin || 12) * 0.625).toFixed(2));
       }
       fin.targetMargin = Number((Number(fin.gaMargin || 0) + Number(fin.mgmtFeeMargin || 0)).toFixed(2));
       if (fin.sgaOverlayPct == null && full.sga_overlay_pct != null) fin.sgaOverlayPct = Number(full.sga_overlay_pct);
@@ -1547,9 +1547,15 @@ function reconstructModelFromFlatRow(row) {
       // M1 (2026-04-21): G&A + Mgmt Fee are the source of truth; targetMargin
       // is the derived sum. Fall back to target_margin_pct with 37.5/62.5 split
       // for rows that haven't been migrated yet.
-      gaMargin:      Number(row.ga_margin_pct      ?? (Number(row.target_margin_pct || 16) * 0.375).toFixed(2)),
-      mgmtFeeMargin: Number(row.mgmt_fee_margin_pct ?? (Number(row.target_margin_pct || 16) * 0.625).toFixed(2)),
-      targetMargin:  Number(row.target_margin_pct || empty.financial.targetMargin),
+      // W1 (2026-07-13, Brock ruling): fallback total standardized on the
+      // empty-model default 12 (the 16 was a pre-M1 fossil), and targetMargin
+      // is ALWAYS the derived ga+mgmt sum — header and components can no
+      // longer disagree on column-less legacy rows.
+      ...(() => {
+        const ga   = Number(row.ga_margin_pct       ?? (Number(row.target_margin_pct || 12) * 0.375).toFixed(2));
+        const mgmt = Number(row.mgmt_fee_margin_pct ?? (Number(row.target_margin_pct || 12) * 0.625).toFixed(2));
+        return { gaMargin: ga, mgmtFeeMargin: mgmt, targetMargin: Number((ga + mgmt).toFixed(2)) };
+      })(),
       annualEscalation: Number(row.labor_escalation_pct || empty.financial.annualEscalation),
       volumeGrowth: Number(row.annual_volume_growth_pct || empty.financial.volumeGrowth),
     },
@@ -2123,11 +2129,18 @@ function _buildDiscloseHTML(key) {
     if (key === 'summary-y1-cost-per-order') {
       const orders = p1.orders || ctx.baseOrders || 0;
       const cpo = orders > 0 ? p1.totalCost / orders : 0;
+      // W2 (2026-07-13): the basis is the channel aggregate when channels
+      // exist; the starred line only anchors channel-less models.
+      const _cpoMulti = Array.isArray(ctx.channelLineage)
+        && ctx.channelLineage.filter(c => !c.isHidden && !c.isReverse).length > 0;
       return _discloseHeader('Cost / Unit (Y1)', 'Y1 Total Cost ÷ Y1 Outbound Volume') +
         _discloseRow('Y1 Total Cost', _fmt$(p1.totalCost)) +
-        _discloseRow('Y1 Outbound Volume', _fmtN(orders), 'starred line on Volumes & Profile') +
+        _discloseRow('Y1 Outbound Volume', _fmtN(orders),
+          _cpoMulti ? 'Σ outbound channels on Volumes & Profile' : 'starred line on Volumes & Profile') +
         `<div class="cm-disclose-total">${_discloseRow('Per Unit', '$' + cpo.toFixed(2))}</div>` +
-        _discloseFooter('Anchored to the outbound-primary volume line (the line with the ★ on Volumes & Profile). Change the star to re-base.');
+        _discloseFooter(_cpoMulti
+          ? 'Anchored to the channel-aware outbound total (Σ non-reverse channels, expressed in orders).'
+          : 'Anchored to the outbound-primary volume line (the line with the ★ on Volumes & Profile). Change the star to re-base.');
     }
     if (key === 'summary-ftes') {
       return _discloseHeader('Total FTEs', 'Σ direct laborLines.fte + Σ indirectLaborLines.fte') +
@@ -4091,8 +4104,8 @@ function renderStdLabor() {
 function renderStdMoney() {
   const f = model.financial || (model.financial = {});
   const pd = model.projectDetails || {};
-  const ga = Number(f.gaMargin ?? (Number(f.targetMargin || 16) * 0.375).toFixed(2));
-  const mgmt = Number(f.mgmtFeeMargin ?? (Number(f.targetMargin || 16) * 0.625).toFixed(2));
+  const ga = Number(f.gaMargin ?? (Number(f.targetMargin || 12) * 0.375).toFixed(2));
+  const mgmt = Number(f.mgmtFeeMargin ?? (Number(f.targetMargin || 12) * 0.625).toFixed(2));
   const body = `
     <div class="cm-form-row-3">
       <div class="hub-field">
@@ -4595,8 +4608,8 @@ function renderHouseAssumptionsCard() {
 
   // ── Row clarity (Brock 2026-07-13): raw scope/metric pairs read as data-
   // base rows. Humanize each combination, group Labor vs Capital, and badge
-  // the ONLY two rows the model actually consumes (Y1 escalation seeds —
-  // same predicates as calc.houseGuidanceSeeds).
+  // the ONLY four rows the model actually consumes (Y1 escalation seeds —
+  // same predicates as calc.houseGuidanceSeeds; W3 added Facility + MHE).
   const rowLabel = (r) => {
     const key = `${r.scope}|${r.scope_key || ''}|${r.metric}`;
     const KNOWN = {
@@ -4620,7 +4633,15 @@ function renderHouseAssumptionsCard() {
       return `<span class="cm-house-seed" title="This row's Y1 value seeded this deal's Labor Escalation default at creation. The other rows are reference only — they don't feed the engine.">→ seeds Labor Escalation</span>`;
     }
     if (r.scope === 'global' && r.metric === 'capex') {
-      return `<span class="cm-house-seed" title="This row's Y1 value seeded this deal's Cost Escalation default at creation. The other rows are reference only — they don't feed the engine.">→ seeds Cost Escalation</span>`;
+      return `<span class="cm-house-seed" title="This row's Y1 value seeded this deal's Cost Escalation default at creation.">→ seeds Cost Escalation</span>`;
+    }
+    // W3 (2026-07-13, Brock ruling): per-category guidance now seeds the
+    // engine's facility/equipment escalation seams on new models.
+    if (r.scope === 'equipment_category' && r.metric === 'capex' && r.scope_key === 'Facility') {
+      return `<span class="cm-house-seed" title="This row's Y1 value seeded this deal's Facility Escalation default at creation (engine seam facilityEscPct).">→ seeds Facility Escalation</span>`;
+    }
+    if (r.scope === 'equipment_category' && r.metric === 'capex' && r.scope_key === 'MHE') {
+      return `<span class="cm-house-seed" title="This row's Y1 value seeded this deal's Equipment Escalation default at creation (MHE stands in for the equipment fleet — the engine has one equipment escalation; remaining rows are reference only).">→ seeds Equipment Escalation</span>`;
     }
     return '';
   };
@@ -7734,10 +7755,10 @@ function renderVas() {
 function renderFinancial() {
   const f = model.financial || {};
   // M1 (2026-04-21): G&A + Mgmt Fee are the source of truth; targetMargin
-  // is the derived sum, kept for downstream back-compat. Defaults: G&A 6.0,
-  // Mgmt Fee 10.0 → Total 16.0.
-  const ga  = Number(f.gaMargin  ?? (Number(f.targetMargin || 16) * 0.375).toFixed(2));
-  const mgmt = Number(f.mgmtFeeMargin ?? (Number(f.targetMargin || 16) * 0.625).toFixed(2));
+  // is the derived sum, kept for downstream back-compat. Defaults: G&A 4.5,
+  // Mgmt Fee 7.5 → Total 12.0 (W1 2026-07-13 — was 16, a pre-M1 fossil).
+  const ga  = Number(f.gaMargin  ?? (Number(f.targetMargin || 12) * 0.375).toFixed(2));
+  const mgmt = Number(f.mgmtFeeMargin ?? (Number(f.targetMargin || 12) * 0.625).toFixed(2));
   const total = Number((ga + mgmt).toFixed(2));
   const grossUpFactor = (1 / (1 - total / 100)).toFixed(2);
   const contractType = model.projectDetails?.contractType || 'fixed_variable';
@@ -13184,6 +13205,10 @@ function ensureHouseAssumptions(seedDefaults) {
     model.financial = model.financial || {};
     if (seeds.laborEscalation  != null) model.financial.laborEscalation  = seeds.laborEscalation;
     if (seeds.annualEscalation != null) model.financial.annualEscalation = seeds.annualEscalation;
+    // W3 (2026-07-13): per-category seeds — ride the engine's existing
+    // facilityEscPct/equipmentEscPct seams (default was costEscPct).
+    if (seeds.facilityEscalation  != null) model.financial.facilityEscalation  = seeds.facilityEscalation;
+    if (seeds.equipmentEscalation != null) model.financial.equipmentEscalation = seeds.equipmentEscalation;
   }
   return true;
 }
@@ -13429,6 +13454,9 @@ function handleExportExcel() {
     let summary = null;
     try {
       const outbound = (model.volumeLines || []).find(v => v.isOutboundPrimary);
+      // W2 (2026-07-13): export rides the same channel-aggregate orders
+      // basis as the seam (starred line = channel-less fallback).
+      const exportChanOrders = channelCalc.getAggregateDerived(model || {}, 'orders');
       // P1-2 (2026-07-02 assessment): export totals carry the same labor
       // basis as the Summary tab (market temp premium / OT / absence /
       // temp-share What-If) — otherwise profile models export stale labor.
@@ -13447,7 +13475,7 @@ function handleExportExcel() {
         startupLines: model.startupLines || [],
         contractYears: pd.contractTerm || 5,
         targetMarginPct: (model.financial && model.financial.targetMargin) || 0,
-        annualOrders: (outbound && outbound.volume) || 1,
+        annualOrders: exportChanOrders > 0 ? exportChanOrders : ((outbound && outbound.volume) || 1),
         facilityRate: 0,
         utilityRate: 0,
         laborOpts: scenarios.resolveSummaryLaborOpts({

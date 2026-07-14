@@ -30,7 +30,7 @@
  * @module tools/cost-model/compute-all
  */
 
-import * as calc from './calc.js?v=20260704-ebr1';
+import * as calc from './calc.js?v=20260713-w1';
 import * as monthlyCalc from './calc.monthly.js?v=20260704-ebr1';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as scenarios from './calc.scenarios.js?v=20260704-ebr1';
@@ -113,8 +113,20 @@ export function computeAll(ctx) {
   const ur = (refData?.utilityRates || []).find(r => r.market_id === market);
   const opHrs = calc.operatingHours(model?.shifts || {});
   const outboundStar = (model?.volumeLines || []).find(v => v.isOutboundPrimary);
-  const orders = outboundStar?.volume || 0;
-  const outboundUomLabel = formatUomSingular(outboundStar?.uom);
+  // W2 (2026-07-13, Brock ruling): when the model carries channels, the
+  // channel-aware aggregate (Σ non-reverse channels' derived orders — the
+  // SAME basis the indirect-labor heuristics and MHE sizing already use) is
+  // authoritative for orders/yr. The starred volume line remains the basis
+  // for channel-less legacy models only. No revenue/cost dollars ride this
+  // value — it feeds costPerOrder / GP-per-order / the projections' orders
+  // row / the D-spine Volume sub, which previously understated multi-channel
+  // deals (Hearthwood: starred DTC-only line 1.4M vs DTC+B2B 2.0M) and made
+  // the orders-cell provenance ("Σ channels" on multi-channel) a lie.
+  const _chanOrders = channelCalc.getAggregateDerived(model || {}, 'orders');
+  const orders = _chanOrders > 0 ? _chanOrders : (outboundStar?.volume || 0);
+  const outboundUomLabel = _chanOrders > 0
+    ? formatUomSingular('orders')
+    : formatUomSingular(outboundStar?.uom);
   const contractYears = model?.projectDetails?.contractTerm || 5;
   const fin = model?.financial || {};
 

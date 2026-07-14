@@ -23,7 +23,7 @@ globalThis.window = globalThis.window || { location: { hostname: '', pathname: '
 // NOTE: the ?v= pin MUST match ui.js/header-kpis.js's import URL — ES modules
 // key on the full URL, and a bare import would create a SECOND compute-all
 // instance with its own memo (feedback_test_cache_bust_match class).
-const { computeAll, invalidateComputeAll } = await import('./tools/cost-model/compute-all.js?v=20260713-m5b');
+const { computeAll, invalidateComputeAll } = await import('./tools/cost-model/compute-all.js?v=20260713-w1');
 const { computeHeaderKpis } = await import('./tools/cost-model/header-kpis.js');
 const scenarios = await import('./tools/cost-model/calc.scenarios.js');
 
@@ -209,6 +209,29 @@ t('compute-all.js: engines-frozen guard — seam imports engines, never redefine
   assert(caSrc.includes('scenarios.buildProjectionParams({'), 'uses the Phase-2a shared params builder');
   assert(!/function\s+(computeSummary|buildYearlyProjections|computeMonthlyLaborView)\b/.test(caSrc),
     'seam must not re-implement engine functions');
+});
+
+t('W2: channel aggregate is authoritative for orders when channels exist', () => {
+  // Brock ruling 2026-07-13 — Σ non-reverse channels' derived orders wins;
+  // the starred line only anchors channel-less models (case above).
+  const m2 = makeModel();
+  m2.channels = [
+    { key: 'outbound', name: 'DTC', primary: { uom: 'orders', value: 1400000, activity: 'outbound' } },
+    { key: 'b2b-retail', name: 'B2B', primary: { uom: 'orders', value: 600000, activity: 'outbound' } },
+    { key: 'reverse', name: 'Returns', primary: { uom: 'orders', value: 250000, activity: 'returns' } },
+  ];
+  invalidateComputeAll();
+  const c2 = computeAll(makeCtx(m2));
+  assert(c2.orders === 2000000, `orders = DTC + B2B, reverse excluded (got ${c2.orders})`);
+  assert(c2.outboundUomLabel === 'Order', `uom label re-bases to orders (got ${c2.outboundUomLabel})`);
+  assert(c2.projections[0].orders === 2000000, 'Y1 projections ride the aggregate');
+  assert(Math.abs(c2.summary.costPerOrder - c2.summary.totalCost / 2000000) < 1e-9, 'costPerOrder denominators re-base');
+  // Channels present but zero-valued → starred-line fallback.
+  const m3 = makeModel();
+  m3.channels = [{ key: 'outbound', name: 'DTC', primary: { uom: 'orders', value: 0, activity: 'outbound' } }];
+  invalidateComputeAll();
+  const c3 = computeAll(makeCtx(m3));
+  assert(c3.orders === 800000, 'zero-valued channels fall back to the starred line');
 });
 
 // ---- Summary ----
