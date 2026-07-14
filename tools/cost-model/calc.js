@@ -14,8 +14,8 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260704-ebr1';
-import { permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260704-ebr1';
+import * as monthly from './calc.monthly.js?v=20260714-a3';
+import { permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260714-a3';
 import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260430-hours-first';
 import {
   getAnnualVolume as _getAnnualVolume,
@@ -484,8 +484,9 @@ function _blendedLoadedRate(line, opts = {}) {
     baseRate: Number(line.hourly_rate) || 0,
     wageLoadFrac,
     benefitsPerHr: opts.includeBenefits === false ? 0 : (Number(line.benefits_per_hour) || 0),
-    mixFrac: permMixFracForLine(line, { tempShareDeltaPp: opts.tempShareDeltaPp }),
+    mixFrac: permMixFracForLine(line, { tempShareDeltaPp: opts.tempShareDeltaPp, defaultPermMixPct: opts.defaultPermMixPct }),
     tempMarkupFrac: tempMarkupFracForLine(line, {
+      dealTempMarkupPct: opts.dealTempMarkupPct,
       marketTempPremiumPct: opts.marketTempPremiumPct,
       defaultTempMarkupPct: opts.defaultTempMarkupPct,
     }),

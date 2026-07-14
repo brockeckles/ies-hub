@@ -18,7 +18,7 @@ import * as calc from './tools/cost-model/calc.js';
 import { computeMonthlyLaborFromLines } from './tools/cost-model/calc.monthly.js';
 import {
   permMixFracForLine, tempMarkupFracForLine, blendLoadedRate,
-  resolveCalcHeuristics, DEFAULT_TEMP_MARKUP_PCT,
+  resolveCalcHeuristics, DEFAULT_TEMP_MARKUP_PCT, dealTempMarkupPct,
 } from './tools/cost-model/calc.scenarios.js';
 
 let pass = 0, fail = 0;
@@ -56,13 +56,20 @@ t('mix: tempShareDeltaPp shifts toward temp, clamps, skips pure-temp', () => {
 });
 
 // ── 2. tempMarkupFracForLine resolution chain ─────────────────────────
-t('markup: pure temp uses line value ONLY (no fallback repricing)', () => {
+// 2026-07-14 (Brock ruling — markup is deal-wide): pure temp now rides the
+// same fallback chain as mixed lines when its line value is unset (a +0%
+// temp was never the real economics; prod audit found zero such lines).
+// Explicit deal-wide value (dealTempMarkupPct) outranks the market profile.
+t('markup: pure temp — line value first, then the shared chain', () => {
   near(tempMarkupFracForLine({ employment_type: 'temp_agency', temp_agency_markup_pct: 38 }), 0.38);
-  near(tempMarkupFracForLine({ employment_type: 'temp_agency' }, { marketTempPremiumPct: 42, defaultTempMarkupPct: 38 }), 0);
+  near(tempMarkupFracForLine({ employment_type: 'temp_agency' }, { marketTempPremiumPct: 42, defaultTempMarkupPct: 38 }), 0.42);
+  near(tempMarkupFracForLine({ employment_type: 'temp_agency' }, { dealTempMarkupPct: 45, marketTempPremiumPct: 42 }), 0.45);
+  near(tempMarkupFracForLine({ employment_type: 'temp_agency' }, {}), DEFAULT_TEMP_MARKUP_PCT / 100);
 });
-t('markup: mixed line — line > market > heuristic > house default', () => {
+t('markup: mixed line — line > deal-explicit > market > heuristic > house default', () => {
   const ln = { employment_type: 'permanent', retention_mix_pct: 50 };
   near(tempMarkupFracForLine({ ...ln, temp_agency_markup_pct: 25 }, { marketTempPremiumPct: 42, defaultTempMarkupPct: 30 }), 0.25);
+  near(tempMarkupFracForLine(ln, { dealTempMarkupPct: 45, marketTempPremiumPct: 42, defaultTempMarkupPct: 30 }), 0.45);
   near(tempMarkupFracForLine(ln, { marketTempPremiumPct: 42, defaultTempMarkupPct: 30 }), 0.42);
   near(tempMarkupFracForLine(ln, { defaultTempMarkupPct: 30 }), 0.30);
   near(tempMarkupFracForLine(ln, {}), DEFAULT_TEMP_MARKUP_PCT / 100);
@@ -141,6 +148,29 @@ t('resolveCalcHeuristics: transient slider values win', () => {
   assert(h.tempMarkupPct === 45, `transient markup ${h.tempMarkupPct}`);
   assert(h.tempShareDeltaPp === 15, `transient delta ${h.tempShareDeltaPp}`);
   assert(h.used.temp_markup_pct === 'transient', 'provenance');
+});
+
+// ── 2026-07-14 (Brock ruling): deal-wide perm mix + explicit-markup helper ──
+t('mix: deal-wide defaultPermMixPct fills when line has no value; line wins', () => {
+  near(permMixFracForLine({ employment_type: 'permanent' }, { defaultPermMixPct: 80 }), 0.80);
+  near(permMixFracForLine({ employment_type: 'permanent', retention_mix_pct: 60 }, { defaultPermMixPct: 80 }), 0.60);
+  near(permMixFracForLine({ employment_type: 'permanent' }, {}), 1);
+  // What-If delta applies on top of the deal-wide default
+  near(permMixFracForLine({ employment_type: 'permanent' }, { defaultPermMixPct: 80, tempShareDeltaPp: 10 }), 0.70);
+});
+t('dealTempMarkupPct: explicit sources only (transient/override/snapshot)', () => {
+  assert(dealTempMarkupPct({ tempMarkupPct: 45, used: { temp_markup_pct: 'override' } }) === 45, 'override → 45');
+  assert(dealTempMarkupPct({ tempMarkupPct: 45, used: { temp_markup_pct: 'transient' } }) === 45, 'transient → 45');
+  assert(dealTempMarkupPct({ tempMarkupPct: 45, used: { temp_markup_pct: 'snapshot' } }) === 45, 'snapshot → 45');
+  assert(dealTempMarkupPct({ tempMarkupPct: 38, used: { temp_markup_pct: 'default' } }) === null, 'default → null (market may win)');
+  assert(dealTempMarkupPct(null) === null, 'null bag → null');
+});
+t('heuristics: perm_mix_pct resolves (default 100, override wins)', () => {
+  const d = resolveCalcHeuristics(null, null, null, {}, null);
+  assert(d.permMixPct === 100, `default ${d.permMixPct}`);
+  const o = resolveCalcHeuristics(null, null, { perm_mix_pct: 75 }, {}, null);
+  assert(o.permMixPct === 75, `override ${o.permMixPct}`);
+  assert(o.used.perm_mix_pct === 'override', 'provenance');
 });
 
 console.log(`\ntest-cm-retention-mix: ${pass} passed, ${fail} failed.`);

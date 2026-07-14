@@ -13,13 +13,13 @@ import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=2026070
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import ofpStyles from './operational-flow-styles.js?v=20260714-a2';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
-import * as calc from './calc.js?v=20260713-w1';
+import * as calc from './calc.js?v=20260714-a3';
 import * as api from './api.js?v=20260704-cmp1';
-import * as scenarios from './calc.scenarios.js?v=20260704-ebr1';
+import * as scenarios from './calc.scenarios.js?v=20260714-a3';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260705-u3d';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260705-u3d';
 import { renderImplementation } from './render-implementation.js?v=20260705-u3d';
-import * as monthlyCalc from './calc.monthly.js?v=20260704-ebr1';
+import * as monthlyCalc from './calc.monthly.js?v=20260714-a3';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
@@ -33,7 +33,7 @@ import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
-import { computeAll } from './compute-all.js?v=20260713-w1';
+import { computeAll } from './compute-all.js?v=20260714-a3';
 import * as shellD from './shell-d.js?v=20260714-a2';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
 import * as stationEco from './station-economics.js?v=20260713-m5d';
@@ -105,11 +105,11 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260714-a2';
+} from './operational-flow-render.js?v=20260714-a3';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260713-w1';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260713-w1';
+import { computeHeaderKpis } from './header-kpis.js?v=20260714-a3';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260714-a3';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -5842,6 +5842,29 @@ function renderShifts() {
       </div>
     </div>
 
+    <!-- Workforce strategy (2026-07-14, Brock ruling): perm mix + agency
+         markup are DEAL-WIDE attributes. Both write the project's heuristic
+         overrides (perm_mix_pct / temp_markup_pct) — the SAME knobs the
+         Assumptions register shows, one mechanism with two surfaces. -->
+    <div class="hub-card mb-4">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">
+        <div class="text-subtitle u-m0">Workforce Strategy <span style="font-size:11px;font-weight:500;color:var(--ies-gray-400);">(deal-wide)</span></div>
+        <span class="hub-field__hint">Applies to every labor line. Also visible in the Assumptions register; What-If's temp-share lever shifts the mix transiently.</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:12px;">
+        <div class="hub-field">
+          <label class="hub-field__label" title="% of direct-labor hours staffed by permanent employees; the remainder is priced as temp agency at the agency markup (no wage load).">Perm Mix %</label>
+          <input class="hub-input" type="number" min="0" max="100" step="5" value="${heuristicOverrides['perm_mix_pct'] ?? ''}" placeholder="100" data-lf-heuristic="perm_mix_pct" />
+          <div class="hub-field__hint">${heuristicOverrides['perm_mix_pct'] != null && heuristicOverrides['perm_mix_pct'] !== '' ? `${100 - Number(heuristicOverrides['perm_mix_pct'])}% of hours priced as temp` : 'Blank = house default (100% permanent)'}</div>
+        </div>
+        <div class="hub-field">
+          <label class="hub-field__label" title="Agency markup on base wage for the temp share. Explicit values here outrank the market profile's temp premium.">Agency Markup %</label>
+          <input class="hub-input" type="number" min="0" max="100" step="1" value="${heuristicOverrides['temp_markup_pct'] ?? ''}" placeholder="${scenarios.DEFAULT_TEMP_MARKUP_PCT}" data-lf-heuristic="temp_markup_pct" />
+          <div class="hub-field__hint">Blank = market profile, else house ${scenarios.DEFAULT_TEMP_MARKUP_PCT}%</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Position Catalog -->
     <div class="hub-card mb-4">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
@@ -5929,6 +5952,35 @@ function effectiveUphForLine(line) {
  * category filter: 'direct' shows direct positions; 'indirect' shows the
  * indirect subset. Keeps each dropdown lean.
  */
+// 2026-07-14 (Brock ruling — the position catalog is the wage authority):
+// pull position attrs onto the line so existing calc paths (which read
+// line.hourly_rate / line.employment_type / line.temp_agency_markup_pct /
+// line.burden_pct) stay defensible. Salaried roles pull annual_salary;
+// hourly roles pull hourly_wage. Used on position ASSIGN, on catalog EDITS
+// (re-applied to every line holding the position), and by the detail pane's
+// Adopt action for legacy diverged rates.
+function _applyPositionToLine(line, p) {
+  if (p.is_salaried) {
+    line.hourly_rate = 0;
+    line.annual_salary = Number(p.annual_salary) || 0;
+    line.pay_type = 'salary';
+  } else {
+    line.hourly_rate = Number(p.hourly_wage) || 0;
+    line.pay_type = 'hourly';
+  }
+  line.employment_type = p.employment_type || 'permanent';
+  if (p.employment_type === 'temp_agency') {
+    line.temp_agency_markup_pct = Number(p.temp_markup_pct) || 0;
+  }
+  // Per-position Benefit Load override (Brock 2026-04-21 pm). Null =
+  // inherit global; any number overrides burden_pct for this line.
+  if (p.benefit_load_pct != null && p.benefit_load_pct !== '') {
+    line.burden_pct = Number(p.benefit_load_pct) || 0;
+  } else {
+    line.burden_pct = null; // clear per-line override so global applies
+  }
+}
+
 function renderPositionCell(line, idx, categoryFilter) {
   const positions = (model.shifts && model.shifts.positions) || [];
   const eligible = positions.filter(p => {
@@ -6359,7 +6411,9 @@ function renderIndirectLaborBlock(opHrs, lc, totalIndirect) {
                 </td>
                 <td>${renderPositionCell(l, i, 'indirect')}</td>
                 <td><input class="hub-input hub-num" type="number" value="${l.headcount || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="headcount" data-type="number" /></td>
-                <td><input class="hub-input hub-num" type="number" step="0.5" value="${l.hourly_rate || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" /></td>
+                <td>${l.position_id
+                  ? `<div class="hub-detail-readonly hub-num" title="Wage flows from the position — edit it in Labor Factors.">$${(l.hourly_rate || 0).toFixed(2)}</div>`
+                  : `<input class="hub-input hub-num" type="number" step="0.5" value="${l.hourly_rate || 0}" data-array="indirectLaborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" />`}</td>
                 <td>
                   ${buckets.length === 0
                     ? `<span class="hub-chip hub-chip--danger">no buckets</span>`
@@ -6758,6 +6812,8 @@ function renderLaborFactorsBanner(lc, shifts) {
         ${chip('PTO', ptoHrs, ' hrs')}
         ${chip('Holiday', holidayHrs, ' hrs')}
         ${chip('Util', util)}
+        ${chip('Perm Mix', heuristicOverrides['perm_mix_pct'] ?? 100)}
+        ${chip('Agency Mkup', heuristicOverrides['temp_markup_pct'] ?? scenarios.DEFAULT_TEMP_MARKUP_PCT)}
       </div>
       <button class="hub-btn hub-btn-secondary hub-btn-sm"
               data-action="goto-section" data-section="shifts"
@@ -7039,36 +7095,50 @@ function renderLaborDetailPane(lines, opHrs, lc) {
         </div>
       </div>
 
-      <!-- Group 4: Rate & Employment (4-col) — overrides of the Position attrs -->
+      <!-- Group 4: Rate & Employment. 2026-07-14 (Brock ruling): wages are a
+           ROLE attribute — the position (deal-wide catalog) is the wage
+           authority, so rate/employment are READ-ONLY on positioned lines.
+           Perm mix + agency markup are DEAL-WIDE (Labor Factors) — the
+           per-line override fields are retired (engines still honor legacy
+           per-line values pinned in saved data). -->
       <div class="hub-detail-group">
-        <h4 class="hub-detail-group__title">Rate &amp; Employment <span style="font-size:11px;font-weight:500;color:var(--ies-gray-400);">${l.position_id ? '(pulled from position · edit here to override)' : '(manual)'}</span></h4>
+        <h4 class="hub-detail-group__title">Rate &amp; Employment <span style="font-size:11px;font-weight:500;color:var(--ies-gray-400);">${l.position_id ? '(from position — the catalog is the wage authority)' : '(manual — no position selected)'}</span></h4>
         <div class="hub-detail-grid hub-detail-grid--4col">
           <div class="hub-field">
             <label class="hub-field__label">Base Hourly Rate</label>
-            <input class="hub-input hub-num" type="number" step="0.25" min="0" value="${hourly}" data-array="laborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" />
+            ${(() => {
+              if (!l.position_id) {
+                return `<input class="hub-input hub-num" type="number" step="0.25" min="0" value="${hourly}" data-array="laborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" />`;
+              }
+              const p = ((model.shifts && model.shifts.positions) || []).find(pp => pp.id === l.position_id);
+              const posWage = p && !p.is_salaried ? (Number(p.hourly_wage) || 0) : null;
+              const diverges = posWage != null && Math.abs(posWage - hourly) > 0.004;
+              return `<div class="hub-detail-readonly">$${hourly.toFixed(2)}</div>`
+                + (diverges
+                  ? `<div class="hub-field__hint" style="color:var(--c-warn-strong);">≠ position $${posWage.toFixed(2)} (legacy per-line rate)
+                       <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="labor-adopt-position-rate" data-idx="${i}" style="padding:1px 8px;font-size:10px;margin-left:4px;" title="Adopt the position's wage — this line reprices to $${posWage.toFixed(2)}/hr.">Adopt $${posWage.toFixed(2)}</button></div>`
+                  : `<div class="hub-field__hint">Wage flows from the position — edit it in <strong>Labor Factors</strong> (reprices every line using it).</div>`);
+            })()}
           </div>
           <div class="hub-field">
             <label class="hub-field__label">Employment Type</label>
-            <select class="hub-input" data-array="laborLines" data-idx="${i}" data-field="employment_type">
+            ${l.position_id
+              ? `<div class="hub-detail-readonly">${empType === 'temp_agency' ? 'Temp Agency' : empType === 'contractor' ? 'Contractor' : 'Permanent'}</div><div class="hub-field__hint">From position</div>`
+              : `<select class="hub-input" data-array="laborLines" data-idx="${i}" data-field="employment_type">
               <option value="permanent"${empType === 'permanent' ? ' selected' : ''}>Permanent</option>
               <option value="temp_agency"${empType === 'temp_agency' ? ' selected' : ''}>Temp Agency</option>
               <option value="contractor"${empType === 'contractor' ? ' selected' : ''}>Contractor</option>
-            </select>
-          </div>
-          <div class="hub-field">
-            <label class="hub-field__label" title="Phase 4e: % of this line's hours staffed by permanent employees; the remainder is priced as temp agency (markup, no wage load). Permanent lines only.">Perm Mix %</label>
-            <input class="hub-input hub-num" type="number" step="5" min="0" max="100" value="${l.retention_mix_pct ?? 100}" data-array="laborLines" data-idx="${i}" data-field="retention_mix_pct" data-type="number" ${empType !== 'permanent' ? 'disabled' : ''} />
-            ${empType !== 'permanent' ? '<div class="hub-field__hint">(Permanent only)</div>' : `<div class="hub-field__hint">${(l.retention_mix_pct ?? 100) < 100 ? `${100 - (l.retention_mix_pct ?? 100)}% temp at markup` : '100% permanent'}</div>`}
-          </div>
-          <div class="hub-field">
-            <label class="hub-field__label" title="Agency markup over base wage. Temp Agency lines: whole line. Permanent lines with Perm Mix < 100: the temp share (0 = inherit market profile / heuristic default 38%).">Temp Markup %</label>
-            <input class="hub-input hub-num" type="number" step="1" min="0" max="100" value="${l.temp_agency_markup_pct || 0}" data-array="laborLines" data-idx="${i}" data-field="temp_agency_markup_pct" data-type="number" ${empType === 'contractor' ? 'disabled' : ''} />
-            ${empType === 'contractor' ? '<div class="hub-field__hint">(N/A for contractors)</div>' : ''}
+            </select>`}
           </div>
           <div class="hub-field">
             <label class="hub-field__label" title="Productivity variance (% std dev) fed into the Monte Carlo sensitivity card in Summary.">Variance %</label>
             <input class="hub-input hub-num" type="number" step="1" min="0" max="50" value="${l.performance_variance_pct || 0}" data-array="laborLines" data-idx="${i}" data-field="performance_variance_pct" data-type="number" />
             <div class="hub-field__hint">Monte Carlo σ</div>
+          </div>
+          <div class="hub-field" style="align-self:flex-end;">
+            <div class="hub-field__hint">Perm mix &amp; agency markup are <strong>deal-wide</strong> —
+              <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="goto-section" data-section="shifts" style="padding:1px 8px;font-size:10px;" title="Set the deal's workforce strategy on Labor Factors.">Labor Factors →</button>
+            </div>
           </div>
         </div>
       </div>
@@ -9356,6 +9426,26 @@ function bindSectionEvents(section, container) {
         }
         if (arr && arr[idx] !== undefined) {
           arr[idx][field] = val;
+          // 2026-07-14 (Brock ruling): the position catalog is the wage
+          // authority — pay/employment edits re-apply to EVERY line holding
+          // the position (that's the point of deal-wide wage governance).
+          // Legacy diverged lines also snap here: the detail pane warns
+          // about divergence and offers Adopt before you ever edit the
+          // catalog. Toast reports the blast radius.
+          if (input.dataset.array === 'shifts.positions'
+              && ['hourly_wage', 'annual_salary', 'employment_type', 'temp_markup_pct', 'is_salaried', 'benefit_load_pct'].includes(field)) {
+            const pos = arr[idx];
+            let touched = 0;
+            for (const ln of (model.laborLines || []).concat(model.indirectLaborLines || [])) {
+              if (ln.position_id === pos.id) { _applyPositionToLine(ln, pos); touched++; }
+            }
+            _markCmDirty();
+            if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
+            refreshNavCompletion();
+            renderSection();
+            if (touched > 0) { try { showToast(`${escapeHtml(pos.name || 'Position')} updated — re-applied to ${touched} labor line${touched === 1 ? '' : 's'}.`, 'success'); } catch (_) {} }
+            return;
+          }
           // Labor: recompute annual_hours + re-render so Hrs/Yr, FTE, Annual Cost, override badge refresh
           if (input.dataset.array === 'laborLines' && (field === 'volume' || field === 'base_uph')) {
             recomputeLineHours(arr[idx]);
@@ -9471,30 +9561,7 @@ function bindSectionEvents(section, container) {
       if (posId) {
         const p = positions.find(pp => pp.id === posId);
         if (p) {
-          // Pull position attrs onto the line so existing calc paths
-          // (which read line.hourly_rate / line.employment_type /
-          // line.temp_agency_markup_pct / line.burden_pct) stay defensible.
-          // Salaried roles pull annual_salary; hourly roles pull hourly_wage.
-          if (p.is_salaried) {
-            line.hourly_rate = 0;
-            line.annual_salary = Number(p.annual_salary) || 0;
-            line.pay_type = 'salary';
-          } else {
-            line.hourly_rate = Number(p.hourly_wage) || 0;
-            line.pay_type = 'hourly';
-          }
-          line.employment_type = p.employment_type || 'permanent';
-          if (p.employment_type === 'temp_agency') {
-            line.temp_agency_markup_pct = Number(p.temp_markup_pct) || 0;
-          }
-          // Per-position Benefit Load override (Brock 2026-04-21 pm). Null =
-          // inherit global; any number overrides burden_pct for this line.
-          if (p.benefit_load_pct != null && p.benefit_load_pct !== '') {
-            line.burden_pct = Number(p.benefit_load_pct) || 0;
-          } else {
-            // Clear per-line override so global (from buckets) applies
-            line.burden_pct = null;
-          }
+          _applyPositionToLine(line, p);
           // Use the position name as the activity name hint if line was empty
           if (!line.activity_name) line.activity_name = p.name;
         }
@@ -9503,6 +9570,41 @@ function bindSectionEvents(section, container) {
       renderSection();
     });
   });
+
+  // 2026-07-14 — Labor Factors deal-wide Workforce Strategy inputs write the
+  // project's heuristic overrides (perm_mix_pct / temp_markup_pct): one
+  // mechanism, two surfaces (this card + the Assumptions register). Empty
+  // input = clear the override (fall back to market/house default).
+  if (container.querySelector('[data-lf-heuristic]')) {
+    if (heuristicsCatalog.length === 0 && !_heuristicsLoadInFlight) {
+      _heuristicsLoadInFlight = true;
+      ensureHeuristicsLoaded()
+        .finally(() => { _heuristicsLoadInFlight = false; })
+        .then(() => renderSection());
+    }
+    container.querySelectorAll('[data-lf-heuristic]').forEach(inp => {
+      inp.addEventListener('change', async () => {
+        const key = inp.dataset.lfHeuristic;
+        const raw = inp.value;
+        const merged = { ...heuristicOverrides };
+        if (raw === '' || raw === null) delete merged[key];
+        else {
+          const v = Number(raw);
+          if (!Number.isFinite(v)) { renderSection(); return; }
+          merged[key] = Math.max(0, Math.min(100, v));
+        }
+        heuristicOverrides = setHeuristicOverrides(merged);
+        if (model?.id) {
+          try { await api.saveHeuristicOverrides(model.id, heuristicOverrides); resetDirty(); }
+          catch (err) { console.warn('[CM] saveHeuristicOverrides failed:', err); }
+        } else {
+          model.heuristicOverrides = heuristicOverrides;
+          _markCmDirty();
+        }
+        renderSection();
+      });
+    });
+  }
 
   container.querySelectorAll('[data-most-select]').forEach(sel => {
     sel.addEventListener('change', () => {
@@ -12325,6 +12427,21 @@ async function handleAction(action, idx, btn) {
     case 'delete-volume':
       model.volumeLines.splice(idx, 1);
       break;
+    // 2026-07-14 — legacy per-line rate diverges from its position: one
+    // click adopts the position's wage (full attr re-pull, so employment/
+    // markup/burden re-sync too).
+    case 'labor-adopt-position-rate': {
+      const idx = Number(btn.dataset.idx);
+      const line = (model.laborLines || [])[idx];
+      const p = line ? ((model.shifts && model.shifts.positions) || []).find(pp => pp.id === line.position_id) : null;
+      if (!line || !p) { showToast('Linked position not found', 'error'); return; }
+      const before = line.hourly_rate;
+      _applyPositionToLine(line, p);
+      _markCmDirty();
+      renderSection();
+      showToast(`Adopted ${escapeHtml(p.name)} — $${Number(before || 0).toFixed(2)} → $${Number(line.hourly_rate || 0).toFixed(2)}/hr`, 'success');
+      break;
+    }
     case 'add-labor':
       model.laborLines.push({ activity_name: '', volume: 0, base_uph: 0, annual_hours: 0, hourly_rate: 0, burden_pct: 30, employment_type: 'permanent', temp_agency_markup_pct: 0, performance_variance_pct: 0, pricing_bucket: defaultBucketFor('labor') });
       // v2 UI — select the newly added line so the detail pane opens to it

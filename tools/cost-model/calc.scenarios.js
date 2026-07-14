@@ -51,8 +51,14 @@ const DEFAULT_WAGE_LOAD_PCT = 30;
  * opts.tempShareDeltaPp (What-If lever) shifts the mix toward temp by N
  * percentage points (negative = more permanent), clamped to 0..100.
  *
+ * 2026-07-14 (Brock ruling — perm mix is a DEAL-WIDE attribute): resolution
+ * is line value (legacy pinned data; the UI no longer writes it) →
+ * opts.defaultPermMixPct (the deal-wide `perm_mix_pct` heuristic, editable
+ * on Labor Factors + Assumptions) → 100. Default-house models reprice
+ * nowhere: no deal-wide value + no line value = 100, exactly as before.
+ *
  * @param {{employment_type?:string, retention_mix_pct?:number}} line
- * @param {{tempShareDeltaPp?:number}} [opts]
+ * @param {{tempShareDeltaPp?:number, defaultPermMixPct?:number}} [opts]
  * @returns {number} fraction 0..1
  */
 export function permMixFracForLine(line, opts = {}) {
@@ -60,7 +66,9 @@ export function permMixFracForLine(line, opts = {}) {
   if (empType === 'temp_agency') return 0;
   if (empType === 'contractor') return 1;
   const v = Number(line && line.retention_mix_pct);
-  let mixPct = (Number.isFinite(v)) ? Math.max(0, Math.min(100, v)) : 100;
+  const dw = Number(opts && opts.defaultPermMixPct);
+  let mixPct = Number.isFinite(v) ? Math.max(0, Math.min(100, v))
+    : (Number.isFinite(dw) ? Math.max(0, Math.min(100, dw)) : 100);
   const delta = Number(opts && opts.tempShareDeltaPp) || 0;
   if (delta !== 0 && mixPct > 0) {
     // The lever only perturbs lines that participate in the mix system —
@@ -73,21 +81,27 @@ export function permMixFracForLine(line, opts = {}) {
 
 /**
  * Agency markup fraction for the TEMP share of a line.
- * Resolution:
- *  - pure temp_agency line → its own temp_agency_markup_pct, nothing else
- *    (preserves shipped Phase 4a pricing — no fallback repricing)
- *  - mixed permanent line  → line value (>0) → market profile
- *    temp_cost_premium_pct → calcHeur tempMarkupPct default
+ * Resolution (2026-07-14, Brock ruling — agency markup is a DEAL-WIDE
+ * commercial attribute; the UI no longer writes per-line values):
+ *  - line value (>0)             — legacy pinned data + position pulls
+ *  - opts.dealTempMarkupPct      — EXPLICIT deal-wide value (temp_markup_pct
+ *    heuristic with used-source transient/override/snapshot). Outranks the
+ *    market profile: an analyst who sets the deal's markup means it.
+ *  - market temp_cost_premium_pct
+ *  - opts.defaultTempMarkupPct   — house default (38)
+ * Pure temp_agency lines now ride the SAME chain when their line value is
+ * unset (pre-2026-07-14 they priced at +0% — never the real economics;
+ * prod audit found zero such lines, so nothing repriced).
  *
  * @param {{employment_type?:string, temp_agency_markup_pct?:number}} line
- * @param {{marketTempPremiumPct?:number, defaultTempMarkupPct?:number}} [opts]
+ * @param {{dealTempMarkupPct?:number, marketTempPremiumPct?:number, defaultTempMarkupPct?:number}} [opts]
  * @returns {number} fraction (0.38 = +38%)
  */
 export function tempMarkupFracForLine(line, opts = {}) {
   const lineV = Number(line && line.temp_agency_markup_pct);
-  const isPureTemp = ((line && line.employment_type) || 'permanent') === 'temp_agency';
-  if (isPureTemp) return (Number.isFinite(lineV) && lineV > 0) ? lineV / 100 : 0;
   if (Number.isFinite(lineV) && lineV > 0) return lineV / 100;
+  const deal = Number(opts && opts.dealTempMarkupPct);
+  if (Number.isFinite(deal) && deal > 0) return deal / 100;
   const mkt = Number(opts && opts.marketTempPremiumPct);
   if (Number.isFinite(mkt) && mkt > 0) return mkt / 100;
   const def = Number(opts && opts.defaultTempMarkupPct);
@@ -105,6 +119,25 @@ export function tempMarkupFracForLine(line, opts = {}) {
  * resolveCalcHeuristics — keep the two in sync.
  */
 export const DEFAULT_TEMP_MARKUP_PCT = 38;
+
+/**
+ * 2026-07-14 — the deal's EXPLICIT agency markup, or null. Same
+ * force-project-flat semantics as the OT/absence chains: a heuristic that
+ * resolved from What-If transient / per-deal override / approval snapshot
+ * is a deliberate deal-wide value and outranks the market profile; the
+ * house default does not. Feed the result to tempMarkupFracForLine's
+ * opts.dealTempMarkupPct.
+ * @param {Object|null} calcHeur — resolveCalcHeuristics output
+ * @returns {number|null}
+ */
+export function dealTempMarkupPct(calcHeur) {
+  const src = calcHeur && calcHeur.used && calcHeur.used.temp_markup_pct;
+  if (src === 'transient' || src === 'override' || src === 'snapshot') {
+    const v = Number(calcHeur.tempMarkupPct);
+    return Number.isFinite(v) ? v : null;
+  }
+  return null;
+}
 
 /**
  * Blend perm + temp loaded hourly rates for a line.
@@ -762,6 +795,11 @@ export function resolveCalcHeuristics(scenario, snapshots, overrides, projectCol
     // What-If "shift N pp of perm hours to temp" lever (transient-first).
     tempMarkupPct:        n(pick('temp_markup_pct',         p.tempMarkup        ?? DEFAULT_TEMP_MARKUP_PCT), DEFAULT_TEMP_MARKUP_PCT),
     tempShareDeltaPp:     n(pick('temp_share_delta_pp',     0),                           0),
+    // 2026-07-14 (Brock ruling): perm mix is deal-wide — % of direct hours
+    // staffed permanent; remainder priced as temp at the agency markup.
+    // Default 100 = the engines' own fallback, so default-house models
+    // reprice nowhere. Editable on Labor Factors + the Assumptions register.
+    permMixPct:           n(pick('perm_mix_pct',            100),                         100),
     // 2026-06-12 Phase 4f: Y1 learning-curve productivity factors by
     // complexity tier (were hardcoded LEARNING_CURVE_FACTORS in calc.js —
     // roadmap Phase 4 wanted these data-driven/analyst-editable; the
@@ -971,11 +1009,14 @@ export function annualEffectiveHoursFromMonthly(line, calcHeur, marketProfile) {
 export function resolveSummaryLaborOpts({ calcHeur, marketLaborProfile } = {}) {
   const opts = {
     // Same chain the monthly engine hands tempMarkupFracForLine:
-    // line value → market temp premium → heuristic default (38).
+    // line value → explicit deal-wide → market temp premium → default (38).
+    dealTempMarkupPct: dealTempMarkupPct(calcHeur),
     marketTempPremiumPct: marketLaborProfile?.temp_cost_premium_pct,
     defaultTempMarkupPct: calcHeur?.tempMarkupPct,
     // What-If "shift N pp of perm hours to temp" lever (permMixFracForLine).
     tempShareDeltaPp: calcHeur?.tempShareDeltaPp,
+    // 2026-07-14 — deal-wide perm mix (perm_mix_pct heuristic; default 100).
+    defaultPermMixPct: calcHeur?.permMixPct,
     // Monthly engine's fallbackWageLoadFrac = (benefitLoadPct ?? 30) / 100.
     // Default-identical; only moves pricing when benefit_load_pct is
     // explicitly overridden (which the monthly expense already honors).
@@ -1139,8 +1180,8 @@ export function simulateLaborVariance(laborLines, calcHeur, marketProfile, nTria
         baseRate,
         wageLoadFrac: burden,
         benefitsPerHr: Number(line.benefits_per_hour) || 0,
-        mixFrac: permMixFracForLine(line, { tempShareDeltaPp: calcHeur?.tempShareDeltaPp }),
-        tempMarkupFrac: tempMarkupFracForLine(line, { marketTempPremiumPct: marketProfile?.temp_cost_premium_pct, defaultTempMarkupPct: calcHeur?.tempMarkupPct }),
+        mixFrac: permMixFracForLine(line, { tempShareDeltaPp: calcHeur?.tempShareDeltaPp, defaultPermMixPct: calcHeur?.permMixPct }),
+        tempMarkupFrac: tempMarkupFracForLine(line, { dealTempMarkupPct: dealTempMarkupPct(calcHeur), marketTempPremiumPct: marketProfile?.temp_cost_premium_pct, defaultTempMarkupPct: calcHeur?.tempMarkupPct }),
       });
       // Apply avg OT / absence from profile (or fallback) to net hours.
       // P1-M (2026-07-02): OT carries the HALF premium, matching the monthly

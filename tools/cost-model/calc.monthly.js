@@ -24,7 +24,7 @@
  * @module tools/cost-model/calc.monthly
  */
 
-import { monthlyEffectiveHours, permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260704-ebr1';
+import { monthlyEffectiveHours, permMixFracForLine, tempMarkupFracForLine, blendLoadedRate, dealTempMarkupPct } from './calc.scenarios.js?v=20260714-a3';
 
 // ============================================================
 // LABOR BUILD-UP HELPERS (inlined from calc.js to avoid cache-bust
@@ -329,8 +329,9 @@ export function computeMonthlyLaborFromLines(laborLines, ctx) {
       baseRate,
       wageLoadFrac,
       benefitsPerHr: Number(line.benefits_per_hour) || 0,
-      mixFrac: permMixFracForLine(line, { tempShareDeltaPp: calcHeur?.tempShareDeltaPp }),
+      mixFrac: permMixFracForLine(line, { tempShareDeltaPp: calcHeur?.tempShareDeltaPp, defaultPermMixPct: calcHeur?.permMixPct }),
       tempMarkupFrac: tempMarkupFracForLine(line, {
+        dealTempMarkupPct: dealTempMarkupPct(calcHeur),
         marketTempPremiumPct: marketLaborProfile?.temp_cost_premium_pct,
         defaultTempMarkupPct: calcHeur?.tempMarkupPct,
       }),
