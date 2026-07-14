@@ -11,7 +11,7 @@ import { downloadXLSX } from '../../shared/export.js?v=20260702-p1m1';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
-import ofpStyles from './operational-flow-styles.js?v=20260705-r1';
+import ofpStyles from './operational-flow-styles.js?v=20260714-a2';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
 import * as calc from './calc.js?v=20260713-w1';
 import * as api from './api.js?v=20260704-cmp1';
@@ -34,7 +34,7 @@ import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { computeAll } from './compute-all.js?v=20260713-w1';
-import * as shellD from './shell-d.js?v=20260714-a1';
+import * as shellD from './shell-d.js?v=20260714-a2';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
 import * as stationEco from './station-economics.js?v=20260713-m5d';
 import * as stationPrice from './station-price.js?v=20260713-m5g';
@@ -51,7 +51,6 @@ import {
   ofpEquipBadge as _ofpEquipBadge,
   ofpUomIn as _ofpUomIn,
   ofpUomOut as _ofpUomOut,
-  ofpSlugifyForFlow as _ofpSlugifyForFlow,
 } from './ofp-helpers.js?v=20260702-sec2';
 import {
   cmState,
@@ -106,7 +105,7 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260713-w1';
+} from './operational-flow-render.js?v=20260714-a2';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
 import { computeHeaderKpis } from './header-kpis.js?v=20260713-w1';
@@ -697,8 +696,9 @@ const SECTIONS = [
   { key: 'pricingBuckets', label: 'Pricing Buckets',    icon: 'layers',        group: 'structure' },
   { key: 'financial',      label: 'Financial',          icon: 'trending-up',   group: 'structure' },
   // Cost — the build itself
-  { key: 'labor',          label: 'Labor',              icon: 'users',         group: 'cost' },
+  // 2026-07-14 (Brock): flow leads — define the flow, then staff it.
   { key: 'flow',           label: 'Operational Flow',   icon: 'git-merge',     group: 'cost' },
+  { key: 'labor',          label: 'Labor',              icon: 'users',         group: 'cost' },
   { key: 'shiftPlanning',  label: 'Shift Planning',     icon: 'grid',          group: 'cost' },
   { key: 'equipment',      label: 'Equipment',          icon: 'truck',         group: 'cost' },
   { key: 'overhead',       label: 'Overhead',           icon: 'layers',        group: 'cost' },
@@ -15396,9 +15396,14 @@ function _bindOperationalFlowEvents(container) {
       const line = arr[idx];
       dragInfo = null;
       if (!line) return;
-      // No-op if dropping into the area the line is already in.
+      // Dropping into the area the line is already in: say so instead of
+      // silently doing nothing (2026-07-14 — silent no-ops read as broken).
       const currentArea = kind === 'direct' ? _classifyAreaFromLine(line) : 'support';
-      if (currentArea === targetArea) return;
+      if (currentArea === targetArea) {
+        const meta = (model.ofpAreas || []).find(a => a.key === targetArea);
+        try { showToast(`Already in ${meta ? meta.label : targetArea}.`, 'info'); } catch (_) {}
+        return;
+      }
       // Indirect labor lives in 'support' by convention. Allow override
       // anyway — the user knows what they want.
       line.flowLane = targetArea;
@@ -15460,87 +15465,14 @@ function _bindOperationalFlowEvents(container) {
     });
   });
 
-  // v0.3a.1 — Drop a card onto another card to connect them on the same
-  // path (sets path_tag on both). Distinct from drop-on-area-background
-  // (which reassigns area). Card handlers stopPropagation so the area
-  // drop doesn't also fire when the user drops on a card inside an area.
-  container.querySelectorAll('.ofp-node').forEach(node => {
-    node.addEventListener('dragover', (e) => {
-      if (!dragInfo) return;
-      const myKind = node.dataset.ofpKind;
-      const myIdx = Number(node.dataset.ofpIdx);
-      // Don't highlight the dragging card as a target for itself.
-      if (dragInfo.kind === myKind && dragInfo.idx === myIdx) return;
-      e.preventDefault();
-      e.stopPropagation();
-      try { e.dataTransfer.dropEffect = 'link'; } catch (_) {}
-      node.classList.add('ofp-node--droptarget');
-    });
-    node.addEventListener('dragleave', (e) => {
-      if (e.target === node || e.target.closest('.ofp-node') === node) {
-        node.classList.remove('ofp-node--droptarget');
-      }
-    });
-    node.addEventListener('drop', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      node.classList.remove('ofp-node--droptarget');
-      if (!dragInfo) return;
-      const targetKind = node.dataset.ofpKind;
-      const targetIdx = Number(node.dataset.ofpIdx);
-      // No-op for self-drop
-      if (dragInfo.kind === targetKind && dragInfo.idx === targetIdx) {
-        dragInfo = null;
-        return;
-      }
-      const sourceArr = dragInfo.kind === 'direct' ? (model.laborLines || []) : (model.indirectLaborLines || []);
-      const targetArr = targetKind === 'direct' ? (model.laborLines || []) : (model.indirectLaborLines || []);
-      const sourceLine = sourceArr[dragInfo.idx];
-      const targetLine = targetArr[targetIdx];
-      dragInfo = null;
-      if (!sourceLine || !targetLine) return;
-      // Resolve the flow tag to apply to both lines:
-      //   target has tag         → both adopt target's tag (target wins,
-      //                            mirrors how 'drop into folder X'
-      //                            inherits X's properties)
-      //   only source has tag    → target adopts source's tag
-      //   both untagged          → prompt for a new flow name
-      const targetTag = (targetLine.path_tag || '').trim();
-      const sourceTag = (sourceLine.path_tag || '').trim();
-      let resolvedTag;
-      if (targetTag) {
-        resolvedTag = targetTag;
-      } else if (sourceTag) {
-        resolvedTag = sourceTag;
-      } else {
-        // v0.3a.2 — both untagged. Auto-generate a flow tag so the drop
-        // doesn't block on prompt() (interruptive during a drag gesture
-        // and prevented test automation from working). Strategy: slugify
-        // source's activity_name to first 2 keywords; fall back to
-        // 'flow-N' (next available integer) when name is empty/garbage.
-        // User can always rename via the detail drawer.
-        const slug = _ofpSlugifyForFlow(sourceLine.activity_name);
-        if (slug) {
-          resolvedTag = slug;
-        } else {
-          const existing = new Set(_ofpAllFlowTags());
-          let n = 1;
-          while (existing.has(`flow-${n}`)) n++;
-          resolvedTag = `flow-${n}`;
-        }
-      }
-      sourceLine.path_tag = resolvedTag;
-      targetLine.path_tag = resolvedTag;
-      // v0.4 — register the (possibly new) tag in the flow registry so
-      // it shows up in Manage Flows immediately, not only after a
-      // re-render side-effect.
-      _ofpRegisterFlow(resolvedTag);
-      _markCmDirty();
-      if (!userHasInteracted) { userHasInteracted = true; updateValidation(); }
-      renderSection();
-      try { showToast(`Connected on flow "${_ofpFlowLabel(resolvedTag)}".`, 'success'); } catch (_) {}
-    });
-  });
+  // v0.3a.1 drop-to-connect RETIRED (Brock ruling 2026-07-14): dropping a
+  // card onto another card used to link both on a flow path (path_tag) via
+  // stopPropagation handlers here. In dense columns nearly every drop lands
+  // on a card, so the common intent — move the line to that area — silently
+  // turned into a flow-link instead ("drag doesn't work"). Now card drops
+  // bubble to the .ofp-area / .ofp-subarea handlers above and MOVE the line.
+  // Flow tags are assigned explicitly via the card's ✎ detail drawer
+  // (path_tag select, incl. "+ new flow") or Manage Flows.
 
   // v0.2.2 — Modal close paths: × button, Esc key, click on backdrop.
   const modal = container.querySelector('#ofp-detail-modal');

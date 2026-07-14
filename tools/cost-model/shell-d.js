@@ -81,7 +81,7 @@ export const D_STATIONS = [
   { key: 'deal',      num: 1, name: 'Deal',      sections: ['setup', 'linked'] },
   { key: 'volume',    num: 2, name: 'Volume',    sections: ['volumes'] },
   { key: 'operation', num: 3, name: 'Operation',
-    sections: ['labor', 'flow', 'shiftPlanning', 'shifts', 'equipment', 'vas', 'implementation'] },
+    sections: ['flow', 'labor', 'shiftPlanning', 'shifts', 'equipment', 'vas', 'implementation'] },
   { key: 'economics', num: 4, name: 'Economics',
     sections: ['facility', 'overhead', 'startup', 'financial', 'assumptions', 'summary', 'timeline', 'whatif'] },
   { key: 'price',     num: 5, name: 'Price',     sections: ['pricingBuckets', 'pricing', 'scenarios'] },

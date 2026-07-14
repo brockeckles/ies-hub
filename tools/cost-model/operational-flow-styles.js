@@ -327,25 +327,6 @@ export function ofpStyles() {
       .ofp-node[draggable="true"] { cursor: grab; }
       .ofp-node[draggable="true"]:active { cursor: grabbing; }
       .ofp-node--dragging { opacity: 0.35; transform: scale(0.96); box-shadow: 0 4px 12px rgba(0,71,171,0.25); }
-      /* v0.3a.1 — drop a card onto another card → connect both on same path */
-      .ofp-node--droptarget {
-        outline: 3px dashed var(--ies-blue);
-        outline-offset: 2px;
-        background: rgba(0, 71, 171, 0.22);
-        box-shadow: 0 0 0 3px rgba(0, 71, 171, 0.15);
-        z-index: 5;
-      }
-      .ofp-node--droptarget::after {
-        content: 'Same flow';
-        position: absolute;
-        top: -12px; right: 6px;
-        background: var(--ies-blue); color: #fff;
-        font-size: 10px; font-weight: 700;
-        padding: 3px 8px; border-radius: 3px;
-        text-transform: uppercase; letter-spacing: 0.05em;
-        pointer-events: none;
-        box-shadow: 0 4px 10px rgba(0,71,171,0.55);
-      }
       .ofp-area--dragover {
         outline: 4px dashed var(--ies-blue);
         outline-offset: -4px;

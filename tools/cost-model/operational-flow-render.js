@@ -39,7 +39,7 @@ import {
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 import * as calc from './calc.js?v=20260713-w1';
-import ofpStyles from './operational-flow-styles.js?v=20260705-r1';
+import ofpStyles from './operational-flow-styles.js?v=20260714-a2';
 
 // v0.10 — Helper extracted from _renderOfpArea so we can reuse it for
 // both top-level area bodies AND sub-area bodies (when an area has
