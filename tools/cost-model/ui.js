@@ -9593,6 +9593,7 @@ function bindSectionEvents(section, container) {
           if (!Number.isFinite(v)) { renderSection(); return; }
           merged[key] = Math.max(0, Math.min(100, v));
         }
+        _heurEditEpoch++;
         heuristicOverrides = setHeuristicOverrides(merged);
         if (model?.id) {
           try { await api.saveHeuristicOverrides(model.id, heuristicOverrides); resetDirty(); }
@@ -10169,6 +10170,7 @@ function bindSectionEvents(section, container) {
         const merged = { ...heuristicOverrides };
         if (value === null || value === undefined || value === '') delete merged[key];
         else merged[key] = value;
+        _heurEditEpoch++;
         heuristicOverrides = setHeuristicOverrides(merged);
         // Persist if we have a saved project
         if (model?.id) {
@@ -10191,6 +10193,7 @@ function bindSectionEvents(section, container) {
         const key = btn.dataset.heuristicKey;
         const merged = { ...heuristicOverrides };
         delete merged[key];
+        _heurEditEpoch++;
         heuristicOverrides = setHeuristicOverrides(merged);
         if (model?.id) {
           try { await api.saveHeuristicOverrides(model.id, heuristicOverrides); } catch (_) {}
@@ -10203,6 +10206,7 @@ function bindSectionEvents(section, container) {
     container.querySelector('[data-cm-action="reset-all-heuristics"]')?.addEventListener('click', async () => {
       const ok = await showConfirm('Reset all heuristics on this scenario to standard defaults?', { okLabel: 'Reset' });
       if (!ok) return;
+      _heurEditEpoch++;
       heuristicOverrides = setHeuristicOverrides({});
       if (model?.id) {
         try { await api.saveHeuristicOverrides(model.id, heuristicOverrides); } catch (_) {}
@@ -16880,21 +16884,30 @@ function renderTimeline() {
  * Lazy-load the heuristics catalog + override jsonb. Called from bindSectionEvents
  * when the Assumptions section is first opened so mount() stays fast.
  */
+// 2026-07-14 — bumped on every LOCAL override edit (Assumptions inputs,
+// resets, Labor Factors Workforce Strategy). ensureHeuristicsLoaded's
+// override re-fetch is skipped when the epoch moved while it awaited:
+// walked live, a load kicked off on first section render resolved AFTER
+// the user's first edit and clobbered it with the pre-save row.
+let _heurEditEpoch = 0;
+
 async function ensureHeuristicsLoaded() {
+  const epoch = _heurEditEpoch;
   if (heuristicsCatalog.length === 0) {
     try { heuristicsCatalog = await api.fetchDesignHeuristics(); }
     catch (e) { console.warn('[CM] ensureHeuristicsLoaded:', e); heuristicsCatalog = []; }
   }
-  // Overrides come from the project jsonb; re-fetch from the active model on each call.
+  // Overrides come from the project jsonb; re-fetch from the active model on
+  // each call — UNLESS the user edited overrides while we were fetching.
   const projectId = model?.id;
   if (projectId) {
     try {
       const p = await api.getModel(projectId);
-      heuristicOverrides = setHeuristicOverrides(p?.heuristic_overrides || {});
-    } catch (_) { heuristicOverrides = {}; }
+      if (epoch === _heurEditEpoch) heuristicOverrides = setHeuristicOverrides(p?.heuristic_overrides || {});
+    } catch (_) { if (epoch === _heurEditEpoch) heuristicOverrides = {}; }
   } else {
     // Unsaved model — keep local overrides in the model itself
-    heuristicOverrides = setHeuristicOverrides(model?.heuristicOverrides || {});
+    if (epoch === _heurEditEpoch) heuristicOverrides = setHeuristicOverrides(model?.heuristicOverrides || {});
   }
 }
 
