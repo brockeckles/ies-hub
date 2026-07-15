@@ -20,11 +20,12 @@ import { showConfirm } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { render3DView, disposeScene3d } from './ui-3d.js?v=20260705-u3b';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
-import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260705-u3a';
+import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260715-w1a';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260710-r2';
-import { renderDashboard } from './ui-dashboard.js?v=20260705-u3a';
+import { renderDashboard } from './ui-dashboard.js?v=20260715-w1a';
 import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260710-r3';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
+import { deriveRequirement } from './requirement-seam.js?v=20260715-w1a';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260710-r2';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
 import { wscExtraStyles } from './ui-styles.js?v=20260710-r2';
@@ -696,6 +697,7 @@ function _makeConfigCtx() {
     refreshLanding: renderLanding,
     copySummary: copySummaryToClipboard,
     toSizingInputs,
+    reqSeam: _reqSeam,
     debounceRender,
     handleCmPush: (p) => handleCmPush(p, _makeCmCtx()),
     handleSaveWsc,
@@ -743,6 +745,7 @@ function _makeDashboardCtx() {
     get volumes() { return volumes; },
     renderFacility: _renderFacility,
     toSizingInputs,
+    reqSeam: _reqSeam,
   };
 }
 
@@ -973,7 +976,17 @@ let _planMeta = null;
  * @returns {import('./calc.js?v=20260703-ux0').SizingInputs}
  */
 function toSizingInputs() {
-  return calc.formStateToInputs({ facility, zones, volumes });
+  // W1 requirement seam (2026-07-15) — applied basis plans fill UNASSERTED
+  // volume fields before the engine sees them; typed values win untouched.
+  // Identity (same volumes reference) when no plan derives anything, so
+  // pre-W1 scenarios size byte-identically.
+  return calc.formStateToInputs({ facility, zones, volumes: _reqSeam().volumes });
+}
+
+/** W1 — seam result for toSizingInputs + the DERIVED badges in Configure /
+ *  Dashboard (display must match mechanism). */
+function _reqSeam() {
+  return deriveRequirement({ volumes, profile, mediaPlan, dynamicsPlan });
 }
 
 // ============================================================

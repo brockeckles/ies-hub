@@ -21,6 +21,12 @@ import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { renderCmDrillbackChip } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 
 export function renderDashboard(ctx) {
+  // W1 requirement seam badge — the inventory block is sized from an applied
+  // basis plan when Configure's counts are unasserted.
+  const _seam = (typeof ctx.reqSeam === 'function' ? ctx.reqSeam() : null) || { active: false, fields: {} };
+  const _seamBadge = _seam.fields.totalPallets
+    ? `<span style="margin-left:8px;padding:1px 7px;border-radius:8px;font-size:9px;font-weight:700;letter-spacing:.04em;background:var(--c-success-bg,#f0fdf4);color:var(--c-success-ink,#15803d);" title="${(+_seam.fields.totalPallets.value).toLocaleString()} on-hand pallets derived from the Design Basis (${_seam.fields.totalPallets.source}). Type a Pallet Positions value in Configure to override.">DERIVED &middot; DESIGN BASIS</span>`
+    : '';
   const storage = calc.computeStorage(ctx.facility, ctx.zones);
   const summary = calc.computeCapacitySummary(ctx.facility, ctx.zones, ctx.volumes);
   // WSC-A1: collapse ctx.facility.dockDoors -> ctx.zones.dockConfig as the single
@@ -187,7 +193,7 @@ export function renderDashboard(ctx) {
 
       <table class="cm-grid-table" style="font-size:13px;width:100%;">
         <tbody>
-          <tr><td colspan="2" style="padding-top:8px;font-weight:700;color:var(--ies-blue);font-size:11px;text-transform:uppercase;">Inventory → Positions</td></tr>
+          <tr><td colspan="2" style="padding-top:8px;font-weight:700;color:var(--ies-blue);font-size:11px;text-transform:uppercase;">Inventory → Positions${_seamBadge}</td></tr>
           ${sized.positions.palletPositionsOverridden ? `
             <tr><td title="Total pallet positions you entered on Volume Requirements. Replaces the peakUnits × mix derivation (peak-derived FP + CP rows are not used downstream when an override is engaged).">
               <strong>Total Pallets (entered)</strong>

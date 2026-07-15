@@ -30,6 +30,15 @@ import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 
 export function renderConfigHtml(ctx) {
+  // W1 requirement seam (2026-07-15) — badge every field the seam is filling
+  // from an applied basis plan (display must match mechanism): the input
+  // shows 0 (unasserted) while the engine sizes from the derived value.
+  const _seam = (typeof ctx.reqSeam === 'function' ? ctx.reqSeam() : null) || { active: false, fields: {} };
+  const _seamHint = (key) => {
+    const f = _seam.fields[key];
+    if (!f) return '';
+    return `<div class="wsc-seam-hint" style="margin-top:2px;font-size:10.5px;font-weight:600;color:var(--c-success-ink,#15803d);" title="${escapeAttr(f.detail)}. Type a value to override.">&#8627; ${(+f.value).toLocaleString()} derived &middot; Design Basis</div>`;
+  };
   // Compute sized once — used by Step 1 readout, Step 5 derived outputs, and CTA banner.
   let sized = null;
   try { sized = calc.sizeFacility(ctx.toSizingInputs()); } catch {}
@@ -146,12 +155,12 @@ export function renderConfigHtml(ctx) {
           </div>
           <div class="wsc-config-row">
             <div class="wsc-config-field"><label title="Peak vs avg-day demand multiplier. Default 1.3. Drives both the peak on-hand units and the dock peak throughput.">Peak Factor</label><input type="number" value="${peakMult}" step="0.1" data-vol="peakMultiplier" /></div>
-            <div class="wsc-config-field"><label title="Average inbound pallets/day — drives dock throughput sizing.">Daily Inbound <span class="wsc-muted-reg">(pallets/day)</span></label><input type="number" value="${ctx.volumes.avgDailyInbound || 0}" data-vol="avgDailyInbound" /></div>
+            <div class="wsc-config-field"><label title="Average inbound pallets/day — drives dock throughput sizing.">Daily Inbound <span class="wsc-muted-reg">(pallets/day)</span></label><input type="number" value="${ctx.volumes.avgDailyInbound || 0}" data-vol="avgDailyInbound" />${_seamHint('avgDailyInbound')}</div>
           </div>
 
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ies-gray-500);margin:14px 0 6px 0;">Storage Counts <span class="wsc-label-soft">(optional — override derived values when you have a slotting study)</span></div>
           <div class="wsc-config-row">
-            <div class="wsc-config-field"><label title="Total pallet positions on-hand at peak. Leave blank (0) to derive from throughput. When > 0, replaces the derived count and bypasses peakUnits × mix derivation for FP+CP.">Pallet Positions <span class="wsc-muted-reg">(0 = derive)</span></label><input type="number" value="${totalPallets}" data-vol="totalPallets" /></div>
+            <div class="wsc-config-field"><label title="Total pallet positions on-hand at peak. Leave blank (0) to derive from throughput. When > 0, replaces the derived count and bypasses peakUnits × mix derivation for FP+CP.">Pallet Positions <span class="wsc-muted-reg">(0 = derive)</span></label><input type="number" value="${totalPallets}" data-vol="totalPallets" />${_seamHint('totalPallets')}</div>
             <div class="wsc-config-field"><label title="Total carton-on-shelving locations on-hand at peak. Leave blank (0) to derive from throughput × shelving mix. When > 0, replaces the derived count.">Shelving Locations <span class="wsc-muted-reg">(0 = derive)</span></label><input type="number" value="${totalShelv}" data-vol="totalShelvingLocations" /></div>
           </div>
 
@@ -291,7 +300,7 @@ export function renderConfigHtml(ctx) {
            with the volume profile; both feed downstream metrics. -->
       <div class="wsc-config-row" style="margin-top:10px;">
         <div class="wsc-config-field"><label title="Operating days per year — used downstream by DIOH metric.">Operating Days/Yr</label><input type="number" value="${ctx.zones.operatingDaysPerYear || 250}" data-inv="operatingDaysPerYear" /></div>
-        <div class="wsc-config-field"><label title="Average outbound pallets/day — drives dock throughput sizing.">Daily Outbound <span class="wsc-muted-reg">(pallets/day)</span></label><input type="number" value="${ctx.volumes.avgDailyOutbound}" data-vol="avgDailyOutbound" /></div>
+        <div class="wsc-config-field"><label title="Average outbound pallets/day — drives dock throughput sizing.">Daily Outbound <span class="wsc-muted-reg">(pallets/day)</span></label><input type="number" value="${ctx.volumes.avgDailyOutbound}" data-vol="avgDailyOutbound" />${_seamHint('avgDailyOutbound')}</div>
       </div>
     </div>
 
