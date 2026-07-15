@@ -118,6 +118,9 @@ t('ui.js toSizingInputs routes through the seam', () => {
   const uiSrc = readFileSync('./tools/warehouse-sizing/ui.js', 'utf8');
   const fn = uiSrc.slice(uiSrc.indexOf('function toSizingInputs()'));
   assert(/_reqSeam\(\)\.volumes/.test(fn.slice(0, 600)), 'toSizingInputs must consume _reqSeam().volumes');
+  const kpi = uiSrc.slice(uiSrc.indexOf('function _refreshWscKpis'));
+  assert(/computeWscKpis\(\{ facility, zones, volumes: _reqSeam\(\)\.volumes \}\)/.test(kpi.slice(0, 700)),
+    'KPI strip must consume the seam too — no second funnel');
   assert(uiSrc.includes("from './requirement-seam.js?v="), 'seam import present');
 });
 

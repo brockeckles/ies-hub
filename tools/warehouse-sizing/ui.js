@@ -477,7 +477,10 @@ function _buildWscChromeOpts() {
  *  lives in calc.computeWscKpis — extracted 2026-05-14 (autonomous session). */
 function _refreshWscKpis() {
   if (!rootEl) return;
-  refreshKpiStrip(rootEl, calc.computeWscKpis({ facility, zones, volumes }));
+  // W1b: the KPI strip was the ONE compute site bypassing the requirement
+  // seam — chrome read raw volumes while Dashboard read seamed ones (caught
+  // in the live walk: strip 10K SF vs dashboard 124K).
+  refreshKpiStrip(rootEl, calc.computeWscKpis({ facility, zones, volumes: _reqSeam().volumes }));
 }
 
 /** WSC-specific styles — the Configure-panel inputs were rendering with
