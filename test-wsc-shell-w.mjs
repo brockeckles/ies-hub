@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 globalThis.window = globalThis.window || { location: { hostname: '', pathname: '/', search: '' } };
 
-const shellW = await import('./tools/warehouse-sizing/shell-w.js?v=20260715-w2a');
+const shellW = await import('./tools/warehouse-sizing/shell-w.js?v=20260715-w2b');
 const { SHELLS, getShellPref, setShellPref, W_STATIONS, stationForSection, renderShellW, updateWRail } = shellW;
 
 const uiSrc = readFileSync('./tools/warehouse-sizing/ui.js', 'utf8');
@@ -106,6 +106,9 @@ t('rail slots exist for every summary key + recon + band', () => {
     assert(html.includes(`data-wsw-rail="${key}"`), `rail slot ${key}`);
   }
   assert(html.includes('data-wsw-rail-recon') && html.includes('data-wsw-rail-band'), 'recon/band containers');
+  // w2b walk find: display:flex on .wsw-recon defeated the hidden attribute —
+  // the empty recon box rendered on a blank design. Pin the CSS guard.
+  assert(/\.wsw-recon\[hidden\][^}]*display:none/.test(html), 'hidden-attr beats display:flex');
 });
 
 console.log('\n── 4. updateWRail (fake-DOM behavior) ──────────────────────');

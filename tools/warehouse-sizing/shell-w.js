@@ -256,6 +256,7 @@ function _wStyles() {
   .wsw-krow span{color:var(--ies-gray-600,#57534e)}
   .wsw-krow b{font-variant-numeric:tabular-nums}
   .wsw-krow--hero b{font-size:15px}
+  .wsw-recon[hidden],.wsw-band[hidden]{display:none!important}
   .wsw-recon{display:flex;align-items:center;gap:8px;background:var(--c-success-bg,#f0fdf4);border:1px solid #bbe5c8;border-radius:9px;padding:7px 10px;font-size:11px;margin-top:8px}
   .wsw-recon b{color:var(--c-success-ink,#15803d);font-size:9.5px}
   .wsw-recon--short{background:#fef2f2;border-color:#fecaca}
