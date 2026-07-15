@@ -59,6 +59,15 @@ export async function bindShellEvents(sctx) {
   if (rootEl.__wscShellBound) return;
   rootEl.__wscShellBound = true;
 
+  // W2 — station-spine shell: capture the clicked station + its scroll
+  // target BEFORE the shared [data-tc-section] delegation navigates (capture
+  // phase guarantees ordering). Bound once per mount alongside the guard
+  // above (within-mount listener-stacking class).
+  rootEl.addEventListener('click', (e) => {
+    const st = e.target.closest('[data-wsw-station]');
+    if (st) sctx.setWswStation?.(st.dataset.wswStation || '', st.dataset.wswScroll || '');
+  }, true);
+
   bindToolChromeEvents(rootEl, {
     onPhase: () => {
       // WSC is single-phase; phase tab clicks no-op.
@@ -132,6 +141,7 @@ export async function bindShellEvents(sctx) {
       }
       if (id === 'wsc-save') return sctx.handleSaveWsc();
       if (id === 'wsc-tier') return sctx.handleWscTierToggle();
+      if (id === 'wsc-shell') return sctx.handleWscShellToggle?.();   // W2 flag toggle
     },
     onPrimaryShortcut: () => {
       pushToCm(sctx.makeCmCtx());

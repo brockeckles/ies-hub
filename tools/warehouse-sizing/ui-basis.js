@@ -82,16 +82,19 @@ export function renderBasisView(container, ctx) {
   container.innerHTML = `
     <div style="max-width:1080px;">
       ${_renderHeader(profile, readiness)}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">
+      <!-- W2 — data-wsw-card anchors: the station shell's Storage/Flow/Basis
+           stations navigate here and scroll to their card. Block wrappers,
+           zero visual change. -->
+      <div data-wsw-card="data" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">
         ${_renderDataCard(profile)}
         ${_renderSparseCard(profile)}
       </div>
       <div id="wsc-basis-wizard" style="display:none;"></div>
       ${profile ? _renderProfileSummary(profile) : _renderEmptyState()}
-      ${profile ? _renderMediaCard(profile, ctx) : ''}
-      ${profile ? _renderDynamicsCard(profile, ctx) : ''}
-      ${_renderLayoutCard(ctx)}
-      <div id="wsc-basis-factors"></div>
+      <div data-wsw-card="media">${profile ? _renderMediaCard(profile, ctx) : ''}</div>
+      <div data-wsw-card="dynamics">${profile ? _renderDynamicsCard(profile, ctx) : ''}</div>
+      <div data-wsw-card="layout">${_renderLayoutCard(ctx)}</div>
+      <div id="wsc-basis-factors" data-wsw-card="factors"></div>
     </div>
   `;
   _bindEvents(container, ctx);

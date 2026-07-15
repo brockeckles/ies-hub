@@ -23,13 +23,14 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260715-w1a';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260710-r2';
 import { renderDashboard } from './ui-dashboard.js?v=20260715-w1a';
-import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260710-r3';
+import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260715-w2a';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { deriveRequirement } from './requirement-seam.js?v=20260715-w1a';
+import { renderShellW, updateWRail, getShellPref as getWShellPref, setShellPref as setWShellPref, stationForSection as wStationForSection, W_STATIONS } from './shell-w.js?v=20260715-w2a';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260710-r2';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
 import { wscExtraStyles } from './ui-styles.js?v=20260710-r2';
-import { bindShellEvents } from './ui-shell-events.js?v=20260710-r2';
+import { bindShellEvents } from './ui-shell-events.js?v=20260715-w2a';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================
@@ -108,6 +109,11 @@ let mediaPlan = null;
  *  docks, staging, MHE/aisles. Persisted on Apply.
  *  @type {Object|null} */
 let dynamicsPlan = null;
+// W2 shell state — which basis-chain station the user last picked (Data /
+// Storage / Flow / Basis all target the 'basis' section) + a one-shot
+// scroll selector consumed by renderContentView after the section renders.
+let _wswStation = '';
+let _wswScrollSel = '';
 
 /** N5 (2026-07-04) — layout synthesis + compliance plan (layout-calc.js):
  *  grid-fit, standards checklist, flow pattern. Persisted on Apply.
@@ -370,8 +376,98 @@ function renderWscPhaseStepper() {
 }
 
 function renderShell() {
+  // W2 (2026-07-15): station-spine shell behind the tier-service-pattern
+  // flag — shell-w emits the SAME data-tc-*/#wsc-config/#wsc-content
+  // contract, so bindShellEvents + renderConfigPanel + renderContentView
+  // host both shells unchanged. Classic stays the default until the flip.
+  if (getWShellPref() === 'w') return renderShellW(_buildWShellOpts()) + wscExtraStyles();
   // CM Chrome v3 ripple — chrome HTML+CSS lives in shared/tool-chrome.js.
   return renderToolChrome(_buildWscChromeOpts()) + wscExtraStyles();
+}
+
+/** W2 — opts bag for the station-spine shell. */
+function _buildWShellOpts() {
+  const classic = _buildWscChromeOpts();
+  const activeStation = (activeView === 'basis' && W_STATIONS.some(st => st.key === _wswStation && st.target === 'basis'))
+    ? _wswStation
+    : (wStationForSection(activeView)?.key || 'data');
+  return {
+    facilityName: facility.name || 'New Facility',
+    modeLabel: (facility.sizingMode || 'design') === 'constraint' ? 'Constraint' : 'Design',
+    stateName: classic.stateName || (!facility.id ? 'draft' : (isDirty ? 'modified' : 'saved')),
+    stateTitle: classic.stateTitle || '',
+    backTitle: classic.backTitle || 'Back',
+    actions: classic.actions,
+    sections: WSC_SECTIONS,
+    activeSection: activeView,
+    activeStation,
+    subs: {
+      data: profile ? `${(profile.skuCount || 0).toLocaleString()} SKU · ${profile.mode}` : 'No profile yet',
+      storage: mediaPlan ? `${(mediaPlan.totals?.positions || 0).toLocaleString()} pos · applied` : 'Not applied',
+      flow: dynamicsPlan
+        ? `${(dynamicsPlan.docks?.inbound?.doors || 0) + (dynamicsPlan.docks?.outbound?.doors || 0)} doors · applied`
+        : 'Not applied',
+      building: `${facility.clearHeight || 0} ft clear`,
+      basis: pinnedFactors ? 'Catalog pinned' : 'Catalog unpinned',
+    },
+  };
+}
+
+/** W2 — station click memory + one-shot scroll target (set from the
+ *  capture-phase delegation in ui-shell-events; consumed by
+ *  renderContentView after the section renders). */
+function _setWswStation(key, scrollSel) {
+  _wswStation = key || '';
+  _wswScrollSel = scrollSel || '';
+}
+
+/** W2 — flip shells and rebuild the editor (mirrors the onSection path). */
+function handleWscShellToggle() {
+  setWShellPref(getWShellPref() === 'w' ? 'classic' : 'w');
+  if (!rootEl || viewMode !== 'editor') return;
+  rootEl.innerHTML = renderShell();
+  bindShellEvents(_makeShellEventsCtx());
+  renderConfigPanel();
+  renderContentView();
+  _refreshWscKpis();
+}
+
+/** W2 — save-state chip refresh under the station shell (classic uses
+ *  refreshToolChromeActions; shell-w has no .tc-* nodes). */
+function _refreshWswChip() {
+  if (getWShellPref() !== 'w' || !rootEl) return;
+  const chip = rootEl.querySelector('[data-wsw-state]');
+  if (!chip) return;
+  const stateName = !facility.id ? 'draft' : (isDirty ? 'modified' : 'saved');
+  chip.className = 'wsw-chip ' + ({ draft: 'wsw-chip--draft', modified: 'wsw-chip--mod', saved: 'wsw-chip--saved' }[stateName]);
+  chip.textContent = { draft: 'DRAFT', modified: 'MODIFIED', saved: 'SAVED' }[stateName];
+}
+
+/** W2 — live rail values (KPI cadence). */
+function _wswRailBag() {
+  let sized = null;
+  try { sized = calc.sizeFacility(toSizingInputs()); } catch { /* rail shows em-dashes */ }
+  const doors = (zones.dockConfig?.inboundDoors || 0) + (zones.dockConfig?.outboundDoors || 0);
+  const gross = sized?.positions?.grossPositions || 0;
+  let recon = null;
+  const required = mediaPlan?.totals?.positions || 0;
+  if (required > 0) {
+    const ok = gross >= required * 0.98;
+    const pct = gross > 0 ? Math.round((gross / required - 1) * 100) : -100;
+    recon = { ok, text: `Designed ${gross.toLocaleString()} vs required ${required.toLocaleString()} — ${ok ? 'OK' : 'SHORT'} ${pct >= 0 ? '+' : ''}${pct}%` };
+  }
+  const cb = mediaPlan?.totals?.costBand;
+  const cost = (cb?.max > 0) ? { min: cb.min, mid: (cb.min + cb.max) / 2, max: cb.max } : null;
+  return {
+    sizedSf: sized?.totalSqft || 0,
+    storageSf: sized?.storageSqft || 0,
+    positions: gross,
+    utilPct: sized?.utilization?.utilizationPct || 0,
+    doors,
+    clearHt: facility.clearHeight || 0,
+    recon,
+    cost,
+  };
 }
 
 /** Build chrome opts from current WSC state. */
@@ -392,6 +488,7 @@ function _markDirty() {
   // CM-INPUT-FOCUS-LOSS class of bug). The actions rail has no inputs.
   if (wasClean && facility.id && rootEl) {
     refreshToolChromeActions(rootEl, _buildWscChromeOpts());
+    _refreshWswChip();   // W2 — station shell has no .tc-* action rail
   }
 }
 
@@ -405,6 +502,12 @@ function _buildWscChromeOpts() {
 
   const _quick = _wscQuickChrome();
   const actions = [
+    // W2 — shell flag toggle (tier-service pattern; classic default).
+    { id: 'wsc-shell',
+      label: getWShellPref() === 'w' ? 'Classic layout' : 'New layout',
+      title: getWShellPref() === 'w'
+        ? 'Switch back to the classic chrome'
+        : 'Preview the station-spine layout (Design Line + live rail) — your data is untouched' },
     { id: 'wsc-tier',
       label: _quick ? 'Engineering' : 'Quick',
       title: _quick ? 'Switch to Engineering mode — full stepped Configure panel + 2D Plan/Elevation IE bench'
@@ -481,6 +584,8 @@ function _refreshWscKpis() {
   // seam — chrome read raw volumes while Dashboard read seamed ones (caught
   // in the live walk: strip 10K SF vs dashboard 124K).
   refreshKpiStrip(rootEl, calc.computeWscKpis({ facility, zones, volumes: _reqSeam().volumes }));
+  // W2 — the station shell's rail refreshes on the same cadence.
+  if (getWShellPref() === 'w') updateWRail(rootEl, _wswRailBag());
 }
 
 /** WSC-specific styles — the Configure-panel inputs were rendering with
@@ -519,6 +624,9 @@ function _makeShellEventsCtx() {
     set _seededFromCm(v) { _seededFromCm = v; },
     get viewMode() { return viewMode; },
     set viewMode(v) { viewMode = v; },
+    // W2 — station shell hooks
+    setWswStation: _setWswStation,
+    handleWscShellToggle,
     get _wscElevView() { return _wscElevView; },
     set _wscElevView(v) { _wscElevView = v; },
     get _planEditMode() { return _planEditMode; },
@@ -594,7 +702,11 @@ async function handleSaveWsc() {
     facility.id = saved.id || saved[0]?.id || facility.id;
     _clearDirty();
     showToast(`Saved "${facility.name || 'Untitled'}"`, 'success');
-    refreshToolChrome(rootEl, _buildWscChromeOpts());
+    if (getWShellPref() === 'w') {
+      _refreshWswChip();   // W2 — no .tc-* chrome to refresh under the station shell
+    } else {
+      refreshToolChrome(rootEl, _buildWscChromeOpts());
+    }
     _refreshWscKpis();
 
     // ── Phase 4 of WSC redesign (2026-05-04) — WSC → CM writeback ──
@@ -860,6 +972,14 @@ function copySummaryToClipboard() {
 function renderContentView() {
   const container = rootEl?.querySelector('#wsc-content');
   if (!container) return;
+  // W2 — one-shot scroll to a basis-chain card after this render completes
+  // (station clicks on Storage/Flow/Basis target the basis section + a card).
+  const _scrollSel = _wswScrollSel; _wswScrollSel = '';
+  if (_scrollSel) {
+    setTimeout(() => {
+      try { container.querySelector(_scrollSel)?.scrollIntoView({ block: 'start' }); } catch {}
+    }, 0);
+  }
   // 2026-04-28 — keep phase stepper status in sync with activeView.
   renderWscPhaseStepper();
 
