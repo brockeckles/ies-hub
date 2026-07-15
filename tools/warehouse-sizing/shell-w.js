@@ -138,9 +138,10 @@ export function renderShellW(opts) {
       '</div>' +
       '<div class="wsw-railsec">' +
         '<div class="wsw-railt">INSPECTOR</div>' +
-        // W3 wires provenance + per-object what-if into this body.
+        '<div id="wsw-izbody">' +
         '<p class="wsw-hint">Click a design figure for its derivation chain — factor citations, ' +
-        'ASSERTED / DERIVED / ESTIMATED sources, and quick what-if levers. (Coming in the next slice.)</p>' +
+        'ASSERTED / DERIVED / ESTIMATED sources, and quick what-if levers.</p>' +
+        '</div>' +
       '</div>' +
     '</aside>' +
   '</div>' +
@@ -148,7 +149,8 @@ export function renderShellW(opts) {
 }
 
 function _railRow(label, key, hero = false) {
-  return '<div class="wsw-krow' + (hero ? ' wsw-krow--hero' : '') + '"><span>' + escapeHtml(label) + '</span><b data-wsw-rail="' + escapeAttr(key) + '">—</b></div>';
+  // W3 — rows answer clicks: the inspector builds this cell's derivation chain.
+  return '<div class="wsw-krow wsw-krow--click' + (hero ? ' wsw-krow--hero' : '') + '" data-wsw-cell="' + escapeAttr(key) + '" title="Inspect — derivation chain + what-if"><span>' + escapeHtml(label) + '</span><b data-wsw-rail="' + escapeAttr(key) + '">—</b></div>';
 }
 
 /** Spine — station buttons carry the SAME data-tc-section contract the
@@ -265,5 +267,26 @@ function _wStyles() {
   .wsw-bandlbl{display:flex;justify-content:space-between;font-size:9.5px;color:var(--ies-gray-400,#a8a29e)}
   .wsw-bandbar{height:7px;border-radius:99px;background:linear-gradient(90deg,#fed7c9,var(--ies-orange,#ff3a00));margin:5px 0 3px}
   .wsw-hint{font-size:11px;color:var(--ies-gray-500,#78716c);line-height:1.5}
+  .wsw-krow--click{cursor:pointer;border-radius:6px;margin:0 -6px;padding-left:6px;padding-right:6px}
+  .wsw-krow--click:hover{background:var(--ies-gray-100,#f5f5f4)}
+  .wsw-krow--sel{background:var(--c-info-soft,#eff4ff)}
+  .wsw-path{font-size:10px;color:var(--ies-gray-400,#a8a29e);margin-bottom:7px}
+  .wsw-chain{border-left:2px solid var(--ies-gray-200,#e7e5e4);padding-left:11px;display:flex;flex-direction:column;gap:7px}
+  .wsw-step{font-size:11.5px}
+  .wsw-step b{font-variant-numeric:tabular-nums}
+  .wsw-why{color:var(--ies-gray-600,#57534e);font-size:10.5px}
+  .wsw-cite{font-size:9.5px;color:var(--ies-gray-400,#a8a29e);font-style:italic}
+  .wsw-src{font-size:8px;font-weight:700;letter-spacing:.04em;border-radius:99px;padding:1px 5px;margin-left:3px;vertical-align:1px}
+  .wsw-src--derived{background:var(--c-success-bg,#f0fdf4);color:var(--c-success-ink,#15803d)}
+  .wsw-src--estimated{background:var(--c-warn-soft,#fffbeb);color:var(--c-warn-deep,#b45309)}
+  .wsw-src--asserted{background:var(--c-info-soft,#eff4ff);color:var(--c-info-strong,#2563eb)}
+  .wsw-note{margin-top:9px;font-size:10.5px;color:var(--ies-gray-600,#57534e);background:var(--ies-gray-50,#fafaf9);border:1px solid var(--ies-gray-200,#e7e5e4);border-radius:8px;padding:7px 9px}
+  .wsw-lever{margin-bottom:9px}
+  .wsw-leverlbl{display:flex;justify-content:space-between;font-size:10.5px;margin-bottom:3px}
+  .wsw-leverlbl b{font-variant-numeric:tabular-nums}
+  .wsw-lever input[type=range]{width:100%;accent-color:var(--ies-orange,#ff3a00)}
+  .wsw-delta{font-size:10.5px;color:var(--ies-gray-600,#57534e);margin-top:4px}
+  .wsw-delta--idle{color:var(--ies-gray-400,#a8a29e)}
+  .wsw-reset{background:none;border:none;color:var(--ies-orange,#ff3a00);font-size:10px;font-weight:700;cursor:pointer;text-decoration:underline;padding:0 0 0 6px}
   </style>`;
 }

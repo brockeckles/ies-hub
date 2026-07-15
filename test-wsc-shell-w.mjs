@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 globalThis.window = globalThis.window || { location: { hostname: '', pathname: '/', search: '' } };
 
-const shellW = await import('./tools/warehouse-sizing/shell-w.js?v=20260715-w2b');
+const shellW = await import('./tools/warehouse-sizing/shell-w.js?v=20260715-w3a');
 const { SHELLS, getShellPref, setShellPref, W_STATIONS, stationForSection, renderShellW, updateWRail } = shellW;
 
 const uiSrc = readFileSync('./tools/warehouse-sizing/ui.js', 'utf8');
@@ -146,7 +146,8 @@ console.log('\n── 5. wiring pins (ui.js / ui-shell-events) ─────�
 
 t('renderShell branches on the pref; KPI cadence updates the rail', () => {
   assert(/if \(getWShellPref\(\) === 'w'\) return renderShellW\(_buildWShellOpts\(\)\)/.test(uiSrc), 'renderShell branch');
-  assert(/if \(getWShellPref\(\) === 'w'\) updateWRail\(rootEl, _wswRailBag\(\)\)/.test(uiSrc), 'rail on KPI cadence');
+  // W3 reshaped this into a block (rail + inspector on the same cadence).
+  assert(/if \(getWShellPref\(\) === 'w'\) \{\s*updateWRail\(rootEl, _wswRailBag\(\)\);/.test(uiSrc), 'rail on KPI cadence');
 });
 
 t('station capture rides the bound-once block, BEFORE tool-chrome delegation (capture phase)', () => {
@@ -155,7 +156,7 @@ t('station capture rides the bound-once block, BEFORE tool-chrome delegation (ca
   const bindPos = evSrc.indexOf('bindToolChromeEvents(rootEl, {');
   assert(guardPos !== -1 && capPos !== -1 && bindPos !== -1, 'all markers');
   assert(capPos > guardPos && capPos < bindPos, 'capture listener inside guard, before delegation');
-  assert(/}, true\);/.test(evSrc.slice(capPos, capPos + 300)), 'capture phase flag');
+  assert(/}, true\);/.test(evSrc.slice(capPos, capPos + 800)), 'capture phase flag');
   assert(evSrc.includes("if (id === 'wsc-shell') return sctx.handleWscShellToggle?.()"), 'toggle action routed');
 });
 

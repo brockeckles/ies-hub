@@ -26,11 +26,12 @@ import { renderDashboard } from './ui-dashboard.js?v=20260715-w1a';
 import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260715-w2a';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { deriveRequirement } from './requirement-seam.js?v=20260715-w1a';
-import { renderShellW, updateWRail, getShellPref as getWShellPref, setShellPref as setWShellPref, stationForSection as wStationForSection, W_STATIONS } from './shell-w.js?v=20260715-w2b';
+import { buildRailInspector, renderInspectorHtml } from './rail-inspector.js?v=20260715-w3a';
+import { renderShellW, updateWRail, getShellPref as getWShellPref, setShellPref as setWShellPref, stationForSection as wStationForSection, W_STATIONS } from './shell-w.js?v=20260715-w3a';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260710-r2';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
 import { wscExtraStyles } from './ui-styles.js?v=20260710-r2';
-import { bindShellEvents } from './ui-shell-events.js?v=20260715-w2a';
+import { bindShellEvents } from './ui-shell-events.js?v=20260715-w3a';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================
@@ -114,6 +115,11 @@ let dynamicsPlan = null;
 // scroll selector consumed by renderContentView after the section renders.
 let _wswStation = '';
 let _wswScrollSel = '';
+// W3 — inspector selection + TRANSIENT what-if levers. The levers feed a
+// preview sizeFacility run only; toSizingInputs never reads them, so saves
+// and the CM writeback stay clean by construction.
+let _wswCell = '';
+let _wswLevers = {};
 
 /** N5 (2026-07-04) — layout synthesis + compliance plan (layout-calc.js):
  *  grid-fit, standards checklist, flow pattern. Persisted on Apply.
@@ -345,6 +351,12 @@ function openEditor(savedRow) {
     zones = createDefaultZones();
     volumes = createDefaultVolumes();
   }
+  // W3 — inspector selection + levers reset BEFORE the render call
+  // (M4c ordering lesson): a fresh scenario must never inherit the previous
+  // scenario's selection or transient levers.
+  _wswCell = '';
+  _wswLevers = {};
+  _wswStation = '';
   rootEl.innerHTML = renderShell();
   bindShellEvents(_makeShellEventsCtx());
   renderConfigPanel();
@@ -441,6 +453,78 @@ function _refreshWswChip() {
   const stateName = !facility.id ? 'draft' : (isDirty ? 'modified' : 'saved');
   chip.className = 'wsw-chip ' + ({ draft: 'wsw-chip--draft', modified: 'wsw-chip--mod', saved: 'wsw-chip--saved' }[stateName]);
   chip.textContent = { draft: 'DRAFT', modified: 'MODIFIED', saved: 'SAVED' }[stateName];
+}
+
+/** W3 — inspector cell selection (from the capture-phase delegation). */
+function _setWswCell(key) {
+  _wswCell = key || '';
+  _refreshWswInspector();
+}
+
+/** W3 — transient lever move. SURGICAL update only (label + Δ chip): a full
+ *  inspector re-render mid-drag destroys the range input under the pointer
+ *  (focus-loss class). Full re-renders happen on selection/KPI cadence. */
+function _setWswLever(key, value, inputEl) {
+  _wswLevers = { ..._wswLevers, [key]: +value };
+  if (inputEl?.parentElement) {
+    const b = inputEl.parentElement.querySelector('.wsw-leverlbl b');
+    if (b) b.textContent = value + ' ' + (inputEl.dataset.unit || '');
+  }
+  const chip = rootEl?.querySelector('[data-wsw-delta]');
+  if (chip) {
+    const d = _wswPreviewDelta();
+    if (d) {
+      chip.classList.remove('wsw-delta--idle');
+      chip.innerHTML = 'Δ ' + d.sf + ' SF · Δ ' + d.positions + ' pos <button class="wsw-reset" data-wsw-lever-reset>reset</button>';
+    }
+  }
+}
+
+/** W3 — reset levers (full re-render is safe here: not mid-drag). */
+function _resetWswLevers() {
+  _wswLevers = {};
+  _refreshWswInspector();
+}
+
+/** W3 — preview delta: a THROWAWAY sizeFacility run with the levers overlaid
+ *  at the input layer. Never persisted, never touches toSizingInputs. */
+function _wswPreviewDelta() {
+  const keys = Object.keys(_wswLevers);
+  if (keys.length === 0) return null;
+  try {
+    const base = calc.sizeFacility(toSizingInputs());
+    const fac2 = { ...facility, clearHeight: _wswLevers.clearHeight ?? facility.clearHeight };
+    const seamVols = _reqSeam().volumes;
+    const scale = (_wswLevers.palletScale ?? 100) / 100;
+    const vols2 = scale !== 1
+      ? { ...seamVols, totalPallets: Math.round((Number(seamVols.totalPallets) || 0) * scale) }
+      : seamVols;
+    const prev = calc.sizeFacility(calc.formStateToInputs({ facility: fac2, zones, volumes: vols2 }));
+    const sgn = (n) => (n >= 0 ? '+' : '−') + Math.abs(Math.round(n)).toLocaleString();
+    return {
+      sf: sgn((prev.totalSqft || 0) - (base.totalSqft || 0)),
+      positions: sgn((prev.positions?.grossPositions || 0) - (base.positions?.grossPositions || 0)),
+    };
+  } catch { return null; }
+}
+
+/** W3 — render the inspector body for the selected rail cell. */
+function _refreshWswInspector() {
+  if (getWShellPref() !== 'w' || !rootEl) return;
+  const body = rootEl.querySelector('#wsw-izbody');
+  if (!body) return;
+  // Row highlight follows selection.
+  rootEl.querySelectorAll('[data-wsw-cell]').forEach(el =>
+    el.classList.toggle('wsw-krow--sel', el.dataset.wswCell === _wswCell));
+  if (!_wswCell) { body.innerHTML = renderInspectorHtml(null); return; }
+  let sized = null;
+  try { sized = calc.sizeFacility(toSizingInputs()); } catch { /* chain shows what it can */ }
+  const model = buildRailInspector(_wswCell, {
+    sized, facility, zones, volumes,
+    seamFields: _reqSeam().fields,
+    mediaPlan, dynamicsPlan, pinnedFactors,
+  });
+  body.innerHTML = renderInspectorHtml(model, { levers: _wswLevers, delta: _wswPreviewDelta() });
 }
 
 /** W2 — live rail values (KPI cadence). */
@@ -585,7 +669,10 @@ function _refreshWscKpis() {
   // in the live walk: strip 10K SF vs dashboard 124K).
   refreshKpiStrip(rootEl, calc.computeWscKpis({ facility, zones, volumes: _reqSeam().volumes }));
   // W2 — the station shell's rail refreshes on the same cadence.
-  if (getWShellPref() === 'w') updateWRail(rootEl, _wswRailBag());
+  if (getWShellPref() === 'w') {
+    updateWRail(rootEl, _wswRailBag());
+    _refreshWswInspector();   // W3 — chain values track design edits
+  }
 }
 
 /** WSC-specific styles — the Configure-panel inputs were rendering with
@@ -627,6 +714,10 @@ function _makeShellEventsCtx() {
     // W2 — station shell hooks
     setWswStation: _setWswStation,
     handleWscShellToggle,
+    // W3 — inspector hooks
+    setWswCell: _setWswCell,
+    setWswLever: _setWswLever,
+    resetWswLevers: _resetWswLevers,
     get _wscElevView() { return _wscElevView; },
     set _wscElevView(v) { _wscElevView = v; },
     get _planEditMode() { return _planEditMode; },

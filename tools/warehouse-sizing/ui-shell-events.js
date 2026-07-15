@@ -66,6 +66,17 @@ export async function bindShellEvents(sctx) {
   rootEl.addEventListener('click', (e) => {
     const st = e.target.closest('[data-wsw-station]');
     if (st) sctx.setWswStation?.(st.dataset.wswStation || '', st.dataset.wswScroll || '');
+    // W3 — inspector: rail-cell selection + lever reset.
+    const cell = e.target.closest('[data-wsw-cell]');
+    if (cell) sctx.setWswCell?.(cell.dataset.wswCell || '');
+    if (e.target.closest('[data-wsw-lever-reset]')) sctx.resetWswLevers?.();
+  }, true);
+
+  // W3 — what-if levers (input cadence; ui.js updates surgically to keep the
+  // range input alive under the pointer). Bound once with the guard above.
+  rootEl.addEventListener('input', (e) => {
+    const lever = e.target.closest('[data-wsw-lever]');
+    if (lever) sctx.setWswLever?.(lever.dataset.wswLever || '', lever.value, lever);
   }, true);
 
   bindToolChromeEvents(rootEl, {
