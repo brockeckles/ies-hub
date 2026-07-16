@@ -23,11 +23,11 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260715-w1a';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260710-r2';
 import { renderDashboard } from './ui-dashboard.js?v=20260715-w1a';
-import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260715-w2a';
+import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260716-w4a';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { deriveRequirement } from './requirement-seam.js?v=20260715-w1a';
 import { buildRailInspector, renderInspectorHtml } from './rail-inspector.js?v=20260715-w3a';
-import { renderShellW, updateWRail, getShellPref as getWShellPref, setShellPref as setWShellPref, stationForSection as wStationForSection, W_STATIONS } from './shell-w.js?v=20260715-w3a';
+import { renderShellW, updateWRail, getShellPref as getWShellPref, setShellPref as setWShellPref, stationForSection as wStationForSection, W_STATIONS } from './shell-w.js?v=20260716-w4a';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260710-r2';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
 import { wscExtraStyles } from './ui-styles.js?v=20260710-r2';
@@ -413,16 +413,44 @@ function _buildWShellOpts() {
     sections: WSC_SECTIONS,
     activeSection: activeView,
     activeStation,
-    subs: {
-      data: profile ? `${(profile.skuCount || 0).toLocaleString()} SKU · ${profile.mode}` : 'No profile yet',
-      storage: mediaPlan ? `${(mediaPlan.totals?.positions || 0).toLocaleString()} pos · applied` : 'Not applied',
-      flow: dynamicsPlan
-        ? `${(dynamicsPlan.docks?.inbound?.doors || 0) + (dynamicsPlan.docks?.outbound?.doors || 0)} doors · applied`
-        : 'Not applied',
-      building: `${facility.clearHeight || 0} ft clear`,
-      basis: pinnedFactors ? 'Catalog pinned' : 'Catalog unpinned',
-    },
+    subs: _wswSubs(),
   };
+}
+
+/** W4 — spine one-liners, shared by the shell build and the surgical
+ *  KPI-cadence refresh (_refreshWswSubs). */
+function _wswSubs() {
+  return {
+    data: profile ? `${(profile.skuCount || 0).toLocaleString()} SKU · ${profile.mode}` : 'No profile yet',
+    storage: mediaPlan ? `${(mediaPlan.totals?.positions || 0).toLocaleString()} pos · applied` : 'Not applied',
+    flow: dynamicsPlan
+      ? `${(dynamicsPlan.docks?.inbound?.doors || 0) + (dynamicsPlan.docks?.outbound?.doors || 0)} doors · applied`
+      : 'Not applied',
+    building: `${facility.clearHeight || 0} ft clear`,
+    basis: pinnedFactors ? 'Catalog pinned' : 'Catalog unpinned',
+  };
+}
+
+/** W4 — surgical spine-sub refresh on the KPI cadence: Apply under a face
+ *  must flip 'Not applied' → 'applied' without a shell rebuild (the spine
+ *  only re-renders on section navigation). textContent only — no listener
+ *  or node churn. */
+function _refreshWswSubs() {
+  if (getWShellPref() !== 'w' || !rootEl) return;
+  const subs = _wswSubs();
+  for (const [k, v] of Object.entries(subs)) {
+    const el = rootEl.querySelector('[data-wsw-sub="' + k + '"]');
+    if (el) el.textContent = v;
+  }
+}
+
+/** W4 — the active basis face under the station shell; null under classic
+ *  (classic renders the full basis stack). Unknown/blank station memory
+ *  falls back to the Data face — the chain's front door. */
+function _wswBasisFace() {
+  if (getWShellPref() !== 'w') return null;
+  const st = W_STATIONS.find(s => s.key === _wswStation && s.face);
+  return st?.face || 'data';
 }
 
 /** W2 — station click memory + one-shot scroll target (set from the
@@ -672,6 +700,7 @@ function _refreshWscKpis() {
   if (getWShellPref() === 'w') {
     updateWRail(rootEl, _wswRailBag());
     _refreshWswInspector();   // W3 — chain values track design edits
+    _refreshWswSubs();        // W4 — spine one-liners track Apply/edit state
   }
 }
 
@@ -1081,6 +1110,9 @@ function renderContentView() {
 
   switch (activeView) {
     case 'basis': renderBasisView(container, {
+      // W4 — station faces: under the station shell only the active
+      // station's cards render; classic gets the full stack (face = null).
+      face: _wswBasisFace(),
       getProfile: () => profile,
       setProfile: (p) => { profile = p; _markDirty(); },
       // N2 — factor pinning (drift badge + explicit adopt)

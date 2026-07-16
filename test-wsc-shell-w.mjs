@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 globalThis.window = globalThis.window || { location: { hostname: '', pathname: '/', search: '' } };
 
-const shellW = await import('./tools/warehouse-sizing/shell-w.js?v=20260715-w3a');
+const shellW = await import('./tools/warehouse-sizing/shell-w.js?v=20260716-w4a');
 const { SHELLS, getShellPref, setShellPref, W_STATIONS, stationForSection, renderShellW, updateWRail } = shellW;
 
 const uiSrc = readFileSync('./tools/warehouse-sizing/ui.js', 'utf8');
@@ -54,11 +54,16 @@ t('every WSC section key appears EXACTLY ONCE across stations', () => {
   eq(new Set(claimed).size, claimed.length, 'no duplicates');
 });
 
-t('every station target is a real section; scroll targets ride basis stations', () => {
+t('every station target is a real section; basis-chain stations carry W4 faces', () => {
   for (const st of W_STATIONS) {
     assert(sectionKeys.includes(st.target), `${st.key} target '${st.target}' exists`);
-    if (st.target === 'basis' && st.key !== 'data') assert(st.scroll.includes('data-wsw-card'), `${st.key} has a card scroll target`);
+    // W4 — faces replaced the W2 scroll-anchor hop: every basis-target
+    // station renders its own face; no station scrolls.
+    if (st.target === 'basis') assert(st.face, `${st.key} has a face`);
+    assert(!st.scroll, `${st.key} scroll retired`);
   }
+  const faces = W_STATIONS.map(st => st.face).filter(Boolean);
+  eq(new Set(faces).size, faces.length, 'faces unique');
   eq(stationForSection('dashboard')?.key, 'building', 'lookup');
   eq(stationForSection('basis')?.key, 'data', 'basis owned by Data');
 });

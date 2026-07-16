@@ -72,34 +72,65 @@ const esc = (s) => String(s ?? '').replace(/</g, '&lt;');
 // RENDER
 // ============================================================
 
+// W4 — station faces: which cards each basis-chain station renders under
+// the station shell. The 5 main cards (data grid / media / dynamics /
+// layout / factors) each appear EXACTLY ONCE across faces (test-pinned);
+// the header (readiness bar + Design Basis Doc button) rides both ends of
+// the chain — Data (where readiness is earned) and Basis (where the doc
+// is the deliverable).
+export const FACE_CARDS = {
+  data:    ['header', 'data'],
+  storage: ['media'],
+  flow:    ['dynamics'],
+  basis:   ['header', 'layout', 'factors'],
+};
+
 /**
  * @param {HTMLElement} container
- * @param {Object} ctx — { getProfile, setProfile, markDirty, rerender }
+ * @param {Object} ctx — { getProfile, setProfile, markDirty, rerender,
+ *                         face? } — face = W4 station face key under the
+ *                         station shell; null/undefined = classic full stack.
  */
 export function renderBasisView(container, ctx) {
   const profile = ctx.getProfile();
   const readiness = profileReadiness(profile);
+  // W4 — classic (no face) renders every card, unchanged. A face renders
+  // only its own cards; unknown face values fall back to the full stack.
+  const face = FACE_CARDS[ctx.face] ? ctx.face : null;
+  const has = (k) => !face || FACE_CARDS[face].includes(k);
   container.innerHTML = `
     <div style="max-width:1080px;">
-      ${_renderHeader(profile, readiness)}
-      <!-- W2 — data-wsw-card anchors: the station shell's Storage/Flow/Basis
-           stations navigate here and scroll to their card. Block wrappers,
-           zero visual change. -->
+      ${has('header') ? _renderHeader(profile, readiness) : ''}
+      ${has('data') ? `
       <div data-wsw-card="data" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">
         ${_renderDataCard(profile)}
         ${_renderSparseCard(profile)}
       </div>
       <div id="wsc-basis-wizard" style="display:none;"></div>
-      ${profile ? _renderProfileSummary(profile) : _renderEmptyState()}
-      <div data-wsw-card="media">${profile ? _renderMediaCard(profile, ctx) : ''}</div>
-      <div data-wsw-card="dynamics">${profile ? _renderDynamicsCard(profile, ctx) : ''}</div>
-      <div data-wsw-card="layout">${_renderLayoutCard(ctx)}</div>
-      <div id="wsc-basis-factors" data-wsw-card="factors"></div>
+      ${profile ? _renderProfileSummary(profile) : _renderEmptyState()}` : ''}
+      ${has('media') ? `<div data-wsw-card="media">${profile ? _renderMediaCard(profile, ctx) : (face ? _renderPrereqHint('Storage media selection') : '')}</div>` : ''}
+      ${has('dynamics') ? `<div data-wsw-card="dynamics">${profile ? _renderDynamicsCard(profile, ctx) : (face ? _renderPrereqHint('Flow dynamics') : '')}</div>` : ''}
+      ${has('layout') ? `<div data-wsw-card="layout">${_renderLayoutCard(ctx)}</div>` : ''}
+      ${has('factors') ? `<div id="wsc-basis-factors" data-wsw-card="factors"></div>` : ''}
     </div>
   `;
   _bindEvents(container, ctx);
-  if (_pending) _renderWizard(container.querySelector('#wsc-basis-wizard'), ctx);
+  if (_pending && has('data')) _renderWizard(container.querySelector('#wsc-basis-wizard'), ctx);
   _renderFactorsCard(container.querySelector('#wsc-basis-factors'), ctx);
+}
+
+/** W4 — prerequisite hint for faces whose card needs a profile. The button
+ *  carries the shell's station contract (data-wsw-station + data-tc-section)
+ *  so the capture-phase delegation + section nav route it exactly like a
+ *  spine click — no bespoke handler. */
+function _renderPrereqHint(what) {
+  return `
+    <div class="hub-card" style="padding:22px;margin-top:14px;text-align:center;color:var(--ies-gray-500);font-size:12.5px;">
+      ${esc(what)} needs a design profile first.
+      <button class="hub-btn hub-btn-sm hub-btn-secondary" data-wsw-station="data" data-tc-section="basis" style="margin-left:8px;">
+        Go to Data station</button>
+    </div>
+  `;
 }
 
 function _renderHeader(profile, readiness) {

@@ -55,20 +55,22 @@ export function setShellPref(shell) {
 
 // ─── Station map: the engineering causal chain IS the nav ────────────────
 // Data → Storage → Flow → Building → Basis. Every WSC_SECTIONS key appears
-// EXACTLY ONCE across stations (test-wsc-shell-w pins this against ui.js):
-// the whole basis section hosts under Data until W4 splits it into faces;
-// Storage/Flow/Basis navigate to the same section and scroll to their card.
+// EXACTLY ONCE across stations (test-wsc-shell-w pins this against ui.js).
+// W4 — station FACES: each basis-chain station renders only its own cards
+// (ui-basis FACE_CARDS, keyed by `face`); the W2 scroll-anchor hop is
+// retired (faces are short — nothing to scroll to). `scroll` stays as a
+// key so _setWswStation's signature is stable, but no station sets one.
 export const W_STATIONS = [
   { key: 'data',     num: 1, name: 'Data',
-    sections: ['basis'], target: 'basis', scroll: '[data-wsw-card="data"]' },
+    sections: ['basis'], target: 'basis', scroll: '', face: 'data' },
   { key: 'storage',  num: 2, name: 'Storage',
-    sections: [], target: 'basis', scroll: '[data-wsw-card="media"]' },
+    sections: [], target: 'basis', scroll: '', face: 'storage' },
   { key: 'flow',     num: 3, name: 'Flow',
-    sections: [], target: 'basis', scroll: '[data-wsw-card="dynamics"]' },
+    sections: [], target: 'basis', scroll: '', face: 'flow' },
   { key: 'building', num: 4, name: 'Building',
-    sections: ['dashboard', 'plan', 'elevation', '3d'], target: 'dashboard', scroll: '' },
+    sections: ['dashboard', 'plan', 'elevation', '3d'], target: 'dashboard', scroll: '', face: '' },
   { key: 'basis',    num: 5, name: 'Basis',
-    sections: [], target: 'basis', scroll: '[data-wsw-card="layout"]' },
+    sections: [], target: 'basis', scroll: '', face: 'basis' },
 ];
 
 /** Station that OWNS a section key (partition lookup — basis → data). */
@@ -165,7 +167,9 @@ export function renderWSpine(opts) {
       (st.scroll ? ' data-wsw-scroll="' + escapeAttr(st.scroll) + '"' : '') + '>' +
       '<span class="wsw-stnum">' + st.num + '</span>' +
       '<span class="wsw-stbody"><span class="wsw-stname">' + escapeHtml(st.name) + '</span>' +
-      (sub ? '<span class="wsw-stsub">' + escapeHtml(sub) + '</span>' : '') + '</span>' +
+      // W4 — always emit the sub slot: _refreshWswSubs updates it surgically
+      // on the KPI cadence (Apply under a face flips 'Not applied' live).
+      '<span class="wsw-stsub" data-wsw-sub="' + escapeAttr(st.key) + '">' + escapeHtml(sub) + '</span></span>' +
     '</button>';
   }).join('');
 }
