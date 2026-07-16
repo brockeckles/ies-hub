@@ -31,7 +31,7 @@ const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
  *                          mediaPlan, dynamicsPlan, layoutPlan, sized, meta }
  * @returns {Object} DesignBasisModel — { title, generatedAt, sections: [{ id, title, ... }] }
  */
-export function buildDesignBasisModel({ facility = {}, zones = {}, volumes = {}, profile = null,
+export function buildDesignBasisModel({ clientSafe = false, facility = {}, zones = {}, volumes = {}, profile = null,
   pinnedFactors = null, mediaPlan = null, dynamicsPlan = null, layoutPlan = null, sized = null, meta = {} } = {}) {
 
   const sections = [];
@@ -132,7 +132,8 @@ export function buildDesignBasisModel({ facility = {}, zones = {}, volumes = {},
     mediaBands: mediaPlan ? mediaPlan.bands.map(b => ({
       bucket: b.bucket, skus: b.skuCount, pallets: b.pallets, media: b.mediaLabel,
       occupancyPct: b.occupancyPct, positions: b.positions,
-      cost: `$${fmt(b.costBand.min / 1000)}K–$${fmt(b.costBand.max / 1000)}K`,
+      // W6 — client-safe copies omit commercial figures (rack capital).
+      cost: clientSafe ? null : `$${fmt(b.costBand.min / 1000)}K–$${fmt(b.costBand.max / 1000)}K`,
       rationale: b.rationale, citations: b.citations,
     })) : null,
     shelving: mediaPlan?.shelving || null,
@@ -158,7 +159,7 @@ export function buildDesignBasisModel({ facility = {}, zones = {}, volumes = {},
     fleet: dynamicsPlan?.mhe?.fleet?.map(f => ({ label: f.label, role: f.role, aisleFt: f.aisleFt, rationale: f.rationale })) || null,
     vnaAdvisory: dynamicsPlan?.mhe?.vnaAdvisory || null,
     mheNote: dynamicsPlan?.mhe ? `MHE fleet shown is an aisle-width planning assumption (${dynamicsPlan.mhe.source === 'asserted' ? 'analyst-asserted' : 'default from media plan'}) — equipment selection is finalized in the MOST / direct-labor template development.` : null,
-    rackCost: mediaPlan?.totals ? `Rack investment (equipment only): $${fmt(mediaPlan.totals.costBand.min / 1000)}K – $${fmt(mediaPlan.totals.costBand.max / 1000)}K for ${fmt(mediaPlan.totals.positions)} positions` : null,
+    rackCost: (mediaPlan?.totals && !clientSafe) ? `Rack investment (equipment only): $${fmt(mediaPlan.totals.costBand.min / 1000)}K – $${fmt(mediaPlan.totals.costBand.max / 1000)}K for ${fmt(mediaPlan.totals.positions)} positions` : null,
   });
 
   // ── 9. Dynamics detail ──
@@ -226,6 +227,7 @@ export function buildDesignBasisModel({ facility = {}, zones = {}, volumes = {},
   return {
     title: `Design Basis — ${facility.name || 'Untitled Facility'}`,
     generatedAt: new Date().toISOString().slice(0, 10),
+    clientSafe,
     sections,
   };
 }
@@ -245,11 +247,12 @@ export function renderDesignBasisHtml(model) {
     if (s.register) body = `<table class="grid"><tr><th>Item</th><th>Value</th><th>Basis</th></tr>${s.register.map(r =>
       `<tr class="${r.basis.startsWith('Estimated') ? 'warn' : ''}"><td>${esc(r.item)}</td><td>${esc(r.value)}</td><td>${esc(r.basis)}</td></tr>`).join('')}</table>`;
     if (s.id === 'media') {
-      body = s.mediaBands ? `<table class="grid"><tr><th>Depth band</th><th>SKUs</th><th>Pallets</th><th>Medium</th><th>Occ.</th><th>Positions</th><th>Rack cost</th></tr>${s.mediaBands.map(b =>
-        `<tr><td>${esc(b.bucket)}</td><td>${fmt(b.skus)}</td><td>${fmt(b.pallets)}</td><td>${esc(b.media)}</td><td>${b.occupancyPct}%</td><td>${fmt(b.positions)}</td><td>${esc(b.cost)}</td></tr>
-         <tr class="rationale"><td colspan="7">↳ ${esc(b.rationale)} <span class="cite">[${b.citations.join(', ')}]</span></td></tr>`).join('')}
-        ${s.shelving ? `<tr><td>&lt;1 plt/SKU</td><td>${fmt(s.shelving.skuCount)}</td><td>${fmt(s.shelving.pallets)}</td><td>Carton shelving</td><td>—</td><td>—</td><td>—</td></tr>` : ''}
-        ${s.totals ? `<tr class="total"><td>Total</td><td></td><td>${fmt(s.totals.pallets)}</td><td>${s.totals.mediaCount} media</td><td></td><td>${fmt(s.totals.positions)}</td><td></td></tr>` : ''}
+      const noCost = !!model.clientSafe;   // W6 — no commercial column on client copies
+      body = s.mediaBands ? `<table class="grid"><tr><th>Depth band</th><th>SKUs</th><th>Pallets</th><th>Medium</th><th>Occ.</th><th>Positions</th>${noCost ? '' : '<th>Rack cost</th>'}</tr>${s.mediaBands.map(b =>
+        `<tr><td>${esc(b.bucket)}</td><td>${fmt(b.skus)}</td><td>${fmt(b.pallets)}</td><td>${esc(b.media)}</td><td>${b.occupancyPct}%</td><td>${fmt(b.positions)}</td>${noCost ? '' : `<td>${esc(b.cost)}</td>`}</tr>
+         <tr class="rationale"><td colspan="${noCost ? 6 : 7}">↳ ${esc(b.rationale)} <span class="cite">[${b.citations.join(', ')}]</span></td></tr>`).join('')}
+        ${s.shelving ? `<tr><td>&lt;1 plt/SKU</td><td>${fmt(s.shelving.skuCount)}</td><td>${fmt(s.shelving.pallets)}</td><td>Carton shelving</td><td>—</td><td>—</td>${noCost ? '' : '<td>—</td>'}</tr>` : ''}
+        ${s.totals ? `<tr class="total"><td>Total</td><td></td><td>${fmt(s.totals.pallets)}</td><td>${s.totals.mediaCount} media</td><td></td><td>${fmt(s.totals.positions)}</td>${noCost ? '' : '<td></td>'}</tr>` : ''}
         </table>
         ${s.allocation ? `<p class="note">Derived storage mix: full-pallet ${s.allocation.fullPallet}% · carton-on-pallet ${s.allocation.cartonOnPallet}% · shelving ${s.allocation.cartonOnShelving}%. ${esc(s.allocation.rationale)}</p>` : ''}
         <p class="note">${esc(s.note)}</p>` : `<p class="note">${esc(s.note)}</p>`;
@@ -305,7 +308,7 @@ export function renderDesignBasisHtml(model) {
 <body>
   <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
   <h1>${esc(model.title)}</h1>
-  <div class="sub">Basis of Design · generated ${esc(model.generatedAt)} · IES Intelligence Hub — every value traces to customer data, a cited factor, or a disclosed assumption</div>
+  <div class="sub">Basis of Design · generated ${esc(model.generatedAt)}${model.clientSafe ? ' · CLIENT COPY — commercial figures omitted' : ''} · IES Intelligence Hub — every value traces to customer data, a cited factor, or a disclosed assumption</div>
   ${model.sections.map(sec).join('\n')}
 </body></html>`;
 }

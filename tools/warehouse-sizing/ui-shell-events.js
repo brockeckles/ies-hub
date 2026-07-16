@@ -70,6 +70,9 @@ export async function bindShellEvents(sctx) {
     const cell = e.target.closest('[data-wsw-cell]');
     if (cell) sctx.setWswCell?.(cell.dataset.wswCell || '');
     if (e.target.closest('[data-wsw-lever-reset]')) sctx.resetWswLevers?.();
+    // W6 — mode pills: Review / Client-safe open the print-grade doc.
+    const mode = e.target.closest('[data-wsw-mode]');
+    if (mode) sctx.openWscReviewDoc?.(mode.dataset.wswMode === 'clientsafe');
   }, true);
 
   // W3 — what-if levers (input cadence; ui.js updates surgically to keep the

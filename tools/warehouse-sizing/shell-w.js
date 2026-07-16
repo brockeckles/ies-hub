@@ -107,6 +107,12 @@ export function renderShellW(opts) {
       '<span class="wsw-crumb">' + escapeHtml(opts.facilityName || 'New Facility') + '</span>' +
       '<span class="wsw-chip">' + escapeHtml(opts.modeLabel || 'Design') + '</span>' +
       '<span class="wsw-chip ' + stateCls + '" data-wsw-state title="' + escapeAttr(opts.stateTitle || '') + '">' + stateLbl + '</span>' +
+      // W6 — mode pills (CM M7 lineage): Working is the live surface;
+      // Review/Client-safe open the print-grade Design Basis doc via the
+      // data-wsw-mode delegation in ui-shell-events.
+      '<span class="wsw-mode"><span class="wsw-mode--on">Working</span>' +
+      '<button type="button" class="wsw-mode--doc" data-wsw-mode="review" title="Review document — the 12-section Basis of Design, print-grade (Save as PDF)">Review</button>' +
+      '<button type="button" class="wsw-mode--doc" data-wsw-mode="clientsafe" title="Client-safe document — commercial figures (rack capital) never render">Client-safe</button></span>' +
       '<span class="wsw-spacer"></span>' +
       actions +
     '</div>' +
@@ -233,6 +239,10 @@ function _wStyles() {
   .wsw-chip{font-size:9.5px;font-weight:700;letter-spacing:.05em;border-radius:99px;padding:2.5px 9px;background:#292524;color:#a8a29e}
   .wsw-chip--draft{background:#3f3320;color:#fbbf24}.wsw-chip--mod{background:#432c1e;color:#fb923c}.wsw-chip--saved{background:#1b3524;color:#4ade80}
   .wsw-spacer{flex:1}
+  .wsw-mode{display:flex;background:#292524;border-radius:999px;padding:3px;margin-left:4px;flex:none}
+  .wsw-mode--on{font-size:10.5px;font-weight:600;padding:3.5px 11px;border-radius:999px;background:var(--ies-orange,#ff3a00);color:#fff}
+  .wsw-mode--doc{background:transparent;border:none;font-size:10.5px;font-weight:600;padding:3.5px 11px;border-radius:999px;color:#a8a29e;cursor:pointer}
+  .wsw-mode--doc:hover{color:#fff}
   .wsw-btn{font-size:11.5px;font-weight:600;border-radius:8px;border:1px solid #44403c;background:transparent;color:#d6d3d1;padding:5.5px 11px;cursor:pointer}
   .wsw-btn--primary{background:var(--ies-orange,#ff3a00);border-color:var(--ies-orange,#ff3a00);color:#fff}
   .wsw-spine{background:#1c1917;color:#d6d3d1;padding:13px 9px;display:flex;flex-direction:column;gap:3px;overflow-y:auto}

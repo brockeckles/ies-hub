@@ -24,6 +24,7 @@ import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260710-r2';
 import { renderDashboard } from './ui-dashboard.js?v=20260715-w1a';
 import { renderBasisView, resetBasisState, computeAdoptStatuses } from './ui-basis.js?v=20260716-w5a';
+import { buildDesignBasisModel, renderDesignBasisHtml } from './basis-doc.js?v=20260710-r3';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { deriveRequirement } from './requirement-seam.js?v=20260715-w1a';
 import { buildRailInspector, renderInspectorHtml } from './rail-inspector.js?v=20260715-w3a';
@@ -436,6 +437,28 @@ function _wswSubs() {
   };
 }
 
+/** W6 — Review / Client-safe mode pills (CM M7 lineage): open the
+ *  print-grade Design Basis doc in a popup (COG F4 pattern; popups are the
+ *  blessed print path). Client-safe strips commercial figures inside
+ *  buildDesignBasisModel — scrubbed at the MODEL, not the renderer, so a
+ *  client copy can never leak costs through a template branch. `sized`
+ *  rides toSizingInputs, which is requirement-seam routed (W1). */
+function _openWscReviewDoc(clientSafe) {
+  let sized = null;
+  try { sized = calc.sizeFacility(toSizingInputs()); } catch (_) { /* blank designs print without §11 */ }
+  const model = buildDesignBasisModel({
+    clientSafe: !!clientSafe,
+    facility, zones, volumes,
+    profile, pinnedFactors,
+    mediaPlan, dynamicsPlan, layoutPlan,
+    sized,
+  });
+  const win = window.open('', '_blank');
+  if (!win) { showToast('Popup blocked — allow popups for this site to generate the document.', 'error'); return; }
+  win.document.write(renderDesignBasisHtml(model));
+  win.document.close();
+}
+
 /** W5 — adopt statuses via ui-basis (it owns the card policies); null under
  *  classic or on any compute hiccup — subs then fall back to 'adopted'. */
 function _wswAdoptStatuses() {
@@ -766,6 +789,8 @@ function _makeShellEventsCtx() {
     // W2 — station shell hooks
     setWswStation: _setWswStation,
     handleWscShellToggle,
+    // W6 — Review / Client-safe mode pills
+    openWscReviewDoc: _openWscReviewDoc,
     // W3 — inspector hooks
     setWswCell: _setWswCell,
     setWswLever: _setWswLever,
