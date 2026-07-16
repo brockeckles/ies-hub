@@ -1114,10 +1114,13 @@ function renderContentView() {
       // station's cards render; classic gets the full stack (face = null).
       face: _wswBasisFace(),
       getProfile: () => profile,
-      setProfile: (p) => { profile = p; _markDirty(); },
+      // w4b walk find: Build Profile / Adopt don't ride the KPI cadence, so
+      // the spine subs ('No profile yet' / 'Catalog unpinned') stayed stale
+      // until the next unrelated edit or shell rebuild. Refresh surgically.
+      setProfile: (p) => { profile = p; _markDirty(); _refreshWswSubs(); },
       // N2 — factor pinning (drift badge + explicit adopt)
       getPinnedFactors: () => pinnedFactors,
-      adoptFactors: (live) => { pinnedFactors = pinWscFactors(live); _markDirty(); },
+      adoptFactors: (live) => { pinnedFactors = pinWscFactors(live); _markDirty(); _refreshWswSubs(); },
       fetchFactors: () => api.fetchWscFactors(),
       // N3 — engineered media plan: Apply persists the plan AND flips the
       // design's storage mix from asserted to derived (mix stays editable —

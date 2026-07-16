@@ -172,6 +172,13 @@ t('basis ctx carries face: _wswBasisFace(); classic short-circuits to null', () 
   assert(/\|\| 'data'/.test(fn.slice(0, 400)), 'blank station memory → data face');
 });
 
+t('setProfile + adoptFactors refresh spine subs directly (w4b walk find)', () => {
+  // Build Profile / Adopt happen outside the KPI cadence — without these the
+  // Data/Basis subs stay stale until the next unrelated edit.
+  assert(/setProfile: \(p\) => \{ profile = p; _markDirty\(\); _refreshWswSubs\(\); \}/.test(uiSrc), 'setProfile refreshes subs');
+  assert(/adoptFactors: \(live\) => \{ pinnedFactors = pinWscFactors\(live\); _markDirty\(\); _refreshWswSubs\(\); \}/.test(uiSrc), 'adoptFactors refreshes subs');
+});
+
 t('_refreshWswSubs rides the KPI cadence inside the shell-w branch', () => {
   const kpi = uiSrc.slice(uiSrc.indexOf('function _refreshWscKpis()'));
   const branch = kpi.slice(kpi.indexOf("getShellPref() === 'w'") >= 0 ? kpi.indexOf("getShellPref() === 'w'") : kpi.indexOf("getWShellPref() === 'w'"));
