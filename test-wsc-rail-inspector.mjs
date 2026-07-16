@@ -10,7 +10,7 @@ globalThis.window = globalThis.window || { location: { hostname: '', pathname: '
 
 const { INSPECTABLE_CELLS, buildRailInspector, renderInspectorHtml } =
   await import('./tools/warehouse-sizing/rail-inspector.js?v=20260715-w3a');
-const shellW = await import('./tools/warehouse-sizing/shell-w.js?v=20260716-w4a');
+const shellW = await import('./tools/warehouse-sizing/shell-w.js?v=20260716-w7a');
 
 const uiSrc = readFileSync('./tools/warehouse-sizing/ui.js', 'utf8');
 const evSrc = readFileSync('./tools/warehouse-sizing/ui-shell-events.js', 'utf8');

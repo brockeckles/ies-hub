@@ -10,10 +10,10 @@
 import { readFileSync } from 'node:fs';
 globalThis.window = globalThis.window || { location: { hostname: '', pathname: '/', search: '' } };
 
-const { buildDesignBasisModel, renderDesignBasisHtml } = await import('./tools/warehouse-sizing/basis-doc.js?v=20260710-r3');
+const { buildDesignBasisModel, renderDesignBasisHtml } = await import('./tools/warehouse-sizing/basis-doc.js?v=20260716-w7a');
 const { computeSparseProfile } = await import('./tools/warehouse-sizing/profile-calc.js?v=20260704-n1a');
 const { selectMedia } = await import('./tools/warehouse-sizing/media-calc.js?v=20260704-n3a');
-const { renderShellW } = await import('./tools/warehouse-sizing/shell-w.js?v=20260715-w3a');
+const { renderShellW } = await import('./tools/warehouse-sizing/shell-w.js?v=20260716-w7a');
 
 const uiSrc = readFileSync('./tools/warehouse-sizing/ui.js', 'utf8');
 const evSrc = readFileSync('./tools/warehouse-sizing/ui-shell-events.js', 'utf8');

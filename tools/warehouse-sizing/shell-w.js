@@ -21,9 +21,11 @@ import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 // ─── Shell preference (tier-service pattern, CM shell-d lineage) ─────────
 const STORAGE_KEY = 'ies_wsc_shell';
 export const SHELLS = ['classic', 'w'];
-// W2: classic stays the default until the post-soak flip (W7). The 'New
-// layout' button is the opt-in.
-const DEFAULT_SHELL = 'classic';
+// W7 FLIP (2026-07-16): the station shell is the DEFAULT. Classic remains
+// one click away ('Classic layout' action) and is retained until the
+// post-soak cleanup — CM M8a/M8b lineage. Users who explicitly picked
+// classic keep it (stored pref wins over the default).
+const DEFAULT_SHELL = 'w';
 
 const _mem = new Map();
 function _store() {
@@ -164,7 +166,9 @@ function _railRow(label, key, hero = false) {
 /** Spine — station buttons carry the SAME data-tc-section contract the
  *  classic pills do, plus data-wsw-station/-scroll for face memory. */
 export function renderWSpine(opts) {
-  return W_STATIONS.map(st => {
+  // W7 — Quick tier: ui.js passes the Building-only subset so Quick keeps
+  // its 5-inputs + Dashboard/3D promise under the station shell.
+  return (opts.stations || W_STATIONS).map(st => {
     const active = st.key === opts.activeStation;
     const sub = (opts.subs || {})[st.key] || '';
     return '<button class="wsw-station' + (active ? ' wsw-station--active' : '') + '"' +
@@ -183,10 +187,13 @@ export function renderWSpine(opts) {
 /** Sub-nav — the active station's sections as standard section pills
  *  (Building: Dashboard / 2D Plan / Elevation / 3D). */
 export function renderWSubnav(opts) {
-  const st = W_STATIONS.find(s => s.key === opts.activeStation);
+  const st = (opts.stations || W_STATIONS).find(s => s.key === opts.activeStation);
   if (!st || st.sections.length < 2) return '';
   const labels = Object.fromEntries((opts.sections || []).map(s => [s.key, s.label]));
-  return st.sections.map(key =>
+  // W7 — only pills for sections present in opts.sections (Quick hides
+  // Plan/Elevation; the tier already lands activeView on dashboard).
+  const allowed = new Set((opts.sections || []).map(s => s.key));
+  return st.sections.filter(key => !allowed.size || allowed.has(key)).map(key =>
     '<button class="wsw-pill' + (key === opts.activeSection ? ' wsw-pill--on' : '') + '" data-tc-section="' + escapeAttr(key) + '">' +
     escapeHtml(labels[key] || key) + '</button>').join('');
 }

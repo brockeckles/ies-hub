@@ -23,16 +23,16 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260715-w1a';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260710-r2';
 import { renderDashboard } from './ui-dashboard.js?v=20260715-w1a';
-import { renderBasisView, resetBasisState, computeAdoptStatuses } from './ui-basis.js?v=20260716-w5a';
-import { buildDesignBasisModel, renderDesignBasisHtml } from './basis-doc.js?v=20260710-r3';
+import { renderBasisView, resetBasisState, computeAdoptStatuses } from './ui-basis.js?v=20260716-w7a';
+import { buildDesignBasisModel, renderDesignBasisHtml } from './basis-doc.js?v=20260716-w7a';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { deriveRequirement } from './requirement-seam.js?v=20260715-w1a';
 import { buildRailInspector, renderInspectorHtml } from './rail-inspector.js?v=20260715-w3a';
-import { renderShellW, updateWRail, getShellPref as getWShellPref, setShellPref as setWShellPref, stationForSection as wStationForSection, W_STATIONS } from './shell-w.js?v=20260716-w4a';
+import { renderShellW, updateWRail, getShellPref as getWShellPref, setShellPref as setWShellPref, stationForSection as wStationForSection, W_STATIONS } from './shell-w.js?v=20260716-w7a';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260710-r2';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
 import { wscExtraStyles } from './ui-styles.js?v=20260710-r2';
-import { bindShellEvents } from './ui-shell-events.js?v=20260715-w3a';
+import { bindShellEvents } from './ui-shell-events.js?v=20260716-w7a';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================
@@ -401,17 +401,23 @@ function renderShell() {
 /** W2 — opts bag for the station-spine shell. */
 function _buildWShellOpts() {
   const classic = _buildWscChromeOpts();
-  const activeStation = (activeView === 'basis' && W_STATIONS.some(st => st.key === _wswStation && st.target === 'basis'))
-    ? _wswStation
-    : (wStationForSection(activeView)?.key || 'data');
+  // W7 — Quick tier under the station shell: Building-only spine, quick
+  // section list (Dashboard/3D pills). handleWscTierToggle already lands
+  // activeView on dashboard when quick hides the current section.
+  const _quick = _wscQuickChrome();
+  const activeStation = _quick ? 'building'
+    : (activeView === 'basis' && W_STATIONS.some(st => st.key === _wswStation && st.target === 'basis'))
+      ? _wswStation
+      : (wStationForSection(activeView)?.key || 'data');
   return {
+    stations: _quick ? W_STATIONS.filter(st => st.key === 'building') : W_STATIONS,
     facilityName: facility.name || 'New Facility',
     modeLabel: (facility.sizingMode || 'design') === 'constraint' ? 'Constraint' : 'Design',
     stateName: classic.stateName || (!facility.id ? 'draft' : (isDirty ? 'modified' : 'saved')),
     stateTitle: classic.stateTitle || '',
     backTitle: classic.backTitle || 'Back',
     actions: classic.actions,
-    sections: WSC_SECTIONS,
+    sections: _quick ? WSC_QUICK_SECTIONS : WSC_SECTIONS,
     activeSection: activeView,
     activeStation,
     subs: _wswSubs(),

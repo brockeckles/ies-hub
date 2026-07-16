@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 globalThis.window = globalThis.window || { location: { hostname: '', pathname: '/', search: '' } };
 
-const shellW = await import('./tools/warehouse-sizing/shell-w.js?v=20260716-w4a');
+const shellW = await import('./tools/warehouse-sizing/shell-w.js?v=20260716-w7a');
 const { SHELLS, getShellPref, setShellPref, W_STATIONS, stationForSection, renderShellW, updateWRail } = shellW;
 
 const uiSrc = readFileSync('./tools/warehouse-sizing/ui.js', 'utf8');
@@ -30,9 +30,9 @@ function eq(actual, expected, label = '') {
 
 console.log('\n── 1. shell preference ─────────────────────────────────────');
 
-t('classic is the DEFAULT until the W7 flip (mutation-probe protection)', () => {
+t('the station shell is the DEFAULT after the W7 flip (mutation-probe protection)', () => {
   eq(SHELLS, ['classic', 'w'], 'SHELLS');
-  eq(getShellPref(), 'classic', 'default');
+  eq(getShellPref(), 'w', 'default');
 });
 
 t('set/get round-trip via the node-safe store; invalid values ignored', () => {
@@ -170,6 +170,29 @@ t('scroll consume is one-shot and pre-render-reset (state-reset ordering class)'
   const consume = fn.indexOf("_wswScrollSel = ''");
   const firstCase = fn.indexOf("case 'basis'");
   assert(consume !== -1 && consume < firstCase, 'selector consumed before section renders');
+});
+
+console.log('\n── 6. W7 — flip + Quick tier under the shell ───────────────');
+
+t('spine + subnav honor a stations subset (Quick = Building only)', () => {
+  const qhtml = renderShellW({
+    facilityName: 'T', modeLabel: 'Design', stateName: 'draft',
+    activeStation: 'building', activeSection: 'dashboard',
+    stations: W_STATIONS.filter(st => st.key === 'building'),
+    sections: [{ key: 'dashboard', label: 'Dashboard' }, { key: '3d', label: '3D View' }],
+    actions: [], subs: {},
+  });
+  assert(qhtml.includes('data-wsw-station="building"'), 'building station');
+  for (const k of ['data', 'storage', 'flow', 'basis']) {
+    assert(!qhtml.includes(`data-wsw-station="${k}"`), `no ${k} station in quick`);
+  }
+  const pills = [...qhtml.matchAll(/wsw-pill[^>]*data-tc-section="([^"]+)"/g)].map(m => m[1]);
+  eq(pills.sort(), ['3d', 'dashboard'], 'quick pills only');
+});
+
+t('ui.js passes the quick subset + quick sections to the shell', () => {
+  assert(/stations: _quick \? W_STATIONS\.filter\(st => st\.key === 'building'\) : W_STATIONS,/.test(uiSrc), 'stations subset');
+  assert(/sections: _quick \? WSC_QUICK_SECTIONS : WSC_SECTIONS,\n    activeSection/.test(uiSrc), 'quick sections into shell opts');
 });
 
 console.log(`\n\ntest-wsc-shell-w: ${passed} passed, ${failed} failed.`);

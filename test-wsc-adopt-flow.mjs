@@ -15,7 +15,7 @@ const { planFingerprint, adoptStatus, adoptSummary, buildAdoptModel, ADOPT_CHAIN
 const { computeSparseProfile } = await import('./tools/warehouse-sizing/profile-calc.js?v=20260704-n1a');
 const { selectMedia } = await import('./tools/warehouse-sizing/media-calc.js?v=20260704-n3a');
 const { computeDynamics } = await import('./tools/warehouse-sizing/dynamics-calc.js?v=20260705-mhe1');
-const basis = await import('./tools/warehouse-sizing/ui-basis.js?v=20260716-w5a');
+const basis = await import('./tools/warehouse-sizing/ui-basis.js?v=20260716-w7a');
 const { renderBasisView, computeAdoptStatuses } = basis;
 
 const uiSrc = readFileSync('./tools/warehouse-sizing/ui.js', 'utf8');
