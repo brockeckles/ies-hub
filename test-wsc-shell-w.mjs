@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 globalThis.window = globalThis.window || { location: { hostname: '', pathname: '/', search: '' } };
 
-const shellW = await import('./tools/warehouse-sizing/shell-w.js?v=20260716-w7a');
+const shellW = await import('./tools/warehouse-sizing/shell-w.js?v=20260716-w7b');
 const { SHELLS, getShellPref, setShellPref, W_STATIONS, stationForSection, renderShellW, updateWRail } = shellW;
 
 const uiSrc = readFileSync('./tools/warehouse-sizing/ui.js', 'utf8');
@@ -188,6 +188,15 @@ t('spine + subnav honor a stations subset (Quick = Building only)', () => {
   }
   const pills = [...qhtml.matchAll(/wsw-pill[^>]*data-tc-section="([^"]+)"/g)].map(m => m[1]);
   eq(pills.sort(), ['3d', 'dashboard'], 'quick pills only');
+});
+
+t('drawer header follows the tier (w7b: Quick Size under quick)', () => {
+  const qhtml = renderShellW({
+    facilityName: 'T', modeLabel: 'Design', stateName: 'draft', activeStation: 'building',
+    activeSection: 'dashboard', sections: [], actions: [], subs: {}, drawerTitle: 'Quick Size',
+  });
+  assert(qhtml.includes('>Quick Size</div>'), 'quick title renders');
+  assert(/drawerTitle: _quick \? 'Quick Size' : 'Configure',/.test(uiSrc), 'ui.js wires the tier');
 });
 
 t('ui.js passes the quick subset + quick sections to the shell', () => {

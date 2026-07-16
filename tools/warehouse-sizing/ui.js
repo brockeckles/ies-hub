@@ -28,7 +28,7 @@ import { buildDesignBasisModel, renderDesignBasisHtml } from './basis-doc.js?v=2
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { deriveRequirement } from './requirement-seam.js?v=20260715-w1a';
 import { buildRailInspector, renderInspectorHtml } from './rail-inspector.js?v=20260715-w3a';
-import { renderShellW, updateWRail, getShellPref as getWShellPref, setShellPref as setWShellPref, stationForSection as wStationForSection, W_STATIONS } from './shell-w.js?v=20260716-w7a';
+import { renderShellW, updateWRail, getShellPref as getWShellPref, setShellPref as setWShellPref, stationForSection as wStationForSection, W_STATIONS } from './shell-w.js?v=20260716-w7b';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260710-r2';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
 import { wscExtraStyles } from './ui-styles.js?v=20260710-r2';
@@ -411,6 +411,7 @@ function _buildWShellOpts() {
       : (wStationForSection(activeView)?.key || 'data');
   return {
     stations: _quick ? W_STATIONS.filter(st => st.key === 'building') : W_STATIONS,
+    drawerTitle: _quick ? 'Quick Size' : 'Configure',
     facilityName: facility.name || 'New Facility',
     modeLabel: (facility.sizingMode || 'design') === 'constraint' ? 'Constraint' : 'Design',
     stateName: classic.stateName || (!facility.id ? 'draft' : (isDirty ? 'modified' : 'saved')),

@@ -123,7 +123,9 @@ export function renderShellW(opts) {
       renderWSpine(opts) +
     '</div>' +
     '<div class="wsw-drawer">' +
-      '<div class="wsw-drawerhd">Configure</div>' +
+      // w7b walk find: drawer header said 'Configure' under Quick while
+      // classic says 'Quick Size' — the header follows the tier now.
+      '<div class="wsw-drawerhd">' + escapeHtml(opts.drawerTitle || 'Configure') + '</div>' +
       '<div id="wsc-config"></div>' +
     '</div>' +
     '<div class="wsw-center">' +

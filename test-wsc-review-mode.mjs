@@ -13,7 +13,7 @@ globalThis.window = globalThis.window || { location: { hostname: '', pathname: '
 const { buildDesignBasisModel, renderDesignBasisHtml } = await import('./tools/warehouse-sizing/basis-doc.js?v=20260716-w7a');
 const { computeSparseProfile } = await import('./tools/warehouse-sizing/profile-calc.js?v=20260704-n1a');
 const { selectMedia } = await import('./tools/warehouse-sizing/media-calc.js?v=20260704-n3a');
-const { renderShellW } = await import('./tools/warehouse-sizing/shell-w.js?v=20260716-w7a');
+const { renderShellW } = await import('./tools/warehouse-sizing/shell-w.js?v=20260716-w7b');
 
 const uiSrc = readFileSync('./tools/warehouse-sizing/ui.js', 'utf8');
 const evSrc = readFileSync('./tools/warehouse-sizing/ui-shell-events.js', 'utf8');
