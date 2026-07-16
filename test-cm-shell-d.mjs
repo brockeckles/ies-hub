@@ -25,7 +25,7 @@ globalThis.window = globalThis.window || { location: { hostname: '', pathname: '
 
 // ?v= pin MUST match ui.js's import (feedback_test_cache_bust_match — a
 // mismatched pin loads a SECOND module instance with its own state).
-const shellD = await import('./tools/cost-model/shell-d.js?v=20260714-a2');
+const shellD = await import('./tools/cost-model/shell-d.js?v=20260716-w7c');
 const { getShellPref, setShellPref, D_STATIONS, stationForSection, renderShellD, renderDSpine,
         renderDScenarioRow, updateDRail, RAIL_ROW_KEYS, WHATIF_BY_CELL, railWhatIfSection,
         whatIfKeysForCell } = shellD;
@@ -498,8 +498,9 @@ t('essentials: assumptions is an economics essential (pill no longer vanishes)',
   assert(ESSENTIALS_BY_STATION.economics.includes('assumptions'),
     'assumptions missing from economics essentials');
   const econ = D_STATIONS.find(st => st.key === 'economics');
-  // Active on facility (another economics pill) — assumptions must still show.
-  const vis = sectionsForDepth(econ, 'essentials', 'facility');
+  // Active on financial (another economics pill) — assumptions must still
+  // show. (Was 'facility' until it moved to Operation, 2026-07-16.)
+  const vis = sectionsForDepth(econ, 'essentials', 'financial');
   assert(vis.includes('assumptions'), 'assumptions pill dropped when another economics section is active');
 });
 
@@ -507,6 +508,17 @@ t('essentials: assumptions is an economics essential (pill no longer vanishes)',
 t('operation station: flow pill leads (define the flow, then staff it)', () => {
   const op = D_STATIONS.find(s => s.key === 'operation');
   assert(op.sections[0] === 'flow' && op.sections[1] === 'labor', 'flow must precede labor');
+});
+
+// ---- 2026-07-16 (Brock): facility rides Operation, not Economics ----
+t('facility lives in Operation (before equipment); gone from Economics', () => {
+  const op = D_STATIONS.find(s => s.key === 'operation');
+  assert(op.sections.includes('facility'), 'operation owns facility');
+  assert(op.sections.indexOf('facility') < op.sections.indexOf('equipment'), 'facility precedes equipment');
+  const econ = D_STATIONS.find(s => s.key === 'economics');
+  assert(!econ.sections.includes('facility'), 'economics no longer lists facility');
+  assert(stationForSection('facility').key === 'operation', 'lookup follows');
+  assert(ESSENTIALS_BY_STATION.operation.includes('facility'), 'facility stays essential (std Building coverage)');
 });
 
 t('ui.js: OFP drop-to-connect gesture retired — card drops MOVE the line', () => {

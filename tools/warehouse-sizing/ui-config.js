@@ -80,7 +80,7 @@ export function renderConfigHtml(ctx) {
          ────────────────────────────────────────────────────────────────── -->
     <div class="wsc-config-section wsc-step" data-step="1">
       <div class="wsc-step-header u-row u-mb-2">
-        <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,var(--ies-blue));color:#fff;font-size:11px;font-weight:700;">1</span>
+        <span class="wsc-step-num" style="display:inline-flex;flex:none;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,var(--ies-blue));color:#fff;font-size:11px;font-weight:700;">1</span>
         <span class="wsc-step-title wsc-section-title">Demand &amp; Inventory Profile</span>
         ${ctx.facility.parent_cost_model_id ? `<button class="hub-btn hub-btn-ghost hub-btn-sm" data-action="wsc-pull-from-cm" title="Re-pull volume defaults from the linked Cost Model." style="font-weight:500;margin-left:auto;">↻ Pull from CM</button>` : ''}
       </div>
@@ -314,7 +314,7 @@ export function renderConfigHtml(ctx) {
          ────────────────────────────────────────────────────────────────── -->
     <div class="wsc-config-section wsc-step" data-step="2">
       <div class="wsc-step-header u-row u-mb-2">
-        <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,var(--ies-blue));color:#fff;font-size:11px;font-weight:700;">2</span>
+        <span class="wsc-step-num" style="display:inline-flex;flex:none;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,var(--ies-blue));color:#fff;font-size:11px;font-weight:700;">2</span>
         <span class="wsc-step-title wsc-section-title">Unit Load &amp; Carton</span>
       </div>
 
@@ -418,7 +418,7 @@ export function renderConfigHtml(ctx) {
          ────────────────────────────────────────────────────────────────── -->
     <div class="wsc-config-section wsc-step" data-step="3">
       <div class="wsc-step-header u-row u-mb-2">
-        <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,var(--ies-blue));color:#fff;font-size:11px;font-weight:700;">3</span>
+        <span class="wsc-step-num" style="display:inline-flex;flex:none;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,var(--ies-blue));color:#fff;font-size:11px;font-weight:700;">3</span>
         <span class="wsc-step-title wsc-section-title">Operating Strategy</span>
       </div>
 
@@ -503,7 +503,7 @@ export function renderConfigHtml(ctx) {
          ────────────────────────────────────────────────────────────────── -->
     <div class="wsc-config-section wsc-step" data-step="4">
       <div class="wsc-step-header u-row u-mb-2">
-        <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,var(--ies-blue));color:#fff;font-size:11px;font-weight:700;">4</span>
+        <span class="wsc-step-num" style="display:inline-flex;flex:none;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-blue,var(--ies-blue));color:#fff;font-size:11px;font-weight:700;">4</span>
         <span class="wsc-step-title wsc-section-title">Dock &amp; Support</span>
       </div>
 
@@ -603,7 +603,7 @@ export function renderConfigHtml(ctx) {
          ────────────────────────────────────────────────────────────────── -->
     <div class="wsc-config-section wsc-step" data-step="5">
       <div class="wsc-step-header u-row u-mb-2">
-        <span class="wsc-step-num" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-gray-500);color:#fff;font-size:11px;font-weight:700;">5</span>
+        <span class="wsc-step-num" style="display:inline-flex;flex:none;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ies-gray-500);color:#fff;font-size:11px;font-weight:700;">5</span>
         <span class="wsc-step-title wsc-section-title">${mode === 'constraint' ? 'Capacity Check' : 'Sized Facility'}</span>
       </div>
       ${(() => {

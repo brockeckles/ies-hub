@@ -34,7 +34,7 @@ import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { computeAll } from './compute-all.js?v=20260714-a3';
-import * as shellD from './shell-d.js?v=20260714-a2';
+import * as shellD from './shell-d.js?v=20260716-w7c';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
 import * as stationEco from './station-economics.js?v=20260713-m5d';
 import * as stationPrice from './station-price.js?v=20260713-m5g';
@@ -12313,7 +12313,7 @@ function _launchToTool(target) {
       // state. Invisible to the cache-bust guard because the './tools/...'
       // path resolves module-relative in the scanner but page-relative at
       // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260716-w7b',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260716-w7c',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {

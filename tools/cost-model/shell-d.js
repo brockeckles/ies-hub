@@ -80,10 +80,15 @@ export function setShellPref(shell) {
 export const D_STATIONS = [
   { key: 'deal',      num: 1, name: 'Deal',      sections: ['setup', 'linked'] },
   { key: 'volume',    num: 2, name: 'Volume',    sections: ['volumes'] },
+  // 2026-07-16 (Brock): 'facility' rides Operation, not Economics — the
+  // building the operation runs in belongs with the people and equipment
+  // that run it (the Operation sub already summarizes its areas). Flow-first
+  // ruling preserved: flow → labor lead; facility sits with the physical
+  // resources (before equipment — equipment counts derive from areas/aisles).
   { key: 'operation', num: 3, name: 'Operation',
-    sections: ['flow', 'labor', 'shiftPlanning', 'shifts', 'equipment', 'vas', 'implementation'] },
+    sections: ['flow', 'labor', 'shiftPlanning', 'shifts', 'facility', 'equipment', 'vas', 'implementation'] },
   { key: 'economics', num: 4, name: 'Economics',
-    sections: ['facility', 'overhead', 'startup', 'financial', 'assumptions', 'summary', 'timeline', 'whatif'] },
+    sections: ['overhead', 'startup', 'financial', 'assumptions', 'summary', 'timeline', 'whatif'] },
   { key: 'price',     num: 5, name: 'Price',     sections: ['pricingBuckets', 'pricing', 'scenarios'] },
 ];
 
@@ -106,11 +111,13 @@ export function stationForSection(sectionKey) {
 export const ESSENTIALS_BY_STATION = {
   deal:      ['setup'],
   volume:    ['volumes'],
-  operation: ['labor'],
+  // 2026-07-16 — facility moved here from economics (Brock); stays an
+  // essential (retired Standard spine's 'Building' step coverage).
+  operation: ['labor', 'facility'],
   // 2026-07-14 (Brock): 'assumptions' is an essential — without it the pill
   // only survived via the union rule while ACTIVE, so it vanished the moment
   // the user clicked any other economics pill.
-  economics: ['facility', 'financial', 'assumptions', 'summary'],
+  economics: ['financial', 'assumptions', 'summary'],
   price:     ['pricing'],
 };
 
