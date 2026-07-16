@@ -23,7 +23,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260715-w1a';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260710-r2';
 import { renderDashboard } from './ui-dashboard.js?v=20260715-w1a';
-import { renderBasisView, resetBasisState } from './ui-basis.js?v=20260716-w4a';
+import { renderBasisView, resetBasisState, computeAdoptStatuses } from './ui-basis.js?v=20260716-w5a';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { deriveRequirement } from './requirement-seam.js?v=20260715-w1a';
 import { buildRailInspector, renderInspectorHtml } from './rail-inspector.js?v=20260715-w3a';
@@ -420,15 +420,38 @@ function _buildWShellOpts() {
 /** W4 — spine one-liners, shared by the shell build and the surgical
  *  KPI-cadence refresh (_refreshWswSubs). */
 function _wswSubs() {
+  // W5 — subs speak the Adopt language and surface staleness: an adopted
+  // plan that no longer matches its fresh derivation reads STALE (adopt
+  // model is data-driven — no persisted flags, works on pre-W5 scenarios).
+  const st = _wswAdoptStatuses();
+  const tag = (k) => (st && st[k] === 'stale') ? 'STALE' : 'adopted';
   return {
     data: profile ? `${(profile.skuCount || 0).toLocaleString()} SKU · ${profile.mode}` : 'No profile yet',
-    storage: mediaPlan ? `${(mediaPlan.totals?.positions || 0).toLocaleString()} pos · applied` : 'Not applied',
+    storage: mediaPlan ? `${(mediaPlan.totals?.positions || 0).toLocaleString()} pos · ${tag('media')}` : 'Not adopted',
     flow: dynamicsPlan
-      ? `${(dynamicsPlan.docks?.inbound?.doors || 0) + (dynamicsPlan.docks?.outbound?.doors || 0)} doors · applied`
-      : 'Not applied',
+      ? `${(dynamicsPlan.docks?.inbound?.doors || 0) + (dynamicsPlan.docks?.outbound?.doors || 0)} doors · ${tag('dynamics')}`
+      : 'Not adopted',
     building: `${facility.clearHeight || 0} ft clear`,
     basis: pinnedFactors ? 'Catalog pinned' : 'Catalog unpinned',
   };
+}
+
+/** W5 — adopt statuses via ui-basis (it owns the card policies); null under
+ *  classic or on any compute hiccup — subs then fall back to 'adopted'. */
+function _wswAdoptStatuses() {
+  if (getWShellPref() !== 'w') return null;
+  try {
+    return computeAdoptStatuses({
+      getProfile: () => profile,
+      getPinnedFactors: () => pinnedFactors,
+      getMediaPlan: () => mediaPlan,
+      getDynamicsPlan: () => dynamicsPlan,
+      getLayoutPlan: () => layoutPlan,
+      getVolumes: () => volumes,
+      getFacility: () => facility,
+      getZones: () => zones,
+    });
+  } catch { return null; }
 }
 
 /** W4 — surgical spine-sub refresh on the KPI cadence: Apply under a face

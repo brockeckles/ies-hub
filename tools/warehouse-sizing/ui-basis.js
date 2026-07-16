@@ -26,6 +26,7 @@ import { selectMedia } from './media-calc.js?v=20260704-n3a';
 import { computeDynamics } from './dynamics-calc.js?v=20260705-mhe1';
 import { synthesizeLayout } from './layout-calc.js?v=20260705-mhe1';
 import { buildDesignBasisModel, renderDesignBasisHtml } from './basis-doc.js?v=20260710-r3';
+import { adoptStatus, adoptSummary, ADOPT_DOWNSTREAM, ADOPT_BUTTON_LABEL } from './adopt-calc.js?v=20260716-w5a';
 
 // ── Module state (session-scoped; raw rows never persisted) ──
 /** Parsed datasets awaiting/backing the profile. */
@@ -42,6 +43,9 @@ let _rotationPolicy = 'none';
 let _dynPolicy = { arrivalWindowHrs: 8, dwellDaysIn: 1, dwellDaysOut: 0.5, mheStorageType: null };
 /** N5 — flue standard toggle (null = catalog default, currently FM). */
 let _flueStd = null;
+/** W5 — active station face (null under classic). Set on every render;
+ *  gates the Apply→Adopt swap so classic stays byte-identical. */
+let _faceMode = null;
 
 const SLOTS = [
   { key: 'skuMaster', label: 'SKU Master',         roles: SKU_MASTER_ROLES, hint: 'Item #, units/case, Ti×Hi, case dims' },
@@ -97,6 +101,7 @@ export function renderBasisView(container, ctx) {
   // W4 — classic (no face) renders every card, unchanged. A face renders
   // only its own cards; unknown face values fall back to the full stack.
   const face = FACE_CARDS[ctx.face] ? ctx.face : null;
+  _faceMode = face;   // W5 — cards swap Apply buttons for Adopt bars under a face
   const has = (k) => !face || FACE_CARDS[face].includes(k);
   container.innerHTML = `
     <div style="max-width:1080px;">
@@ -489,9 +494,9 @@ function _renderMediaCard(profile, ctx) {
               <option value="fifo_strict"${_rotationPolicy === 'fifo_strict' ? ' selected' : ''}>Strict FIFO / lot control</option>
             </select>
           </label>
-          <button class="hub-btn hub-btn-sm hub-btn-primary" id="wsc-media-apply"
+          ${_faceMode ? '' : `<button class="hub-btn hub-btn-sm hub-btn-primary" id="wsc-media-apply"
                   title="Persist this plan and set the design's storage mix from it. The mix stays editable in Configure.">
-            ${isApplied ? 'Re-apply to design' : 'Apply to design'}</button>
+            ${isApplied ? 'Re-apply to design' : 'Apply to design'}</button>`}
         </div>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
@@ -539,6 +544,7 @@ function _renderMediaCard(profile, ctx) {
       <div style="font-size:10px;color:var(--ies-gray-500);margin-top:8px;">
         Hover any row for the full selection audit (candidates considered, Rule-of-3 checks, rejections). Factor citations ride each band into the Design Basis doc.
       </div>
+      ${_renderAdoptBar('media', plan, applied)}
     </div>
   `;
 }
@@ -614,9 +620,9 @@ function _renderDynamicsCard(profile, ctx) {
               <option value="counterbalance"${_dynPolicy.mheStorageType === 'counterbalance' ? ' selected' : ''}>Counterbalance</option>
             </select>
           </label>
-          <button class="hub-btn hub-btn-sm hub-btn-primary" id="wsc-dyn-apply"
+          ${_faceMode ? '' : `<button class="hub-btn hub-btn-sm hub-btn-primary" id="wsc-dyn-apply"
                   title="Persist this plan and write dock doors, staging SF, and the governing storage aisle into the design.">
-            ${isApplied ? 'Re-apply to design' : 'Apply to design'}</button>
+            ${isApplied ? 'Re-apply to design' : 'Apply to design'}</button>`}
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">
@@ -652,6 +658,7 @@ function _renderDynamicsCard(profile, ctx) {
       ${plan.gaps.length ? plan.gaps.map(g => `
         <div style="font-size:10.5px;color:${g.severity === 'warn' ? 'var(--c-warn-deep)' : 'var(--ies-gray-500)'};margin-top:4px;">
           ${g.severity === 'warn' ? '⚠' : 'ℹ'} ${esc(g.message)}</div>`).join('') : ''}
+      ${_renderAdoptBar('dynamics', plan, applied)}
     </div>
   `;
 }
@@ -725,9 +732,9 @@ function _renderLayoutCard(ctx) {
               <option value="NFPA"${_flueStd === 'NFPA' ? ' selected' : ''}>NFPA 13</option>
             </select>
           </label>
-          <button class="hub-btn hub-btn-sm hub-btn-primary" id="wsc-layout-apply"
+          ${_faceMode ? '' : `<button class="hub-btn hub-btn-sm hub-btn-primary" id="wsc-layout-apply"
                   title="Persist this plan; writes the recommended column grid and raises flue space to the standard's minimum (never shrinks it).">
-            ${isApplied ? 'Re-apply to design' : 'Apply to design'}</button>
+            ${isApplied ? 'Re-apply to design' : 'Apply to design'}</button>`}
         </div>
       </div>
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:3px;">Column grid ↔ rack-bay fit</div>
@@ -751,6 +758,7 @@ function _renderLayoutCard(ctx) {
       ${plan.gaps.map(gp => `
         <div style="font-size:10.5px;color:${gp.severity === 'warn' ? 'var(--c-warn-deep)' : 'var(--ies-gray-500)'};margin-top:4px;">
           ${gp.severity === 'warn' ? '⚠' : 'ℹ'} ${esc(gp.message)}</div>`).join('')}
+      ${_renderAdoptBar('layout', plan, applied)}
     </div>
   `;
 }
@@ -850,8 +858,91 @@ async function _renderFactorsCard(el, ctx) {
 // EVENTS
 // ============================================================
 
+// ============================================================
+// ADOPT-FLOW (W5) — one decision per stage, downstream re-derives
+// ============================================================
+
+/** W5 — Adopt bar under a station face (classic keeps its Apply button).
+ *  status current → slim in-sync line; pending/stale → the orange bar. */
+function _renderAdoptBar(kind, fresh, applied) {
+  if (!_faceMode) return '';
+  const status = adoptStatus(kind, applied, fresh);
+  if (status === 'none') return '';
+  if (status === 'current') {
+    return `<div data-wsw-adopt-state="current" style="margin-top:10px;font-size:11px;font-weight:600;color:var(--c-success-ink);">✓ Adopted — in sync with the design.</div>`;
+  }
+  const summary = adoptSummary(kind, fresh || applied);
+  const down = ADOPT_DOWNSTREAM[kind] || [];
+  const note = status === 'stale'
+    ? `Design adopted an older derivation — <b>out of sync</b>. Re-adopt to sync${down.length ? ' (adopted downstream stations re-derive too)' : ''}.`
+    : (down.length ? 'Adopted downstream stations re-derive automatically.' : 'Writes the recommended grid and flue standard into the design.');
+  return `
+    <div data-wsw-adopt-state="${status}" style="display:flex;align-items:center;gap:10px;background:#fff7ed;border:1px solid #fed7c9;border-radius:10px;padding:10px 14px;margin-top:12px;font-size:12px;">
+      <span>➜</span>
+      <div style="flex:1;">This plan sets the design requirement: <b>${esc(summary)}</b>.<br>
+        <span style="color:var(--ies-gray-500);font-size:11px;">${note}</span></div>
+      <button class="hub-btn hub-btn-sm hub-btn-primary" data-wsw-adopt="${kind}"
+              title="Apply this derivation to the design${down.length ? ' and re-derive adopted downstream stages' : ''}.">
+        ${ADOPT_BUTTON_LABEL[kind]}</button>
+    </div>`;
+}
+
+/** W5 — the one-decision cascade. Adopting a stage applies its FRESH
+ *  derivation, then re-derives every DOWNSTREAM stage that was already
+ *  adopted. Order is the chain order — each step reads the previous step's
+ *  output through the ctx live getters, so the cascade is correct by
+ *  construction. Un-adopted downstream stages stay un-adopted (the user
+ *  hasn't made that call yet). */
+function _adopt(kind, ctx) {
+  const doMedia = () => {
+    const p = selectMedia({ profile: ctx.getProfile(), pinnedFactors: ctx.getPinnedFactors?.(), policy: { rotation: _rotationPolicy } });
+    if (p) ctx.applyMediaPlan(p);
+    return !!p;
+  };
+  const doDyn = () => {
+    const p = _computeDynPreview(ctx);
+    if (p) ctx.applyDynamicsPlan(p);
+    return !!p;
+  };
+  const doLay = () => { ctx.applyLayoutPlan(_computeLayoutPreview(ctx)); return true; };
+  const dynAdopted = !!ctx.getDynamicsPlan?.();
+  const layAdopted = !!ctx.getLayoutPlan?.();
+  const redone = [];
+  if (kind === 'media') {
+    if (!doMedia()) { ctx.toast?.('Nothing to adopt — profile lacks a depth signal.', 'error'); return; }
+    if (dynAdopted && doDyn()) redone.push('Flow');
+    if (layAdopted && doLay()) redone.push('Building layout');
+  } else if (kind === 'dynamics') {
+    if (!doDyn()) { ctx.toast?.('Nothing to adopt — missing a flow signal.', 'error'); return; }
+    if (layAdopted && doLay()) redone.push('Building layout');
+  } else if (kind === 'layout') {
+    doLay();
+  } else return;
+  ctx.rerender();
+  ctx.toast?.(`Adopted the ${kind} derivation${redone.length ? ' — re-derived ' + redone.join(' + ') : ''}.`, 'success');
+}
+
+/** W5 — adopt statuses for the spine subs (ui.js). Fresh previews use the
+ *  SAME policies the cards use (module state), so status here always agrees
+ *  with the bar the user sees. */
+export function computeAdoptStatuses(ctx) {
+  const profile = ctx.getProfile();
+  const freshMedia = profile
+    ? selectMedia({ profile, pinnedFactors: ctx.getPinnedFactors?.(), policy: { rotation: _rotationPolicy } })
+    : null;
+  return {
+    media: adoptStatus('media', ctx.getMediaPlan?.(), freshMedia),
+    dynamics: adoptStatus('dynamics', ctx.getDynamicsPlan?.(), _computeDynPreview(ctx)),
+    layout: adoptStatus('layout', ctx.getLayoutPlan?.(), _computeLayoutPreview(ctx)),
+  };
+}
+
 function _bindEvents(container, ctx) {
   const fileInput = container.querySelector('#wsc-basis-file');
+  // W5 — Adopt bars (station faces only; classic keeps per-card Apply)
+  container.querySelectorAll('[data-wsw-adopt]').forEach(btn => {
+    btn.addEventListener('click', () => _adopt(btn.dataset.wswAdopt, ctx));
+  });
   _bindMediaEvents(container, ctx);   // N3 — rotation select + Apply
   _bindDynamicsEvents(container, ctx);   // N4 — policy inputs + Apply
   _bindLayoutEvents(container, ctx);   // N5 — flue toggle + Apply
