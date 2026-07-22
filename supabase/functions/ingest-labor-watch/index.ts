@@ -136,7 +136,25 @@ async function ingestItems(sb, items, fallbackLoc, severity, cutoffStr, counters
   }
 }
 
-Deno.serve(async (_req) => {
+Deno.serve(async (req) => {
+  // ── Auth gate (C5, 2026-07-22) ──
+  // verify_jwt=false (pg_cron/pg_net caller has no user JWT), which left this
+  // open to header-less internet drive-bys — anyone could trigger fetch/prune
+  // storms against Google News and union_activity. Require
+  // `Authorization: Bearer <key>`: the anon-key gate stops header-less
+  // drive-bys; a dedicated INGEST_SECRET dashboard env var is the hardening
+  // follow-up (set INGEST_SECRET + update the cron job's header — no code
+  // redeploy needed).
+  const ingestSecret = Deno.env.get('INGEST_SECRET');
+  const expectedToken = ingestSecret || Deno.env.get('SUPABASE_ANON_KEY') || '';
+  const bearer = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+  if (!expectedToken || bearer !== expectedToken) {
+    return new Response(JSON.stringify({ error: 'unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
   const sb = createClient(SUPABASE_URL, SERVICE_KEY);
   const counters = { inserted: 0, stale: 0, noise: 0, errors: [] as string[] };
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 90);

@@ -1,13 +1,13 @@
 /**
  * IES Hub v3 — Feedback System UI
- * User feedback board with voting, filtering, and detail view.
+ * User feedback board with filtering and detail view.
  *
  * @module hub/feedback/ui
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as calc from './calc.js?v=20260418-sK';
-import * as api from './api.js?v=20260430-fb1';
+import * as calc from './calc.js?v=20260722-s4c';
+import * as api from './api.js?v=20260722-s4c';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeHtml as _h, escapeAttr as _a } from '../../shared/escape.js?v=20260702-sec2';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
@@ -24,7 +24,7 @@ let activeView = 'board'; // board | detail
 let activeItem = null;
 let typeFilter = 'all';
 let statusFilter = 'all';
-let sortBy = 'upvotes';
+let sortBy = 'date';
 let items = [];
 
 export async function mount(el) {
@@ -33,7 +33,7 @@ export async function mount(el) {
   activeItem = null;
   typeFilter = 'all';
   statusFilter = 'all';
-  sortBy = 'upvotes';
+  sortBy = 'date';
   // Render shell first (with a loading state) so the user sees something.
   render();
   bindDelegatedEvents();
@@ -110,12 +110,11 @@ function renderBoard(el) {
         <button class="hub-btn hub-btn-sm ${t === typeFilter ? '' : 'hub-btn-secondary'}" data-type-filter="${t}">${t === 'all' ? 'All' : _typeIcon(t) + ' ' + t}</button>
       `).join('')}
       <span style="margin-left:12px;font-size:11px;font-weight:700;color:var(--ies-gray-400);">Status:</span>
-      ${['all', 'open', 'in-progress', 'completed'].map(s => `
+      ${['all', 'open', 'in-review', 'in-progress', 'completed', 'declined'].map(s => `
         <button class="hub-btn hub-btn-sm ${s === statusFilter ? '' : 'hub-btn-secondary'}" data-status-filter="${s}">${s === 'all' ? 'All' : s}</button>
       `).join('')}
       <span style="margin-left:auto;font-size:11px;color:var(--ies-gray-400);">Sort by:</span>
       <select id="fb-sort" class="hub-select" style="width:auto;height:auto;padding:4px 26px 4px 10px;font-size:12px;">
-        <option value="upvotes" ${sortBy === 'upvotes' ? 'selected' : ''}>Most Voted</option>
         <option value="date" ${sortBy === 'date' ? 'selected' : ''}>Newest</option>
         <option value="priority" ${sortBy === 'priority' ? 'selected' : ''}>Priority</option>
       </select>
@@ -124,10 +123,6 @@ function renderBoard(el) {
       sorted.map(item => `
         <div class="hub-card" style="margin-bottom:10px;padding:14px;cursor:pointer;" data-item="${_a(item.id)}">
           <div style="display:flex;align-items:center;gap:10px;">
-            <div style="display:flex;flex-direction:column;align-items:center;min-width:40px;">
-              <span style="font-size:16px;font-weight:800;color:${item.upvotes >= 8 ? 'var(--c-info)' : 'var(--ies-gray-400)'};">${item.upvotes}</span>
-              <span style="font-size:9px;color:var(--ies-gray-400);">votes</span>
-            </div>
             <div style="flex:1;">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
                 <span style="display:inline-flex;">${_typeIcon(item.type)}</span>
@@ -166,7 +161,6 @@ function renderDetail(el) {
         <span>${calc.formatDate(item.submittedDate)}</span>
         <span>Tool: ${_h(item.tool || 'General')}</span>
         <span style="font-weight:700;color:${calc.priorityBadgeColor(item.priority)};">${_h(item.priority)} priority</span>
-        <span style="margin-left:auto;font-weight:700;color:var(--c-info);">▲ ${item.upvotes} votes</span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         ${(item.tags || []).map(t => `<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:#f3f4f6;color:var(--c-muted);">${_h(t)}</span>`).join('')}

@@ -1,6 +1,6 @@
 /**
  * IES Hub v3 — Admin Panel API / Persistence
- * Supabase interactions for master data, users, escalations, and audit log.
+ * Supabase interactions for master data, invites, user activity, and audit log.
  *
  * @module hub/admin/api
  */
@@ -97,90 +97,14 @@ export async function deleteMasterRecord(tableName, id) {
 }
 
 // ============================================================
-// USERS
+// USERS / ESCALATION RULES — removed (C5, 2026-07-22)
 // ============================================================
-
-/**
- * List user accounts.
- * @returns {Promise<import('./types.js?v=20260418-sP').UserAccount[]>}
- */
-export async function listUsers() {
-  // 2026-06-10 (assessment hub #13): was querying 'user_accounts' — a table
-  // that exists in ZERO of 122 migrations. The real table is 'profiles'
-  // (phase3_01_profiles_teams). Mapped to the legacy UserAccount shape so
-  // existing render code keeps working.
-  const { data, error } = await db.from('profiles')
-    .select('id, email, full_name, role, team_id, created_at')
-    .order('full_name');
-  if (error) throw error;
-  return (data || []).map(r => ({
-    id: r.id,
-    display_name: r.full_name || r.email,
-    email: r.email,
-    role: r.role,
-    team_id: r.team_id,
-    active: true, // profiles carries no active flag; deactivation = auth-level ban (not exposed here)
-    created_at: r.created_at,
-  }));
-}
-
-/**
- * Update user role or active status.
- * @param {string} id
- * @param {{ role?: string, active?: boolean }} updates
- * @returns {Promise<void>}
- */
-export async function updateUser(id, updates) {
-  // 2026-06-10: real table is 'profiles'. Only role changes are supported —
-  // and they are enforced server-side by the role-immutability trigger
-  // (admin JWT required), so a non-admin calling this gets a 42501.
-  const allowed = {};
-  if (updates && updates.role != null) allowed.role = updates.role;
-  if (Object.keys(allowed).length === 0) return;
-  await db.update('profiles', id, allowed);
-}
-
-// ============================================================
-// ESCALATION RULES
-// ============================================================
-
-/**
- * List escalation rules.
- * @returns {Promise<import('./types.js?v=20260418-sP').EscalationRule[]>}
- */
-export async function listEscalations() {
-  const { data, error } = await db.from('escalation_rules').select('*').order('created_at');
-  if (error) throw error;
-  return data || [];
-}
-
-/**
- * Save (insert or update) an escalation rule.
- * @param {import('./types.js?v=20260418-sP').EscalationRule} rule
- * @returns {Promise<any>}
- */
-export async function saveEscalation(rule) {
-  const payload = {
-    name: rule.name,
-    metric: rule.metric,
-    condition: rule.condition,
-    threshold: rule.threshold,
-    severity: rule.severity,
-    active: rule.active,
-    notify_email: rule.notifyEmail || null,
-  };
-  if (rule.id) return db.update('escalation_rules', rule.id, payload);
-  return db.insert('escalation_rules', payload);
-}
-
-/**
- * Delete an escalation rule.
- * @param {string} id
- * @returns {Promise<void>}
- */
-export async function deleteEscalation(id) {
-  await db.remove('escalation_rules', id);
-}
+// listUsers/updateUser: zero callers repo-wide (the Users tab died in
+// Slice 3.15; User Activity queries profiles itself via
+// loadUserActivityInputs). listEscalations/saveEscalation/deleteEscalation:
+// hit an 'escalation_rules' table that exists in NO migration — they could
+// never have worked. When a real escalation engine lands, build its API
+// against an actual migrated table.
 
 // ============================================================
 // AUDIT LOG
@@ -226,14 +150,8 @@ export async function listAuditFacets() {
   return { tables: Array.from(tables).sort(), actions: Array.from(actions).sort() };
 }
 
-/**
- * Write an audit log entry.
- * @param {Omit<import('./types.js?v=20260418-sP').AuditLogEntry, 'id'>} entry
- * @returns {Promise<void>}
- */
-export async function writeAuditEntry(entry) {
-  await db.insert('audit_log', entry);
-}
+// writeAuditEntry removed (C5) — zero callers; audit writes go through
+// shared/audit.js recordAudit(), which stamps actor/session correctly.
 
 // ============================================================
 // INVITES (Slice 3.16)
@@ -357,19 +275,5 @@ export async function loadUserActivityInputs(opts = {}) {
   };
 }
 
-// ============================================================
-// LOAD ALL
-// ============================================================
-
-/**
- * Load all admin data.
- * @returns {Promise<{ users: any[], escalations: any[], auditLog: any[] }>}
- */
-export async function loadRefData() {
-  const [users, escalations, auditLog] = await Promise.all([
-    listUsers(),
-    listEscalations(),
-    listAuditLog(),
-  ]);
-  return { users, escalations, auditLog };
-}
+// loadRefData removed (C5) — dead aggregator over the deleted
+// listUsers/listEscalations; each tab loads its own data directly.

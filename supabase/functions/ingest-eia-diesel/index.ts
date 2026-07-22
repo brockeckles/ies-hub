@@ -6,6 +6,23 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const EIA_API_URL = "https://api.eia.gov/v2/petroleum/pri/gasprice/data/";
 
 Deno.serve(async (req: Request) => {
+  // ── Auth gate (C5, 2026-07-22) ──
+  // verify_jwt=false (pg_cron/pg_net caller has no user JWT), which left this
+  // open to header-less internet drive-bys — anonymous POSTs could upsert
+  // arbitrary rows into fuel_prices. Require `Authorization: Bearer <key>`:
+  // the anon-key gate stops header-less drive-bys; a dedicated INGEST_SECRET
+  // dashboard env var is the hardening follow-up (set INGEST_SECRET + update
+  // the cron job's header — no code redeploy needed).
+  const ingestSecret = Deno.env.get("INGEST_SECRET");
+  const expectedToken = ingestSecret || Deno.env.get("SUPABASE_ANON_KEY") || "";
+  const bearer = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+  if (!expectedToken || bearer !== expectedToken) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -14,18 +31,11 @@ Deno.serve(async (req: Request) => {
 
     const eiaApiKey = Deno.env.get("EIA_API_KEY");
 
-    if (!eiaApiKey) {
-      // If no API key is set yet, return instructions
-      return new Response(JSON.stringify({
-        status: "config_needed",
-        message: "Set EIA_API_KEY in Supabase Edge Function secrets. Get a free key at https://www.eia.gov/opendata/register.php",
-        manual_mode: "You can also POST data directly to this function with { report_date, price_per_gallon }"
-      }), { headers: { "Content-Type": "application/json" } });
-    }
-
-    // Check if this is a manual data push
+    // Check if this is a manual data push. This branch runs BEFORE the
+    // EIA_API_KEY check (C5 fix): the config_needed message below promises
+    // manual mode works, but the old ordering made it unreachable keyless.
     if (req.method === "POST") {
-      const body = await req.json();
+      const body = await req.json().catch(() => ({}));
       if (body.report_date && body.price_per_gallon) {
         // Manual insert mode
         const prevWeek = await supabase
@@ -56,6 +66,15 @@ Deno.serve(async (req: Request) => {
           headers: { "Content-Type": "application/json" }
         });
       }
+    }
+
+    if (!eiaApiKey) {
+      // No API key set and no manual payload: return instructions
+      return new Response(JSON.stringify({
+        status: "config_needed",
+        message: "Set EIA_API_KEY in Supabase Edge Function secrets. Get a free key at https://www.eia.gov/opendata/register.php",
+        manual_mode: "You can also POST data directly to this function with { report_date, price_per_gallon }"
+      }), { headers: { "Content-Type": "application/json" } });
     }
 
     // Auto-fetch from EIA API

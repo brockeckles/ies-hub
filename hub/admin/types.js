@@ -34,11 +34,14 @@
  */
 
 /**
+ * Mirrors public.profiles (phase3_01_profiles_teams): the name column is
+ * `full_name` and the role enum is admin|member — there are no
+ * editor/viewer roles in the real schema.
  * @typedef {Object} UserAccount
  * @property {string} id
  * @property {string} email
- * @property {string} displayName
- * @property {'admin' | 'editor' | 'viewer'} role
+ * @property {string} full_name
+ * @property {'admin' | 'member'} role
  * @property {boolean} active
  * @property {string} [lastLogin]
  * @property {string} [created_at]

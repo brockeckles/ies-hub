@@ -56,7 +56,9 @@ export async function getTemplate(id) {
  * @returns {Promise<import('./types.js?v=20260418-sM').MostTemplate>}
  */
 export async function createTemplate(data) {
-  return db.insert('ref_most_templates', { ...data, is_active: true });
+  const inserted = await db.insert('ref_most_templates', { ...data, is_active: true });
+  recordAudit({ table: 'ref_most_templates', id: inserted?.id, action: 'insert', fields: { activity_name: inserted?.activity_name } }).catch(() => {});
+  return inserted;
 }
 
 /**
@@ -66,7 +68,9 @@ export async function createTemplate(data) {
  * @returns {Promise<import('./types.js?v=20260418-sM').MostTemplate>}
  */
 export async function updateTemplate(id, data) {
-  return db.update('ref_most_templates', id, data);
+  const updated = await db.update('ref_most_templates', id, data);
+  recordAudit({ table: 'ref_most_templates', id, action: 'update', fields: { keys: Object.keys(data || {}) } }).catch(() => {});
+  return updated;
 }
 
 /**
@@ -76,6 +80,8 @@ export async function updateTemplate(id, data) {
  */
 export async function deleteTemplate(id) {
   await db.update('ref_most_templates', id, { is_active: false });
+  // Soft delete (is_active=false) — logged as 'delete' since that's the user intent.
+  recordAudit({ table: 'ref_most_templates', id, action: 'delete', fields: { soft: true } }).catch(() => {});
 }
 
 /**
@@ -84,6 +90,8 @@ export async function deleteTemplate(id) {
  * @returns {Promise<import('./types.js?v=20260418-sM').MostTemplate>}
  */
 export async function duplicateTemplate(id) {
+  // Audit coverage: delegates to createTemplate/createElement, which each
+  // record their own insert — a separate call here would double-log the copy.
   const template = await getTemplate(id);
   if (!template) throw new Error('Template not found');
   const elements = await listElements(id);
@@ -128,7 +136,9 @@ export async function listElements(templateId) {
 export async function createElement(data) {
   // P2-2: sanitize — id is BIGSERIAL; editor-local UUID placeholder ids and
   // UI scratch keys must never reach the insert.
-  return db.insert('ref_most_elements', sanitizeElementForWrite(data));
+  const inserted = await db.insert('ref_most_elements', sanitizeElementForWrite(data));
+  recordAudit({ table: 'ref_most_elements', id: inserted?.id, action: 'insert', fields: { template_id: inserted?.template_id } }).catch(() => {});
+  return inserted;
 }
 
 /**
@@ -139,7 +149,9 @@ export async function createElement(data) {
  */
 export async function updateElement(id, data) {
   // P2-2: sanitize — never write id/created_at back into the row.
-  return db.update('ref_most_elements', id, sanitizeElementForWrite(data));
+  const updated = await db.update('ref_most_elements', id, sanitizeElementForWrite(data));
+  recordAudit({ table: 'ref_most_elements', id, action: 'update', fields: { keys: Object.keys(data || {}) } }).catch(() => {});
+  return updated;
 }
 
 /**
@@ -149,6 +161,7 @@ export async function updateElement(id, data) {
  */
 export async function deleteElement(id) {
   await db.remove('ref_most_elements', id);
+  recordAudit({ table: 'ref_most_elements', id, action: 'delete' }).catch(() => {});
 }
 
 /**
@@ -160,6 +173,10 @@ export async function reorderElements(updates) {
   for (const u of updates) {
     // P2-2 fix: column is sequence_order (writing `sequence` 400'd).
     await db.update('ref_most_elements', u.id, { sequence_order: u.sequence });
+  }
+  // Bulk reorder — one audit row per call, not per element.
+  if (updates.length) {
+    recordAudit({ table: 'ref_most_elements', id: null, action: 'update', fields: { count: updates.length, reorder: true } }).catch(() => {});
   }
 }
 
@@ -192,7 +209,10 @@ export async function createAllowanceProfile(data) {
   };
   const { data: result, error } = await db.from('ref_allowance_profiles').insert(row).select().single();
   if (error) throw error;
-  try { await recordAudit({ entity: 'most_allowance_profile', entityId: String(result.id), action: 'create', meta: { profile_name: row.profile_name } }); } catch (_) {}
+  // C5 fix: the previous audit call used a legacy entity/meta shape that
+  // recordAudit silently ignores (it requires `table`, and the action must be
+  // in the insert|update|delete|link|unlink enum) — it was a silent no-op.
+  recordAudit({ table: 'ref_allowance_profiles', id: result?.id, action: 'insert', fields: { profile_name: row.profile_name } }).catch(() => {});
   return result;
 }
 
@@ -204,7 +224,7 @@ export async function createAllowanceProfile(data) {
 export async function updateAllowanceProfile(id, patch) {
   const { data: result, error } = await db.from('ref_allowance_profiles').update(patch).eq('id', id).select().single();
   if (error) throw error;
-  try { await recordAudit({ entity: 'most_allowance_profile', entityId: String(id), action: 'update', meta: { fields: Object.keys(patch) } }); } catch (_) {}
+  recordAudit({ table: 'ref_allowance_profiles', id, action: 'update', fields: { keys: Object.keys(patch || {}) } }).catch(() => {});
   return result;
 }
 
@@ -215,7 +235,7 @@ export async function updateAllowanceProfile(id, patch) {
 export async function deleteAllowanceProfile(id) {
   const { error } = await db.from('ref_allowance_profiles').delete().eq('id', id);
   if (error) throw error;
-  try { await recordAudit({ entity: 'most_allowance_profile', entityId: String(id), action: 'delete' }); } catch (_) {}
+  recordAudit({ table: 'ref_allowance_profiles', id, action: 'delete' }).catch(() => {});
   return true;
 }
 
@@ -272,7 +292,7 @@ export async function saveAnalysis(analysis) {
 
   if (analysis.id) {
     const updated = await db.update('most_analyses', analysis.id, payload);
-    recordAudit({ table: 'most_analyses', id: analysis.id, action: 'update', fields: { name: payload.name, line_count: (analysis.lines || []).length } });
+    recordAudit({ table: 'most_analyses', id: analysis.id, action: 'update', fields: { name: payload.name, line_count: (analysis.lines || []).length } }).catch(() => {});
     return updated;
   }
   // UX-1 D2 (2026-07-03): stamp new analyses with the active deal context.
@@ -280,7 +300,7 @@ export async function saveAnalysis(analysis) {
   if (_ctx) payload.parent_deal_id = _ctx.id;
   if (_ctx && _ctx.siteId) payload.site_id = _ctx.siteId; // S1: site binding
   const inserted = await db.insert('most_analyses', payload);
-  recordAudit({ table: 'most_analyses', id: inserted?.id, action: 'insert', fields: { name: payload.name, line_count: (analysis.lines || []).length } });
+  recordAudit({ table: 'most_analyses', id: inserted?.id, action: 'insert', fields: { name: payload.name, line_count: (analysis.lines || []).length } }).catch(() => {});
   return inserted;
 }
 
@@ -291,7 +311,7 @@ export async function saveAnalysis(analysis) {
  */
 export async function deleteAnalysis(id) {
   await db.remove('most_analyses', id);
-  recordAudit({ table: 'most_analyses', id, action: 'delete' });
+  recordAudit({ table: 'most_analyses', id, action: 'delete' }).catch(() => {});
 }
 
 /**
@@ -301,6 +321,7 @@ export async function deleteAnalysis(id) {
  */
 export async function linkToCm(analysisId, cmId) {
   await db.update('most_analyses', analysisId, { parent_cost_model_id: cmId });
+  recordAudit({ table: 'most_analyses', id: analysisId, action: 'link', fields: { parent_cost_model_id: cmId } }).catch(() => {});
 }
 
 /**
@@ -309,6 +330,7 @@ export async function linkToCm(analysisId, cmId) {
  */
 export async function unlinkFromCm(analysisId) {
   await db.update('most_analyses', analysisId, { parent_cost_model_id: null });
+  recordAudit({ table: 'most_analyses', id: analysisId, action: 'unlink' }).catch(() => {});
 }
 
 // ============================================================

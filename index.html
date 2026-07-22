@@ -216,7 +216,7 @@
     // Shared UX modules — self-wire their listeners/guards on import.
     import { showToast } from './shared/toast.js?v=20260705-u1a';
     import './shared/error-net.js?v=20260703-net1';  // P3-2 global error net — keep first among side-effect imports
-    import { mountFeedbackFab } from './shared/feedback-fab.js?v=20260430-btn-cleanup';
+    import { mountFeedbackFab } from './shared/feedback-fab.js?v=20260722-s4c';
     import './shared/unsaved-guard.js?v=20260703-p34';
     import { tour } from './shared/tour.js?v=20260722-s4a';
     import { analytics } from './shared/analytics.js?v=20260504-auth1';
@@ -594,8 +594,8 @@
         'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260722-s4b' },
         'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260722-s4a' },
         'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260722-s4b' },
-        'admin': { title: 'Admin', path: './hub/admin/ui.js?v=20260710-r2' },
-        'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260710-r2' },
+        'admin': { title: 'Admin', path: './hub/admin/ui.js?v=20260722-s4c' },
+        'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260722-s4c' },
       };
 
       for (const [route, config] of Object.entries(hubRoutes)) {

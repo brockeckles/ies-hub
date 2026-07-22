@@ -72,6 +72,7 @@ export async function deleteScenario(id) {
   // Delete lanes first (FK constraint)
   await db.from('fleet_lanes').delete().eq('scenario_id', id);
   await db.remove('fleet_scenarios', id);
+  recordAudit({ table: 'fleet_scenarios', id, action: 'delete' }).catch(() => {});
 }
 
 /**
@@ -81,6 +82,7 @@ export async function deleteScenario(id) {
  */
 export async function linkToCm(scenarioId, cmId) {
   await db.update('fleet_scenarios', scenarioId, { parent_cost_model_id: cmId });
+  recordAudit({ table: 'fleet_scenarios', id: scenarioId, action: 'link', fields: { parent_cost_model_id: cmId } }).catch(() => {});
 }
 
 /**
@@ -89,6 +91,7 @@ export async function linkToCm(scenarioId, cmId) {
  */
 export async function unlinkFromCm(scenarioId) {
   await db.update('fleet_scenarios', scenarioId, { parent_cost_model_id: null });
+  recordAudit({ table: 'fleet_scenarios', id: scenarioId, action: 'unlink' }).catch(() => {});
 }
 
 /**
@@ -101,6 +104,7 @@ export async function duplicateScenario(id) {
   if (!scenario) throw new Error('Scenario not found');
   const { id: _, created_at, ...rest } = scenario;
   const copy = await db.insert('fleet_scenarios', { ...rest, name: (rest.name || 'Fleet') + ' (Copy)' });
+  recordAudit({ table: 'fleet_scenarios', id: copy?.id, action: 'insert', fields: { name: copy?.name } }).catch(() => {});
   // Legacy scenarios keep lanes in fleet_lanes — copy them so the duplicate
   // doesn't open empty (2026-07-05 fleet-load fix).
   try {
@@ -153,6 +157,8 @@ export async function saveLanes(scenarioId, lanes) {
       delivery_window: lane.deliveryWindow || null,
     });
   }
+  // Bulk replace — one audit row per call, not per lane.
+  recordAudit({ table: 'fleet_lanes', id: scenarioId, action: 'update', fields: { count: lanes.length } }).catch(() => {});
 }
 
 // ============================================================
@@ -211,7 +217,9 @@ export async function updateCarrierRate(id, patch) {
  * @param {number|string} id
  */
 export async function deactivateCarrierRate(id) {
-  return db.update('ref_fleet_carrier_rates', id, { is_active: false, updated_at: new Date().toISOString() });
+  const row = await db.update('ref_fleet_carrier_rates', id, { is_active: false, updated_at: new Date().toISOString() });
+  recordAudit({ table: 'ref_fleet_carrier_rates', id, action: 'update', fields: { is_active: false } }).catch(() => {});
+  return row;
 }
 
 /** Defaults used when Supabase is unreachable — match the migration seed. */

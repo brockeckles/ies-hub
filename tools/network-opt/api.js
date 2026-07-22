@@ -8,6 +8,7 @@
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
 import * as dealContext from '../../shared/deal-context.js?v=20260722-s1a';
+import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 
 // ============================================================
 // NETWORK CONFIGS (saved network scenarios)
@@ -56,7 +57,9 @@ export async function saveConfig(config) {
     // Updates NEVER rebind: parent_cost_model_id / parent_deal_id / site_id
     // are stamped on INSERT only (deal-spine convention). linkToCm /
     // unlinkFromCm below are the explicit rebind path for the CM linkage.
-    return db.update('netopt_configs', config.id, payload);
+    const updated = await db.update('netopt_configs', config.id, payload);
+    recordAudit({ table: 'netopt_configs', id: config.id, action: 'update', fields: { name: payload.name } }).catch(() => {});
+    return updated;
   }
   // C1 deal-spine stamp (insert only): explicit config value wins, then the
   // hub-wide active deal context, then null. 2026-04-30 (G12): top-level
@@ -78,7 +81,9 @@ export async function saveConfig(config) {
     throw new Error('Save failed: you are not signed in. Please sign in and try again.');
   }
   payload.owner_id = u.id;
-  return db.insert('netopt_configs', payload);
+  const inserted = await db.insert('netopt_configs', payload);
+  recordAudit({ table: 'netopt_configs', id: inserted?.id, action: 'insert', fields: { name: payload.name } }).catch(() => {});
+  return inserted;
 }
 
 /**
@@ -88,6 +93,7 @@ export async function saveConfig(config) {
  */
 export async function deleteConfig(id) {
   await db.remove('netopt_configs', id);
+  recordAudit({ table: 'netopt_configs', id, action: 'delete' }).catch(() => {});
 }
 
 /**
@@ -97,6 +103,7 @@ export async function deleteConfig(id) {
  */
 export async function linkToCm(scenarioId, cmId) {
   await db.update('netopt_configs', scenarioId, { parent_cost_model_id: cmId });
+  recordAudit({ table: 'netopt_configs', id: scenarioId, action: 'link', fields: { parent_cost_model_id: cmId } }).catch(() => {});
 }
 
 /**
@@ -105,6 +112,7 @@ export async function linkToCm(scenarioId, cmId) {
  */
 export async function unlinkFromCm(scenarioId) {
   await db.update('netopt_configs', scenarioId, { parent_cost_model_id: null });
+  recordAudit({ table: 'netopt_configs', id: scenarioId, action: 'unlink' }).catch(() => {});
 }
 
 /**
@@ -121,11 +129,13 @@ export async function duplicateConfig(id) {
   if (!u?.id) {
     throw new Error('Duplicate failed: you are not signed in. Please sign in and try again.');
   }
-  return db.insert('netopt_configs', {
+  const copy = await db.insert('netopt_configs', {
     ...rest,
     name: (rest.name || 'Network') + ' (Copy)',
     owner_id: u.id,
   });
+  recordAudit({ table: 'netopt_configs', id: copy?.id, action: 'insert', fields: { name: copy?.name } }).catch(() => {});
+  return copy;
 }
 
 // ============================================================
@@ -154,11 +164,13 @@ export async function listScenarioResults(configId) {
  * @returns {Promise<object>}
  */
 export async function saveScenarioResult(configId, name, result) {
-  return db.insert('netopt_scenario_results', {
+  const inserted = await db.insert('netopt_scenario_results', {
     config_id: configId,
     name,
     result_data: result,
   });
+  recordAudit({ table: 'netopt_scenario_results', id: inserted?.id, action: 'insert', fields: { name } }).catch(() => {});
+  return inserted;
 }
 
 /**
@@ -168,6 +180,7 @@ export async function saveScenarioResult(configId, name, result) {
  */
 export async function deleteScenarioResult(id) {
   await db.remove('netopt_scenario_results', id);
+  recordAudit({ table: 'netopt_scenario_results', id, action: 'delete' }).catch(() => {});
 }
 
 // ============================================================

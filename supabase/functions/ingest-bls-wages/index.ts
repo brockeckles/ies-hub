@@ -30,6 +30,23 @@ const MSA_SERIES: Record<string, string> = {
 const NATIONAL_SERIES = 'OEUN000000000000053706203';
 
 Deno.serve(async (req: Request) => {
+  // ── Auth gate (C5, 2026-07-22) ──
+  // verify_jwt=false (pg_cron/pg_net caller has no user JWT), which left this
+  // open to header-less internet drive-bys — anonymous POSTs could upsert
+  // arbitrary rows into labor_markets. Require `Authorization: Bearer <key>`:
+  // the anon-key gate stops header-less drive-bys; a dedicated INGEST_SECRET
+  // dashboard env var is the hardening follow-up (set INGEST_SECRET + update
+  // the cron job's header — no code redeploy needed).
+  const ingestSecret = Deno.env.get('INGEST_SECRET');
+  const expectedToken = ingestSecret || Deno.env.get('SUPABASE_ANON_KEY') || '';
+  const bearer = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+  if (!expectedToken || bearer !== expectedToken) {
+    return new Response(JSON.stringify({ error: 'unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',

@@ -11,7 +11,7 @@
  * @property {string} title
  * @property {string} description
  * @property {'bug' | 'feature' | 'improvement' | 'question'} type
- * @property {'open' | 'in-review' | 'planned' | 'in-progress' | 'completed' | 'declined'} status
+ * @property {'open' | 'in-review' | 'in-progress' | 'completed' | 'declined'} status
  * @property {'low' | 'medium' | 'high' | 'critical'} priority
  * @property {string} submittedBy — user name or email
  * @property {string} submittedDate — ISO date

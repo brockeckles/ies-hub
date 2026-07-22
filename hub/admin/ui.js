@@ -1,13 +1,14 @@
 /**
  * IES Hub v3 — Admin Panel UI
- * Master data management, user admin, escalation rules, and audit log.
+ * Master data management, user activity, and audit log. (The Escalations
+ * tab is an honest empty state — no escalation engine exists yet.)
  *
  * @module hub/admin/ui
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as calc from './calc.js?v=20260511-port17';
-import * as api from './api.js?v=20260702-sec2';
+import * as calc from './calc.js?v=20260722-s4c';
+import * as api from './api.js?v=20260722-s4c';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { getEnv, getEnvLabel, getProjectRef } from '../../shared/supabase.js?v=20260703-hw1';
 import { getBuildInfo, getBuildInfoSync } from '../../shared/build-info.js?v=20260424-A2';
@@ -36,10 +37,13 @@ function renderEnvChip() {
   try { env = getEnv(); label = getEnvLabel(); ref = getProjectRef(); }
   catch { return ''; }
   const isProd = env === 'prod';
-  const bg = isProd ? '#dcfce7' : '#ffedd5';
-  const fg = isProd ? '#166534' : '#9a3412';
+  // C5: prod hexes → hub.css tokens (exact-value matches). The staging
+  // orange family and the prod border (#bbf7d0) have no tokens in
+  // hub.css, so those stay literal.
+  const bg = isProd ? 'var(--c-success-bg)' : '#ffedd5';
+  const fg = isProd ? 'var(--c-success-ink)' : '#9a3412';
   const bd = isProd ? '#bbf7d0' : '#fed7aa';
-  const dot = isProd ? '#16a34a' : '#ea580c';
+  const dot = isProd ? 'var(--c-success)' : '#ea580c';
   const info = getBuildInfoSync();
   const versionSuffix = info && info.tag && info.tag !== 'dev'
     ? `<span style="opacity:0.75;text-transform:none;font-weight:500;letter-spacing:0;">· ${info.tag}</span>`
@@ -84,7 +88,6 @@ export function unmount() { rootEl = null;  }
 
 function render() {
   if (!rootEl) return;
-  const stats = calc.computeStats(calc.DEMO_USERS, calc.MASTER_TABLES, calc.DEMO_ESCALATIONS, calc.DEMO_AUDIT_LOG, '2026-04-16');
 
   rootEl.innerHTML = `
     <div class="hub-content-inner" style="padding:24px;">
@@ -103,10 +106,9 @@ function render() {
           `).join('')}
         </div>
       </div>
-      <div class="hub-kpi-strip" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:20px;">
-        ${kpi('Tables', stats.totalTables)}
-        ${kpi('Records', stats.totalRecords)}
-        ${kpi('Active Rules', stats.activeEscalations, stats.activeEscalations > 0 ? 'var(--ies-orange)' : null)}
+      <div class="hub-kpi-strip" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:20px;">
+        ${kpi('Tables', calc.MASTER_TABLES.length)}
+        ${kpi('Records', '…', null, 'admin-kpi-records')}
       </div>
       <div id="admin-content"></div>
     </div>
@@ -139,6 +141,35 @@ function render() {
     // Real user management (invite / promote / deactivate) will land as
     // its own slice with working API wiring, not as a demo placeholder.
   }
+
+  // C5: Records KPI — patch in the live total from the same count fetch
+  // the Master Data cards use (previously hardcoded 0 while the cards
+  // showed real numbers). Shows '…' until the fetch lands; '—' if every
+  // table errored/was RLS-blocked.
+  getLiveCounts().then(counts => {
+    if (!rootEl) return;
+    const slot = rootEl.querySelector('#admin-kpi-records .hub-kpi-tile__value');
+    if (!slot) return;
+    const nums = Object.values(counts).filter(v => typeof v === 'number');
+    slot.textContent = nums.length ? nums.reduce((s, v) => s + v, 0).toLocaleString() : '—';
+  }).catch(err => {
+    console.warn('[admin] records KPI counts failed', err);
+    const slot = rootEl?.querySelector('#admin-kpi-records .hub-kpi-tile__value');
+    if (slot) slot.textContent = '—';
+  });
+}
+
+// C5: one shared fetch for live master-table row counts, used by both the
+// Records KPI and the Master Data card grid so they can never disagree.
+// The card grid forces a refresh on each visit (covers add/delete drift);
+// other tabs reuse the cached promise.
+let _countsPromise = null;
+function getLiveCounts(force = false) {
+  if (force || !_countsPromise) {
+    const tableNames = calc.MASTER_TABLES.map(t => t.tableName).filter(Boolean);
+    _countsPromise = api.countMasterRecords(tableNames);
+  }
+  return _countsPromise;
 }
 
 // ===== MASTER DATA =====
@@ -170,8 +201,9 @@ function renderMasterData(el) {
 
   // 2026-04-29: fetch live row counts in parallel and patch each card in
   // place so the static rowCount values from MASTER_TABLES never lie.
-  const tableNames = calc.MASTER_TABLES.map(t => t.tableName).filter(Boolean);
-  api.countMasterRecords(tableNames).then(counts => {
+  // C5: force-refresh the shared fetch so re-entering the grid (e.g. after
+  // an add/delete in a detail view) picks up current counts.
+  getLiveCounts(true).then(counts => {
     for (const [tableName, count] of Object.entries(counts)) {
       const slot = el.querySelector(`[data-count-for="${tableName}"]`);
       if (!slot) continue;
@@ -251,9 +283,11 @@ function _renderMasterTableBody(el, table, rows) {
               ${table.columns.map(c => {
                 const val = row[c.key];
                 let display = val;
+                // C5: escapeHtml on stored values — master-data cells are
+                // shared-DB content rendered via innerHTML (stored-XSS sink).
                 if (c.type === 'boolean') display = val ? '✓' : '✕';
-                else if (c.type === 'number') display = (typeof val === 'number') ? val.toLocaleString() : (val ?? '—');
-                else display = (val == null || val === '') ? '—' : String(val);
+                else if (c.type === 'number') display = (typeof val === 'number') ? val.toLocaleString() : escapeHtml(String(val ?? '—'));
+                else display = (val == null || val === '') ? '—' : escapeHtml(String(val));
                 return `<td style="padding:10px 12px;color:var(--ies-gray-700);">${display}</td>`;
               }).join('')}
               <td style="padding:8px 12px;text-align:right;white-space:nowrap;">
@@ -375,11 +409,12 @@ function _masterFormField(c, row) {
 }
 
 // ===== USERS =====
-// Removed in Slice 3.15 — rendered calc.DEMO_USERS (John Smith / Sarah Connor /
+// Removed in Slice 3.15 — rendered a demo roster (John Smith / Sarah Connor /
 // etc.), which undermined credibility once real pilots were seated. The real
 // roster lives in the User Activity tab (email, role, last login, usage).
 // When real user management lands — invite, role-change, deactivate — it
-// should reuse listUsers() from api.js, not re-introduce a demo surface.
+// should query public.profiles directly, not re-introduce a demo surface.
+// (The old listUsers/updateUser api fns were deleted in C5 as dead code.)
 
 // ===== USER ACTIVITY (Slice 3.13) =====
 async function loadActivityData(forceRefresh = false) {
@@ -715,23 +750,19 @@ function renderInviteUserModal(opts = {}) {
 
 
 // ===== ESCALATIONS =====
+// C5 honesty: this tab used to render DEMO_ESCALATIONS — four invented
+// rules styled as live config. There is no escalation engine and no
+// escalation_rules table in any migration, so the tab now says exactly
+// that instead of faking it. (Empty-state pattern matches Command Center's
+// Win/Loss card.)
 function renderEscalations(el) {
-  const rules = calc.DEMO_ESCALATIONS;
-
   el.innerHTML = `
-    <div class="hub-card u-p-4">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <span style="font-size:14px;font-weight:700;">Escalation Rules</span>
-        <span class="u-cap u-faint">${rules.filter(r => r.active).length} active</span>
+    <div class="hub-card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+      <div class="u-13 u-bold">Escalation Rules</div>
+      <div style="font-size:13px;color:var(--ies-gray-500);line-height:1.5;">
+        No escalation rules yet — the escalation engine isn't built.
+        Deal-level escalation settings live in Deal Management → ★ models' CM knobs.
       </div>
-      ${rules.map(r => `
-        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--ies-gray-100);">
-          <span style="width:8px;height:8px;border-radius:50%;background:${r.active ? 'var(--c-success)' : '#d1d5db'};"></span>
-          <span style="font-size:13px;font-weight:600;flex:1;">${r.name}</span>
-          <span class="u-cap u-faint">${r.metric} ${r.condition} ${r.threshold}</span>
-          <span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:${calc.severityColor(r.severity)};">${r.severity}</span>
-        </div>
-      `).join('')}
     </div>
   `;
 }
@@ -859,7 +890,7 @@ function renderAudit(el) {
                   <td style="color:var(--ies-gray-500);font-size:11px;">${r.recordId || ''}</td>
                   <td class="u-cap" title="${r.authed ? 'Authenticated user (auth.uid)' : 'Pre-auth / code session'}">
                     ${r.authed ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#10b981;margin-right:6px;vertical-align:middle;"></span>' : ''}
-                    ${r.userName}
+                    ${escapeHtml(r.userName)}
                   </td>
                   <td class="u-cap u-muted" title="${JSON.stringify(r.fields || {}).replace(/"/g, '&quot;')}">${fieldStr}</td>
                 </tr>
@@ -889,12 +920,13 @@ function renderAudit(el) {
 }
 
 // ===== HELPERS =====
-function kpi(label, value, color) {
+function kpi(label, value, color, id) {
   // 2026-04-29 polish — emit hub-kpi-tile so the strip aligns with the rest
   // of the hub. Optional color preserved for threshold semantics.
+  // C5: optional id so async loaders (Records tile) can patch in place.
   const valueStyle = color ? ` style="color:${color};"` : '';
   return `
-    <div class="hub-kpi-tile">
+    <div class="hub-kpi-tile"${id ? ` id="${id}"` : ''}>
       <div class="hub-kpi-tile__label">${label}</div>
       <div class="hub-kpi-tile__value"${valueStyle}>${value}</div>
     </div>

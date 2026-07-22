@@ -49,9 +49,9 @@ export async function getFeedback(id) {
 // ============================================================
 
 /**
- * Insert a new feedback row. Used by both the global FAB and any
- * page-level forms. submitted_by falls back to 'Anonymous' per RLS
- * column default.
+ * Insert a new feedback row. Single write path for hub_feedback — the
+ * global FAB (shared/feedback-fab.js) routes through here. submitted_by
+ * falls back to 'Anonymous' per column default.
  */
 export async function submitFeedback(item) {
   return db.insert('hub_feedback', {

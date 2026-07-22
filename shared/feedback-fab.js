@@ -3,7 +3,8 @@
  *
  * Floating "Share feedback / Report issue" button that mounts globally on
  * every page. Click → opens an inline modal with a feedback form. Submit
- * inserts into hub_feedback (RLS allows anon + authenticated INSERT).
+ * routes through hub/feedback/api.js submitFeedback() — the single write
+ * path into hub_feedback (RLS allows anon + authenticated INSERT).
  *
  * Auto-captures the current route as the `section` field so triage knows
  * which page the user was on.
@@ -15,7 +16,7 @@
  * @module shared/feedback-fab
  */
 
-import { db } from './supabase.js?v=20260703-hw1';
+import { submitFeedback } from '../hub/feedback/api.js?v=20260722-s4c';
 import { showToast } from './toast.js?v=20260705-u1a';
 
 const FAB_ID = 'hub-feedback-fab';
@@ -171,15 +172,13 @@ function openModal() {
     }
 
     try {
-      await db.insert('hub_feedback', {
+      await submitFeedback({
         type: selectedType,
         title,
-        description: description || null,
-        section: section || null,
-        submitted_by: submittedBy,
+        description,
+        section,
+        submittedBy,
         priority,
-        // status defaults to 'new'
-        // upvotes defaults to '{}'
       });
       showToast('Thanks — feedback received.', 'success');
       close();

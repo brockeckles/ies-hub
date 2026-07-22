@@ -44,9 +44,13 @@ t('parent_cost_model_id: config value ?? null (no context fallback)',
 
 // Insert-only placement: the update branch returns BEFORE the stamp block,
 // so the stamp can only ever apply to db.insert.
-const updateAt = fn.indexOf("return db.update('netopt_configs', config.id, payload);");
+// C5 (2026-07-22): saveConfig now captures the db result to audit
+// post-mutation (recordAudit convention), so the anchors pin the awaited
+// db call instead of the old direct-return form. Window/ordering intent
+// is unchanged.
+const updateAt = fn.indexOf("await db.update('netopt_configs', config.id, payload);");
 const stampAt = fn.indexOf('const _ctx = dealContext.getActive();');
-const insertAt = fn.indexOf("return db.insert('netopt_configs', payload);");
+const insertAt = fn.indexOf("await db.insert('netopt_configs', payload);");
 t('update branch returns before the stamp block',
   updateAt !== -1 && stampAt !== -1 && updateAt < stampAt);
 t('stamp block sits before the insert',
