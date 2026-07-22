@@ -1257,10 +1257,62 @@ export function filterCurrent(rows, asOf) {
  * @param {Object} [ctx.overrides] — per-surface param overrides (spread last)
  * @returns {Object} params for buildYearlyProjections
  */
+/**
+ * Escalation Option B (Brock ruling 2026-07-22) — build per-category Y1–Y5
+ * schedules (PERCENT arrays) from a model's pinned houseAssumptions rows.
+ * Row mapping mirrors calc.houseGuidanceSeeds: labor ← hourly wage row
+ * (global-wage fallback) · cost ← global capex · facility ← Facility capex
+ * · equipment ← MHE capex (global-capex fallback). Null per category when
+ * no row exists. Lives here (not calc.js) — the calc→monthly→scenarios
+ * import chain must stay one-directional.
+ * @param {{ rows?: Object[] }} pinned — model.houseAssumptions
+ * @returns {{labor:number[]|null, cost:number[]|null, facility:number[]|null, equipment:number[]|null}|null}
+ */
+export function escalationSchedulesFromPinned(pinned) {
+  const rows = pinned?.rows || [];
+  if (!rows.length) return null;
+  const find = (scope, metric, key) => rows.find(r =>
+    r.scope === scope && r.metric === metric && (key === undefined || r.scope_key === key));
+  const sched = (r) => {
+    if (!r) return null;
+    const ys = [r.year_1_pct, r.year_2_pct, r.year_3_pct, r.year_4_pct, r.year_5_pct]
+      .map(v => Number(v) || 0);
+    return ys.some(v => v !== 0) ? ys : null;
+  };
+  const wage  = find('labor_category', 'wage', 'hourly') || find('global', 'wage', null) || find('global', 'wage');
+  const capex = find('global', 'capex', null) || find('global', 'capex');
+  const fac   = find('equipment_category', 'capex', 'Facility');
+  const mhe   = find('equipment_category', 'capex', 'MHE') || capex;
+  return { labor: sched(wage), cost: sched(capex), facility: sched(fac), equipment: sched(mhe) };
+}
+
 export function buildProjectionParams(ctx) {
   const { model, summary, calcHeur, contractYears, orders, pricingBuckets,
           refData, marketLaborProfile, overrides = {} } = ctx;
+  // Escalation Option B — schedules apply ONLY when (a) the model opted in
+  // (financial.useEscalationSchedules; seeded true on NEW models, explicit
+  // Adopt action on older ones) AND (b) that category's flat knob is RESTING
+  // on its default source. A What-If transient, a heuristic override, or an
+  // approved-scenario snapshot wins FLAT for its category (whole-schedule
+  // flat-override semantics — the WSC lever precedent).
+  let escSchedules = null;
+  if (model?.financial?.useEscalationSchedules === true) {
+    const s = escalationSchedulesFromPinned(model.houseAssumptions);
+    if (s) {
+      const resting = (k) => (calcHeur.used?.[k] ?? 'default') === 'default';
+      escSchedules = {
+        labor:     resting('labor_escalation_pct')     ? s.labor     : null,
+        cost:      resting('cost_escalation_pct')      ? s.cost      : null,
+        facility:  resting('facility_escalation_pct')  ? s.facility  : null,
+        equipment: resting('equipment_escalation_pct') ? s.equipment : null,
+      };
+      if (!escSchedules.labor && !escSchedules.cost && !escSchedules.facility && !escSchedules.equipment) {
+        escSchedules = null;
+      }
+    }
+  }
   return {
+    escSchedules,
     years: contractYears,
     baseLaborCost:     summary.laborCost,
     baseFacilityCost:  summary.facilityCost,

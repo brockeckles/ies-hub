@@ -4350,9 +4350,19 @@ function renderHouseAssumptionsCard() {
             ${drift.anyDrift
               ? '<span style="color:var(--c-warn-strong);font-weight:700;">⚠ This deal\'s pinned guidance differs from current corporate guidance (corporate update or deal-specific edit) — differing cells are highlighted; hover for the corporate value.</span>'
               : '<span style="color:#10b981;font-weight:700;">✓ Matches current corporate guidance.</span>'}
+            ${model.financial?.useEscalationSchedules === true
+              ? '<span class="cm-house-seed" style="background:#ecfdf5;color:#047857;" title="Projections compound this table\'s Y1–Y5 rates per category (year k rate applies moving into year k+1; contracts past Yr 5 reuse the Yr-5 rate). A What-If escalation slider or a heuristic override switches that category back to a flat rate for the preview.">Y1–Y5 SCHEDULE ACTIVE</span>'
+              : '<span class="cm-house-seed" style="background:var(--ies-gray-100);color:var(--ies-gray-500);" title="Projections compound the four flat escalation knobs; the Y2–Y5 columns here are reference only until you adopt the schedule.">FLAT Y1 ONLY — Y2–Y5 reference</span>'}
           </div>
         </div>
-        ${drift.anyDrift ? `<button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="adopt-house-guidance" title="Re-pin this deal to today's corporate guidance — overwrites any deal-specific edits in this table. Your escalation inputs are not changed.">Adopt current guidance</button>` : ''}
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">
+          ${drift.anyDrift ? `<button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="adopt-house-guidance" title="Re-pin this deal to today's corporate guidance — overwrites any deal-specific edits in this table. Your escalation inputs are not changed.">Adopt current guidance</button>` : ''}
+          <button class="hub-btn hub-btn-sm ${model.financial?.useEscalationSchedules === true ? 'hub-btn--ghost' : 'hub-btn-primary'}" data-action="toggle-esc-schedule"
+                  title="${model.financial?.useEscalationSchedules === true
+                    ? 'Switch projections back to the four flat Y1 escalation knobs (this table becomes reference only).'
+                    : 'Make projections compound this table\'s Y1–Y5 rates per category instead of the flat Y1 knobs. Reprices out-years only; Year 1 is unchanged by construction.'}">
+            ${model.financial?.useEscalationSchedules === true ? 'Use flat rates' : 'Adopt Y1–Y5 schedule'}</button>
+        </div>
       </div>
       <div class="cm-table-scroll" style="margin-top:10px;">
         <table class="hub-datatable hub-datatable--dense" style="width:100%;font-size:12px;">
@@ -12190,6 +12200,21 @@ async function handleAction(action, idx, btn) {
         });
       return;
     }
+    case 'toggle-esc-schedule': {
+      // Escalation Option B (Brock 2026-07-22) — flip projections between
+      // the pinned Y1–Y5 schedules and the flat Y1 knobs. Reprices
+      // out-years only (Year 1 multiplier is 1.0 either way).
+      model.financial = model.financial || {};
+      const on = model.financial.useEscalationSchedules === true;
+      model.financial.useEscalationSchedules = !on;
+      _markCmDirty();
+      renderSection();
+      refreshHeaderKpis();
+      showToast(!on
+        ? 'Projections now compound the pinned Y1–Y5 schedule per category (What-If sliders still override flat).'
+        : 'Projections back on the four flat escalation rates — the Y2–Y5 columns are reference only.', 'success');
+      return;
+    }
     case 'add-equipment':
       // Phase 2a (2026-04-22): new blank rows default to owned_mhe since the
       // default category is 'MHE'. Users re-classify via the Line Type column.
@@ -13028,6 +13053,10 @@ function ensureHouseAssumptions(seedDefaults) {
     // facilityEscPct/equipmentEscPct seams (default was costEscPct).
     if (seeds.facilityEscalation  != null) model.financial.facilityEscalation  = seeds.facilityEscalation;
     if (seeds.equipmentEscalation != null) model.financial.equipmentEscalation = seeds.equipmentEscalation;
+    // Escalation Option B (Brock 2026-07-22): NEW models ride the pinned
+    // Y1–Y5 schedules; the Y1 flat seeds above remain the fallback + the
+    // What-If override base. Existing models opt in via the House card.
+    model.financial.useEscalationSchedules = true;
   }
   return true;
 }

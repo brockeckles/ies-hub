@@ -2277,6 +2277,27 @@ export function buildYearlyProjections(params) {
   const facilityEscPct  = params.facilityEscPct  != null ? params.facilityEscPct  : costEscPct;
   const equipmentEscPct = params.equipmentEscPct != null ? params.equipmentEscPct : costEscPct;
 
+  // Escalation Option B (Brock ruling 2026-07-22) — schedule-driven
+  // multipliers. params.escSchedules = { labor|cost|facility|equipment:
+  // number[]|null } carries the model's OWN pinned Y1–Y5 guidance in
+  // PERCENT (year_k = escalation applied moving from year k to k+1;
+  // contracts beyond the schedule reuse the last rate). A null/absent
+  // schedule falls back to the flat knob — every pre-B model and every
+  // What-If flat override is byte-identical by construction. With all
+  // schedule years equal, schedule == flat (same compounding).
+  const _sched = params.escSchedules || null;
+  const _escMult = (schedule, flatFrac, yr) => {
+    if (Array.isArray(schedule) && schedule.length > 0) {
+      let m = 1;
+      for (let k = 1; k <= yr - 1; k++) {
+        const pct = Number(schedule[Math.min(k, schedule.length) - 1]) || 0;
+        m *= 1 + Math.max(-100, pct) / 100;
+      }
+      return m;
+    }
+    return Math.pow(1 + (flatFrac || 0), yr - 1);
+  };
+
   // Learning curve: weighted avg productivity factor for Year 1 (shared
   // helper — adaptYearlyToMonthlyParams passes the same factor to the
   // monthly engine so Y1 labor ties across engines).
@@ -2291,10 +2312,13 @@ export function buildYearlyProjections(params) {
     const volMult = Math.pow(1 + volGrowthPct, yr - 1);
     // 2026-06-12: UPH productivity growth offsets wage escalation — labor
     // cost = base × (1+wage)^n / (1+uph)^n. Default 0 preserves legacy.
-    const laborMult = Math.pow(1 + laborEscPct, yr - 1) / Math.pow(1 + Math.max(0, uphYoyPct), yr - 1);
-    const costMult = Math.pow(1 + costEscPct, yr - 1);
-    const facilityMult  = Math.pow(1 + facilityEscPct,  yr - 1);
-    const equipmentMult = Math.pow(1 + equipmentEscPct, yr - 1);
+    // Option B: each category rides its schedule when one is present,
+    // else the flat knob (identical math when no schedule). The UPH
+    // productivity divisor deliberately stays flat (Brock ruling).
+    const laborMult = _escMult(_sched?.labor, laborEscPct, yr) / Math.pow(1 + Math.max(0, uphYoyPct), yr - 1);
+    const costMult = _escMult(_sched?.cost, costEscPct, yr);
+    const facilityMult  = _escMult(_sched?.facility,  facilityEscPct,  yr);
+    const equipmentMult = _escMult(_sched?.equipment, equipmentEscPct, yr);
 
     const learningMult = yr === 1 ? (1 / yr1LearningFactor) : 1.0;
     const labor = baseLaborCost * laborMult * volMult * learningMult;
