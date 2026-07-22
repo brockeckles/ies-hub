@@ -877,11 +877,11 @@ function _renderAdoptBar(kind, fresh, applied) {
     ? `Design adopted an older derivation — <b>out of sync</b>. Re-adopt to sync${down.length ? ' (adopted downstream stations re-derive too)' : ''}.`
     : (down.length ? 'Adopted downstream stations re-derive automatically.' : 'Writes the recommended grid and flue standard into the design.');
   return `
-    <div data-wsw-adopt-state="${status}" style="display:flex;align-items:center;gap:10px;background:#fff7ed;border:1px solid #fed7c9;border-radius:10px;padding:10px 14px;margin-top:12px;font-size:12px;">
-      <span>➜</span>
-      <div style="flex:1;">This plan sets the design requirement: <b>${esc(summary)}</b>.<br>
+    <div data-wsw-adopt-state="${status}" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:#fff7ed;border:1px solid #fed7c9;border-radius:10px;padding:10px 14px;margin-top:12px;font-size:12px;">
+      <span style="flex:none;">➜</span>
+      <div style="flex:1;min-width:200px;">This plan sets the design requirement: <b>${esc(summary)}</b>.<br>
         <span style="color:var(--ies-gray-500);font-size:11px;">${note}</span></div>
-      <button class="hub-btn hub-btn-sm hub-btn-primary" data-wsw-adopt="${kind}"
+      <button class="hub-btn hub-btn-sm hub-btn-primary" data-wsw-adopt="${kind}" style="flex:none;white-space:nowrap;"
               title="Apply this derivation to the design${down.length ? ' and re-derive adopted downstream stages' : ''}.">
         ${ADOPT_BUTTON_LABEL[kind]}</button>
     </div>`;

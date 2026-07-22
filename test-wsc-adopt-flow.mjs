@@ -157,6 +157,17 @@ t('ui.js: spine subs read adopt statuses; stale → STALE badge', () => {
   assert(/function _wswAdoptStatuses\(\)[\s\S]{0,200}if \(getWShellPref\(\) !== 'w'\) return null;/.test(uiSrc), 'classic short-circuit');
 });
 
+t('adopt bar survives narrow canvas: wrap on the row, flex:none button', () => {
+  // Soak-list cosmetic (2026-07-22): on a narrow canvas the bar squeezed the
+  // button and letter-wrapped its label. The row wraps as a unit instead —
+  // fourth instance of the flex:none fixed-size lesson (step badges w7c).
+  const bar = basisSrc.match(/data-wsw-adopt-state="\$\{status\}"[^>]*style="([^"]*)"/)?.[1] || '';
+  assert(bar.includes('flex-wrap:wrap'), 'row wraps instead of squeezing');
+  assert(/data-wsw-adopt="\$\{kind\}" style="[^"]*flex:none;white-space:nowrap/.test(basisSrc),
+    'button is flex:none + nowrap');
+  assert(/style="flex:1;min-width:2\d\dpx;"/.test(basisSrc), 'text keeps a readable min width');
+});
+
 t('live behavior: computeAdoptStatuses flags stale after profile change', () => {
   const st1 = computeAdoptStatuses(makeCtx({ profile: profileA, mediaPlan: mediaA }));
   eq(st1.media, 'current', 'in sync');
