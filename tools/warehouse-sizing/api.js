@@ -6,7 +6,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
-import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
+import * as dealContext from '../../shared/deal-context.js?v=20260722-s1a';
 
 // ============================================================
 // FACILITY CONFIGS
@@ -52,6 +52,7 @@ export async function saveConfig(config) {
   // and the deal workspace both read. Insert-only: updates never rebind.
   const _ctx = dealContext.getActive();
   if (_ctx) payload.parent_deal_id = _ctx.id;
+  if (_ctx && _ctx.siteId) payload.site_id = _ctx.siteId; // S1: site binding
   return db.insert('wsc_facility_configs', payload);
 }
 

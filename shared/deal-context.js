@@ -80,6 +80,10 @@ export function setActive(deal) {
     id,
     name: deal.name != null ? String(deal.name) : null,
     customer: deal.customer != null ? String(deal.customer) : null,
+    // S1 (2026-07-22): optional site slot. Tools launched from a Site page
+    // stamp new scenarios with site_id; deal-level launches leave it null.
+    siteId: deal.siteId != null && String(deal.siteId) ? String(deal.siteId) : null,
+    siteName: deal.siteName != null ? String(deal.siteName) : null,
     setAt: Date.now(),
   };
   try { _store().setItem(STORAGE_KEY, JSON.stringify(ctx)); } catch {}
@@ -105,6 +109,8 @@ export function getActive() {
           id: String(parsed.id),
           name: parsed.name != null ? String(parsed.name) : null,
           customer: parsed.customer != null ? String(parsed.customer) : null,
+          siteId: parsed.siteId != null && String(parsed.siteId) ? String(parsed.siteId) : null,
+          siteName: parsed.siteName != null ? String(parsed.siteName) : null,
           setAt: Number(parsed.setAt) || 0,
         };
       }
@@ -114,7 +120,7 @@ export function getActive() {
   const urlId = readDealFromUrl();
   if (urlId) {
     if (stored && stored.id === urlId) return stored;
-    return { id: urlId, name: null, customer: null, setAt: 0 };
+    return { id: urlId, name: null, customer: null, siteId: null, siteName: null, setAt: 0 };
   }
   return stored;
 }

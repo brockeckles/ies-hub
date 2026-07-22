@@ -32,7 +32,7 @@
  */
 
 import { db } from './supabase.js?v=20260703-hw1';
-import * as dealContext from './deal-context.js?v=20260703-dc1';
+import * as dealContext from './deal-context.js?v=20260722-s1a';
 import { showToast } from './toast.js?v=20260705-u1a';
 import { showConfirm } from './confirm-modal.js?v=20260705-u1a';
 

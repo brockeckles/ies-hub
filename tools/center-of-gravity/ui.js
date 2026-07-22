@@ -7,7 +7,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260705-u1a';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260722-s1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260710-r2';
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
@@ -15,8 +15,8 @@ import { printFontCss, FONT_UI, FONT_DISPLAY } from '../../shared/print-fonts.js
 import { downloadCSV } from '../../shared/export.js?v=20260702-p1m1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import * as calc from './calc.js?v=20260704-ux2c';
-import * as api from './api.js?v=20260703-dc2';
-import * as cmApi from '../cost-model/api.js?v=20260704-cmp1';
+import * as api from './api.js?v=20260722-s1a';
+import * as cmApi from '../cost-model/api.js?v=20260722-s1a';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';

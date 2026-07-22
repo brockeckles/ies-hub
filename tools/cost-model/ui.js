@@ -14,7 +14,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import ofpStyles from './operational-flow-styles.js?v=20260714-a2';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
 import * as calc from './calc.js?v=20260722-e1';
-import * as api from './api.js?v=20260704-cmp1';
+import * as api from './api.js?v=20260722-s1a';
 import * as scenarios from './calc.scenarios.js?v=20260722-e1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260705-u3d';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260705-u3d';
@@ -33,7 +33,7 @@ import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260705-u
 import { refreshKpiStrip, bindToolChromeEvents, applyToolCrumb } from '../../shared/tool-chrome.js?v=20260710-r2';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
-import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
+import * as dealContext from '../../shared/deal-context.js?v=20260722-s1a';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { computeAll } from './compute-all.js?v=20260722-e1';
@@ -1104,6 +1104,9 @@ export async function mount(el) {
         }
         if (model && model.projectDetails) {
           model.projectDetails.dealId = payload.dealId;
+          // S1 (2026-07-22): "New scenario" launched from a Site page
+          // pre-stamps the site so the save lands attached, not Unassigned.
+          if (payload.siteId) model.projectDetails.siteId = payload.siteId;
           _markCmDirty();
         }
       } else {
@@ -1208,6 +1211,8 @@ async function loadModelByCmId(id) {
       if (!pdHydrate.clientName && full.client_name) pdHydrate.clientName = full.client_name;
       if (!pdHydrate.contractTerm && full.contract_term_years) pdHydrate.contractTerm = full.contract_term_years;
       if (!pdHydrate.dealId && full.deal_deals_id) pdHydrate.dealId = full.deal_deals_id;
+      // S1 (2026-07-22): hydrate the site binding so save round-trips keep it.
+      if (!pdHydrate.siteId && full.site_id) pdHydrate.siteId = full.site_id;
       if (!pdHydrate.name && full.name) pdHydrate.name = full.name;
       if (!model.financial) model.financial = createEmptyModel().financial;
       const fin = model.financial;
@@ -11992,7 +11997,7 @@ function _launchToTool(target) {
       // state. Invisible to the cache-bust guard because the './tools/...'
       // path resolves module-relative in the scanner but page-relative at
       // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260722-h1',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260722-s1a',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {

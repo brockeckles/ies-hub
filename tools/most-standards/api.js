@@ -6,7 +6,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
-import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
+import * as dealContext from '../../shared/deal-context.js?v=20260722-s1a';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 // P2-2 (2026-07-02) — pure element sanitation lives in calc.js
 import { sanitizeElementForWrite } from './calc.js?v=20260704-ux2d';
@@ -278,6 +278,7 @@ export async function saveAnalysis(analysis) {
   // UX-1 D2 (2026-07-03): stamp new analyses with the active deal context.
   const _ctx = dealContext.getActive();
   if (_ctx) payload.parent_deal_id = _ctx.id;
+  if (_ctx && _ctx.siteId) payload.site_id = _ctx.siteId; // S1: site binding
   const inserted = await db.insert('most_analyses', payload);
   recordAudit({ table: 'most_analyses', id: inserted?.id, action: 'insert', fields: { name: payload.name, line_count: (analysis.lines || []).length } });
   return inserted;

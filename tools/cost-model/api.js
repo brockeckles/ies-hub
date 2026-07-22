@@ -136,6 +136,11 @@ export async function createModel(data) {
   };
   const dealId = pd.dealId || data.dealId;
   if (dealId) payload.deal_deals_id = dealId;
+  // S1 (2026-07-22): scenarios born from a Site page carry the site binding.
+  // Conditional stamp only — site assignment is otherwise DM's job, and an
+  // omitted column never clobbers a DM-side (re)assignment.
+  const siteId = pd.siteId || data.siteId;
+  if (siteId) payload.site_id = siteId;
   return db.insert('cost_model_projects', payload);
 }
 
@@ -188,6 +193,10 @@ function _modelUpdatePayload(data) {
     ..._headlineColumns(data),
   };
   payload.deal_deals_id = pd.dealId || data.dealId || null;
+  // S1 (2026-07-22): conditional site stamp (see _headline insert note) —
+  // never null site_id from CM; detach lives in Deal Management only.
+  const siteId = pd.siteId || data.siteId;
+  if (siteId) payload.site_id = siteId;
   return payload;
 }
 

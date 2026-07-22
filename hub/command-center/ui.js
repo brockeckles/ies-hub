@@ -8,7 +8,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260703-dc5';
+import * as api from './api.js?v=20260722-s1a';
 import { safeHttpUrl } from '../../shared/escape.js?v=20260702-sec2';
 
 /** @type {HTMLElement|null} */

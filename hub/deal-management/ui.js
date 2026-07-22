@@ -7,15 +7,17 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260703-dc5';
+import * as api from './api.js?v=20260722-s1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
-import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260703-dc1';
+import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260722-s1a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 // UX-1 D1p2 (2026-07-03): the MSA merge — deal tabs reuse the Multi-Site
 // Analyzer's pure calc + site mapping instead of duplicating the math.
 import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260710-r4';
 import * as msaApi from '../../tools/deal-manager/api.js?v=20260710-r4';
+// S1 (2026-07-22): shared pure Σ★ roll-up (same module api.js computes with).
+import * as dmCalc from './calc.js?v=20260722-s1a';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -31,6 +33,8 @@ const _msaSitesByDeal = new Map();
 let _cmpSiteA = null;
 let _cmpSiteB = null;
 let detailTab = 'overview'; // overview | sites | dos | financials | documents | strategy
+// S1 (2026-07-22): drilled-in site on the Sites tab (null = card grid).
+let selectedSiteId = null;
 let dealSearch = '';
 let customerFilter = ''; // empty = all
 
@@ -372,6 +376,7 @@ function bindDelegatedEvents() {
       if (selectedDeal) {
         viewMode = 'detail';
         detailTab = 'overview';
+        selectedSiteId = null; // S1: site drill-in is per-deal
         // UX-1 D2 (2026-07-03): entering a deal's workspace binds the hub-wide
         // deal context — tools launched from here mount pre-bound to this deal.
         setDealContext({ id: selectedDeal.id, name: selectedDeal.name, customer: selectedDeal.client });
@@ -383,7 +388,49 @@ function bindDelegatedEvents() {
     }
 
     // Back button
-    if (target.closest('[data-action="back"]')) { viewMode = 'pipeline'; selectedDeal = null; render(); return; }
+    if (target.closest('[data-action="back"]')) { viewMode = 'pipeline'; selectedDeal = null; selectedSiteId = null; render(); return; }
+
+    // S1 — site drill-in / drill-out on the Sites tab.
+    const openSite = target.closest('[data-open-site]');
+    if (openSite) {
+      selectedSiteId = /** @type {HTMLElement} */ (openSite).dataset.openSite || null;
+      renderDetailContent();
+      return;
+    }
+    if (target.closest('[data-action="site-back"]')) { selectedSiteId = null; renderDetailContent(); return; }
+
+    // S1 — edit-site modal.
+    const editSite = target.closest('[data-action="edit-site"]');
+    if (editSite) {
+      const sid = editSite.getAttribute('data-site-id');
+      const site = selectedDeal && (selectedDeal.sites || []).find(s => String(s.id) === String(sid));
+      if (selectedDeal && site) openSiteModal(selectedDeal.id, site);
+      return;
+    }
+
+    // S1 — attach a deal-level design to the open site.
+    const attachDesign = target.closest('[data-action="attach-design"]');
+    if (attachDesign) {
+      const tool = attachDesign.getAttribute('data-tool');
+      const designId = attachDesign.getAttribute('data-design-id');
+      const sid = attachDesign.getAttribute('data-site-id');
+      const d = selectedDeal;
+      if (!d || !tool || !designId || !sid) return;
+      (async () => {
+        try {
+          await api.assignDesignToSite(tool, designId, sid);
+          const ds = _designScenariosByDeal.get(d.id);
+          const row = ds && (ds[tool] || []).find(r => String(r.id) === String(designId));
+          if (row) row.site_id = sid;
+          renderDetailContent();
+          showToast('Design attached to site', 'success');
+        } catch (err) {
+          console.error('[deal-mgmt] attach-design failed', err);
+          showToast('Attach failed: ' + (err.message || err), 'error');
+        }
+      })();
+      return;
+    }
 
     // Detail tabs. Tab bar is rendered once in renderDetail() and never
     // re-rendered on click (only the content pane is), so we have to toggle
@@ -432,7 +479,8 @@ function bindDelegatedEvents() {
     const createCm = target.closest('[data-action="create-cost-model"]');
     if (createCm) {
       const did = /** @type {HTMLElement} */ (createCm).dataset.dealId;
-      if (did) createCostModelForDeal(did);
+      // S1: a site card / site page passes its site so the save lands there.
+      if (did) createCostModelForDeal(did, createCm.getAttribute('data-site-id') || null);
       return;
     }
 
@@ -441,7 +489,13 @@ function bindDelegatedEvents() {
     // landing (D2-wired) shows the binding chip and sorts this deal first.
     const launchTool = target.closest('[data-action="launch-tool"]');
     if (launchTool) {
-      if (selectedDeal) setDealContext({ id: selectedDeal.id, name: selectedDeal.name, customer: selectedDeal.client });
+      if (selectedDeal) {
+        // S1: launches from a Site page bind deal + site; deal-level launches
+        // (no data-site-id) explicitly clear any prior site binding.
+        const sid = launchTool.getAttribute('data-site-id') || null;
+        const site = sid ? (selectedDeal.sites || []).find(s => String(s.id) === String(sid)) : null;
+        setDealContext({ id: selectedDeal.id, name: selectedDeal.name, customer: selectedDeal.client, siteId: sid, siteName: site ? site.name : null });
+      }
       const route = launchTool.getAttribute('data-tool-route');
       if (route) window.location.hash = route;
       return;
@@ -454,7 +508,9 @@ function bindDelegatedEvents() {
       return;
     }
 
-    // UX-1 D1p2-B: ★-in-bid toggle on the Sites tab.
+    // S1 (2026-07-22): ★-in-bid is PER SITE — authority is
+    // deal_sites.in_bid_model_id (api.setModelInBid does one UPDATE there
+    // and mirrors the legacy in_bid boolean within the site).
     const bidBtn = target.closest('[data-action="mark-in-bid"]');
     if (bidBtn) {
       const modelId = bidBtn.getAttribute('data-model-id');
@@ -463,21 +519,22 @@ function bindDelegatedEvents() {
       (async () => {
         try {
           await api.setModelInBid(d.id, modelId);
-          // Update local state without a full re-fetch: exclusive per group.
+          // Local state sync: the model's site takes this ★; flags follow.
           const t = (d.models || []).find(m => String(m.id) === String(modelId));
-          const gk = t ? `${t.market_id || ''}|${t.name || ''}` : null;
-          (d.models || []).forEach(m => {
-            if (`${m.market_id || ''}|${m.name || ''}` === gk) m.in_bid = String(m.id) === String(modelId);
-          });
+          const site = t && t.site_id ? (d.sites || []).find(s => String(s.id) === String(t.site_id)) : null;
+          if (site) {
+            site.inBidModelId = t.id;
+            if (t.facility_sqft) site.sqft = Number(t.facility_sqft) || site.sqft;
+          }
+          const starIds = new Set((d.sites || []).map(s => (s.inBidModelId != null ? String(s.inBidModelId) : null)).filter(Boolean));
+          (d.models || []).forEach(m => { m.in_bid = starIds.has(String(m.id)); });
+          // MSA rows (Financials tab) read inBid per scenario: sync the site group.
           const msaRows = _msaSitesByDeal.get(d.id) || [];
-          msaRows.forEach(r => {
-            const rk = `${r.marketId || ''}|${r.name || ''}`;
-            // MSA Site shape doesn't carry market_id — match on costModelId group via models list instead.
-          });
-          // Simplest correct refresh of MSA rows: flip inBid by id.
-          msaRows.forEach(r => { if (t && (d.models || []).some(m => `${m.market_id || ''}|${m.name || ''}` === gk && String(m.id) === String(r.costModelId))) r.inBid = String(r.costModelId) === String(modelId); });
-          showToast('Marked ★ in bid — deal rollups now read this scenario.', 'success');
-          renderDetailContent();
+          const groupIds = new Set((d.models || []).filter(m => site && String(m.site_id || '') === String(site.id)).map(m => String(m.id)));
+          msaRows.forEach(r => { if (groupIds.has(String(r.costModelId))) r.inBid = String(r.costModelId) === String(modelId); });
+          _recomputeDealRollup(d);
+          showToast('Marked ★ in bid — site and deal roll-ups now read this scenario.', 'success');
+          renderDetail();
         } catch (err) {
           console.error('[deal-mgmt] mark-in-bid failed', err);
           showToast('Could not mark in bid: ' + err.message, 'error');
@@ -485,11 +542,12 @@ function bindDelegatedEvents() {
       })();
       return;
     }
-    // R10 (2026-04-29) — Site Details + Add Site
+    // S1 (2026-07-22): + Add Site creates a SITE RECORD (pre-S1 this routed
+    // to createCostModelForDeal because no Site entity existed).
     const addSite = target.closest('[data-action="add-site-to-deal"]');
     if (addSite) {
       const did = /** @type {HTMLElement} */ (addSite).dataset.dealId;
-      if (did) createCostModelForDeal(did);
+      if (did) openSiteModal(did, null);
       return;
     }
 
@@ -579,6 +637,30 @@ function bindDelegatedEvents() {
   // Strategy inputs — debounced upsert via _scheduleStrategySave
   // UX-1 D1p2-C: Compare tab slot selects.
   rootEl.addEventListener('change', (e) => {
+    // S1 — Unassigned bucket: attach a model to a site.
+    const assignSel = /** @type {HTMLElement} */ (e.target).closest?.('[data-assign-model]');
+    if (assignSel) {
+      const modelId = assignSel.getAttribute('data-assign-model');
+      const siteId = /** @type {HTMLSelectElement} */ (assignSel).value;
+      const d = selectedDeal;
+      if (!d || !modelId || !siteId) return;
+      (async () => {
+        try {
+          await api.assignModelToSite(modelId, siteId);
+          const m = (d.models || []).find(x => String(x.id) === String(modelId));
+          if (m) m.site_id = siteId;
+          const site = (d.sites || []).find(s => String(s.id) === String(siteId));
+          if (site) site.modelCount = (d.models || []).filter(x => String(x.site_id || '') === String(site.id)).length;
+          _recomputeDealRollup(d);
+          renderDetail();
+          showToast('Model assigned to ' + (site ? site.name : 'site'), 'success');
+        } catch (err) {
+          console.error('[deal-mgmt] assign-model failed', err);
+          showToast('Assign failed: ' + (err.message || err), 'error');
+        }
+      })();
+      return;
+    }
     const sel = /** @type {HTMLElement} */ (e.target).closest?.('[data-cmp-slot]');
     if (!sel) return;
     const slot = sel.getAttribute('data-cmp-slot');
@@ -1064,7 +1146,7 @@ function renderDetail() {
 
       <!-- Quick Stats — 5-tile strip overrides hub-kpi-strip\'s 4-column default -->
       <div class="hub-kpi-strip" style="grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:20px;">
-        ${kpi('Revenue', '$' + (d.revenue / 1e6).toFixed(1) + 'M')}
+        ${kpi(d.rollupFromStars ? 'Revenue (Σ★)' : 'Revenue', '$' + (d.revenue / 1e6).toFixed(1) + 'M' + (d.rollupIsEstimate ? ' <span title="Some sites have no ★ scenario yet — totals cover the starred sites only" style="font-size:10px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:8px;padding:1px 6px;vertical-align:middle;">est</span>' : ''))}
         ${kpi('Margin', d.margin > 0 ? d.margin + '%' : 'TBD', d.margin > 0 && d.margin < 10 ? 'var(--ies-orange)' : null)}
         ${kpi('Total sqft', totalSqft > 0 ? (totalSqft / 1000).toFixed(0) + 'K' : '—')}
         ${kpi('Days in Stage', d.daysInStage, d.daysInStage > 14 ? 'var(--ies-red)' : null)}
@@ -1074,7 +1156,7 @@ function renderDetail() {
       <!-- Detail Tabs -->
       <div class="hub-tab-bar" style="margin-bottom:16px;">
         <button class="hub-tab ${detailTab === 'overview' ? 'active' : ''}" data-detail-tab="overview">Overview</button>
-        <button class="hub-tab ${detailTab === 'sites' ? 'active' : ''}" data-detail-tab="sites">Site Details</button>
+        <button class="hub-tab ${detailTab === 'sites' ? 'active' : ''}" data-detail-tab="sites">Sites</button>
         <button class="hub-tab ${detailTab === 'dos' ? 'active' : ''}" data-detail-tab="dos">DOS Elements</button>
         <button class="hub-tab ${detailTab === 'financials' ? 'active' : ''}" data-detail-tab="financials">Financials</button>
         <button class="hub-tab ${detailTab === 'sensitivity' ? 'active' : ''}" data-detail-tab="sensitivity">Sensitivity</button>
@@ -1513,16 +1595,19 @@ function openCostModelChooser(dealId) {
  * Create a new cost model linked to the given deal. Pre-stash the deal id
  * via sessionStorage so the new model picks it up on save.
  */
-function createCostModelForDeal(dealId) {
+function createCostModelForDeal(dealId, siteId) {
   try {
-    sessionStorage.setItem('cm_pending_new_for_deal', JSON.stringify({ dealId, at: Date.now() }));
+    // S1 (2026-07-22): a "New scenario" launched from a Site page carries the
+    // site so the CM save lands attached to it (not Unassigned).
+    sessionStorage.setItem('cm_pending_new_for_deal', JSON.stringify({ dealId, siteId: siteId || null, at: Date.now() }));
   } catch {}
   // UX-1 D2: persistent context — if the relay TTL lapses, the CM landing's
   // "+ Create New Model" still prestamps this deal from context.
   {
     const _d = DEALS.find(x => x.id === dealId) || selectedDeal;
-    if (_d) setDealContext({ id: _d.id, name: _d.name, customer: _d.client });
-    else setDealContext({ id: dealId });
+    const _s = siteId && _d ? (_d.sites || []).find(s => String(s.id) === String(siteId)) : null;
+    if (_d) setDealContext({ id: _d.id, name: _d.name, customer: _d.client, siteId: siteId || null, siteName: _s ? _s.name : null });
+    else setDealContext({ id: dealId, siteId: siteId || null });
   }
   window.location.hash = 'designtools/cost-model';
 }
@@ -1924,74 +2009,325 @@ function renderDealCompare() {
   `;
 }
 
+// ============================================================
+// S1 — SITES TAB (2026-07-22, rulings #6/#7: Sites become real)
+// Site cards + per-site ★ + Unassigned bucket + site detail page.
+// ============================================================
+
+const SITE_STATUS_META = {
+  proposed:   { label: 'Proposed',   bg: 'var(--ies-gray-100)', ink: 'var(--ies-gray-600)' },
+  evaluating: { label: 'Evaluating', bg: '#dbeafe',             ink: '#1e40af' },
+  committed:  { label: 'Committed',  bg: '#dcfce7',             ink: '#166534' },
+  dropped:    { label: 'Dropped',    bg: '#fee2e2',             ink: '#991b1b' },
+};
+
+function _siteStatusChip(status) {
+  const m = SITE_STATUS_META[status] || SITE_STATUS_META.proposed;
+  return `<span style="display:inline-flex;align-items:center;border-radius:14px;padding:2px 9px;font-size:11px;font-weight:600;background:${m.bg};color:${m.ink};">${m.label}</span>`;
+}
+
+/** Scenario revenue estimate — the shared pure formula (calc.js). */
+function _modelRevenueEst(m, fallbackMarginPct) {
+  return dmCalc.modelRevenueEst(m, fallbackMarginPct);
+}
+
+/** Recompute the deal's Σ★ roll-up locally after a ★ / site / assignment
+ *  change. Same pure formula the fetch path uses (calc.computeStarRollup) —
+ *  legacy heuristic values pass through when no ★ exists. */
+function _recomputeDealRollup(d) {
+  const modelById = new Map((d.models || []).map(m => [String(m.id), m]));
+  const r = dmCalc.computeStarRollup(d.sites || [], modelById, { revenue: d.revenue, margin: d.margin });
+  d.revenue = r.revenue;
+  d.margin = r.margin;
+  d.rollupFromStars = r.rollupFromStars;
+  d.rollupIsEstimate = r.rollupIsEstimate;
+  d.bidCoverage = r.bidCoverage;
+}
+
+function _scenarioChips(d, site, group) {
+  return group.map(m => {
+    const lbl = m.scenario_label || 'Baseline';
+    const star = site.inBidModelId != null && String(site.inBidModelId) === String(m.id);
+    return `<span style="display:inline-flex;align-items:center;gap:5px;border:1px solid ${star ? '#bbe5c8' : 'var(--ies-gray-200)'};background:${star ? '#e9f7ee' : '#fff'};border-radius:14px;padding:2px 4px 2px 10px;font-size:11px;margin:2px 4px 2px 0;">
+      <a href="javascript:void(0)" data-action="open-cost-model-id" data-model-id="${escapeAttr(m.id)}" style="text-decoration:none;color:var(--ies-navy);font-weight:${star ? '700' : '500'};">${star ? '★ ' : ''}${escapeHtml(lbl)}</a>
+      ${star ? '' : `<button data-action="mark-in-bid" data-model-id="${escapeAttr(m.id)}" title="Mark this scenario ★ in bid — the site and deal roll-ups will read it" style="border:none;background:var(--ies-gray-50);border-radius:10px;padding:1px 7px;font-size:10px;cursor:pointer;color:var(--ies-gray-500);">★?</button>`}
+    </span>`;
+  }).join('');
+}
+
 function renderDealSites() {
   const d = selectedDeal;
-  const sites = Array.isArray(d.sites) ? d.sites : [];
   const isReal = !!d.isReal;
+  const sites = Array.isArray(d.sites) ? d.sites : [];
 
-  // R10 (2026-04-29): tab is no longer read-only. Real deals can add a site,
-  // which routes through createCostModelForDeal so the new site lands as a
-  // cost_model_projects row attached to this deal (existing data model).
-  // Demo deals (isReal=false) keep the read-only behavior since they have
-  // no FK row to attach to.
+  // Drill-in: a selected site renders its detail page inside the tab pane.
+  if (selectedSiteId) {
+    const site = sites.find(s => String(s.id) === String(selectedSiteId));
+    if (site) return renderSiteDetail(d, site);
+    selectedSiteId = null;
+  }
+
   const addBtn = isReal
-    ? `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="add-site-to-deal" data-deal-id="${escapeAttr(d.id)}">+ Add Site</button>`
+    ? `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="add-site-to-deal" data-deal-id="${escapeAttr(d.id)}" title="Create a Site record under this deal">+ Add Site</button>`
     : '';
 
-  const emptyState = sites.length === 0 ? `
-        <tr><td colspan="4" style="padding:24px;text-align:center;color:var(--ies-gray-500);font-size:13px;">
-          ${isReal
-            ? 'No sites linked yet. Click <b>+ Add Site</b> to create the first cost-model scenario for this deal.'
-            : 'No sites linked.'}
-        </td></tr>` : '';
+  // Demo deals keep the legacy derived rows (no deal_sites FK to hang off) —
+  // render them read-only with the old shape.
+  if (!isReal) {
+    return `
+      <div class="hub-card u-p-4">
+        <div class="u-13 u-bold" style="margin-bottom:10px;">Sites (${sites.length})</div>
+        ${sites.length === 0 ? '<div class="u-cap u-faint">No sites linked.</div>' : `
+        <table class="u-table">
+          <thead><tr class="u-th-rule"><th style="text-align:left;padding:8px;">Site</th><th style="text-align:left;padding:8px;">Market</th><th style="text-align:right;padding:8px;">Sq Ft</th></tr></thead>
+          <tbody>${sites.map(s => `<tr style="border-bottom:1px solid var(--ies-gray-100);">
+            <td style="padding:8px;font-weight:600;">${escapeHtml(s.name)}</td>
+            <td style="padding:8px;color:var(--ies-gray-500);">${escapeHtml(s.market)}</td>
+            <td style="padding:8px;text-align:right;">${(s.sqft || 0).toLocaleString()}</td></tr>`).join('')}</tbody>
+        </table>`}
+      </div>`;
+  }
+
+  const unassigned = (d.models || []).filter(m => !m.site_id);
+  const cov = d.bidCoverage || { starred: 0, active: sites.filter(s => s.status !== 'dropped').length };
+  const gap = cov.active - cov.starred;
+  const warn = sites.length > 0 && gap > 0 ? `
+    <div style="display:flex;align-items:center;gap:8px;background:#fef3c7;border:1px solid #fde68a;color:#92400e;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;margin-bottom:12px;">
+      ⚠ Roll-up covers ${cov.starred} of ${cov.active} sites — deal totals carry an <i>&nbsp;est&nbsp;</i> badge until every non-dropped site has a ★ scenario.
+    </div>` : '';
+
+  const cards = sites.map(s => {
+    const group = (d.models || []).filter(m => String(m.site_id || '') === String(s.id));
+    const starModel = s.inBidModelId != null ? group.find(m => String(m.id) === String(s.inBidModelId)) : null;
+    const starRev = starModel ? _modelRevenueEst(starModel, d.margin) : 0;
+    const starCost = starModel ? (Number(starModel.total_annual_cost) || 0) : 0;
+    const starLine = starModel && starRev > 0
+      ? `★ $${(starRev / 1e6).toFixed(1)}M · ${(((starRev - starCost) / starRev) * 100).toFixed(1)}%`
+      : `<span class="u-faint">${s.status === 'dropped' ? '— dropped' : group.length ? 'no ★ yet' : '— excluded from roll-up'}</span>`;
+    return `
+    <div class="hub-card" style="padding:14px 16px;display:flex;flex-direction:column;gap:9px;${group.length === 0 ? 'border-style:dashed;' : ''}">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="font-size:13.5px;font-weight:800;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(s.name)}</div>
+        ${_siteStatusChip(s.status)}
+      </div>
+      <div class="u-cap u-faint">${escapeHtml(s.market || '—')}${s.sqft > 0 ? ` · ${s.sqft.toLocaleString()} sq ft` : ''}${s.building ? ` · ${escapeHtml(s.building)}` : ''}</div>
+      <div style="border-top:1px solid var(--ies-gray-100);padding-top:8px;">
+        <div style="font-size:10.5px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Scenarios (${group.length})</div>
+        ${group.length
+          ? _scenarioChips(d, s, group)
+          : `<div class="u-cap u-faint" style="margin-bottom:6px;">No scenarios yet.</div>
+             <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="create-cost-model" data-deal-id="${escapeAttr(d.id)}" data-site-id="${escapeAttr(s.id)}">Start cost model →</button>`}
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--ies-gray-100);padding-top:9px;margin-top:auto;">
+        <span style="font-size:11.5px;font-weight:700;">${starLine}</span>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-open-site="${escapeAttr(s.id)}">Open site →</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const unassignedBlock = unassigned.length ? `
+    <div class="hub-card" style="margin-top:14px;padding:12px 16px;background:var(--ies-gray-50);">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:10.5px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.04em;">Unassigned (${unassigned.length})</span>
+        ${unassigned.map(m => `
+          <span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--ies-gray-200);background:#fff;border-radius:14px;padding:2px 6px 2px 10px;font-size:11px;">
+            <a href="javascript:void(0)" data-action="open-cost-model-id" data-model-id="${escapeAttr(m.id)}" style="text-decoration:none;color:var(--ies-navy);font-weight:500;">${escapeHtml(m.name || 'Untitled')}${m.scenario_label ? ' · ' + escapeHtml(m.scenario_label) : ''}</a>
+            <select data-assign-model="${escapeAttr(m.id)}" style="font-size:11px;padding:2px 4px;border:1px solid var(--ies-gray-200);border-radius:8px;color:var(--ies-gray-600);">
+              <option value="">Assign to site…</option>
+              ${sites.map(s => `<option value="${escapeAttr(s.id)}">${escapeHtml(s.name)}</option>`).join('')}
+            </select>
+          </span>`).join('')}
+        <span class="u-cap u-faint">Site-less models keep working — they just don't feed any site's roll-up.</span>
+      </div>
+    </div>` : '';
 
   return `
-    <div class="hub-card u-p-4">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div class="u-13 u-bold">Site Details (${sites.length})</div>
-        ${addBtn}
-      </div>
-      <table class="u-table">
-        <thead>
-          <tr class="u-th-rule">
-            <th style="text-align:left;padding:8px;">Site Name</th>
-            <th style="text-align:left;padding:8px;">Market</th>
-            <th style="text-align:right;padding:8px;">Sq Ft</th>
-            <th style="text-align:left;padding:8px;">Type</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${emptyState}
-          ${sites.map(s => {
-            // UX-1 D1p2-B: a site is the named entity; its scenarios are the
-            // deal's CM projects sharing market|name. Exactly one should be ★.
-            const group = (d.models || []).filter(m => (m.name || '') === s.name);
-            const chips = group.map(m => {
-              const lbl = m.scenario_label || 'Baseline';
-              const star = m.in_bid;
-              return `<span style="display:inline-flex;align-items:center;gap:5px;border:1px solid ${star ? '#bbe5c8' : 'var(--ies-gray-200)'};background:${star ? '#e9f7ee' : '#fff'};border-radius:14px;padding:2px 4px 2px 10px;font-size:11px;margin:2px 4px 2px 0;">
-                <a href="javascript:void(0)" data-action="open-cost-model-id" data-model-id="${escapeAttr(m.id)}" style="text-decoration:none;color:var(--ies-navy);font-weight:${star ? '700' : '500'};">${star ? '★ ' : ''}${escapeHtml(lbl)}</a>
-                ${star ? '' : `<button data-action="mark-in-bid" data-model-id="${escapeAttr(m.id)}" title="Mark this scenario ★ in bid — deal rollups will read it" style="border:none;background:var(--ies-gray-50);border-radius:10px;padding:1px 7px;font-size:10px;cursor:pointer;color:var(--ies-gray-500);">★?</button>`}
-              </span>`;
-            }).join('');
-            return `
-            <tr style="border-bottom:1px solid var(--ies-gray-100);">
-              <td style="padding:8px;font-weight:600;vertical-align:top;">${escapeHtml(s.name)}
-                <div class="u-mt-1">${chips || '<span class="u-cap u-faint">no scenarios</span>'}</div>
-              </td>
-              <td style="padding:8px;color:var(--ies-gray-500);vertical-align:top;">${escapeHtml(s.market)}</td>
-              <td style="padding:8px;text-align:right;font-weight:600;vertical-align:top;">${(s.sqft || 0).toLocaleString()}</td>
-              <td style="padding:8px;vertical-align:top;"><span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;background:var(--ies-gray-100);color:var(--ies-gray-600);">${escapeHtml(s.type)}</span></td>
-            </tr>
-          `; }).join('')}
-        </tbody>
-      </table>
-      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--ies-gray-100);font-size:12px;color:var(--ies-gray-400);">
-        Total: ${sites.reduce((s, site) => s + (site.sqft || 0), 0).toLocaleString()} sq ft across ${sites.length} sites ·
-        ★ = in-bid scenario (deal P&amp;L reads ★ rows only once any is marked)
-      </div>
+    ${warn}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div class="u-13 u-bold">Sites (${sites.length})</div>
+      ${addBtn}
+    </div>
+    ${sites.length === 0 ? `
+      <div class="hub-card" style="padding:28px;text-align:center;color:var(--ies-gray-500);font-size:13px;">
+        No sites yet. <b>+ Add Site</b> creates a Site record — scenarios and designs attach to it.
+      </div>` : `
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;">${cards}</div>`}
+    ${unassignedBlock}
+    <div style="margin-top:12px;font-size:12px;color:var(--ies-gray-400);">
+      Total: ${sites.reduce((t, s) => t + (s.sqft || 0), 0).toLocaleString()} sq ft across ${sites.length} site${sites.length === 1 ? '' : 's'} ·
+      deal roll-up = Σ of each site's ★ scenario
     </div>
   `;
+}
+
+/** S1 — site detail page (drill-in from a site card). */
+function renderSiteDetail(d, site) {
+  const group = (d.models || []).filter(m => String(m.site_id || '') === String(site.id));
+  const ds = _designScenariosByDeal.get(d.id) || { wsc: [], most: [], cog: [] };
+  const TOOLS = [
+    { key: 'wsc',  label: 'Sizing',  route: 'designtools/warehouse-sizing', bg: '#dbeafe', ink: '#1e40af' },
+    { key: 'most', label: 'Labor',   route: 'designtools/most-standards',   bg: '#f3e8ff', ink: '#6b21a8' },
+    { key: 'cog',  label: 'Network', route: 'designtools/center-of-gravity', bg: '#dcfce7', ink: '#166534' },
+  ];
+  const atSite = [];
+  const looseDesigns = [];
+  for (const t of TOOLS) {
+    for (const row of (ds[t.key] || [])) {
+      (String(row.site_id || '') === String(site.id) ? atSite : (!row.site_id ? looseDesigns : [])).push({ ...row, tool: t });
+    }
+  }
+  const starModel = site.inBidModelId != null ? group.find(m => String(m.id) === String(site.inBidModelId)) : null;
+  const starRev = starModel ? _modelRevenueEst(starModel, d.margin) : 0;
+  const starCost = starModel ? (Number(starModel.total_annual_cost) || 0) : 0;
+
+  const scenarioRows = group.map(m => {
+    const star = site.inBidModelId != null && String(site.inBidModelId) === String(m.id);
+    const rev = _modelRevenueEst(m, d.margin);
+    const cost = Number(m.total_annual_cost) || 0;
+    return `
+    <tr style="border-bottom:1px solid var(--ies-gray-100);${star ? 'background:#f0fdf4;' : ''}">
+      <td style="padding:8px;width:34px;text-align:center;">${star
+        ? '<span style="color:var(--c-success);font-size:15px;">★</span>'
+        : `<button data-action="mark-in-bid" data-model-id="${escapeAttr(m.id)}" title="Make this the site's ★ bid scenario" style="border:none;background:var(--ies-gray-50);border-radius:10px;padding:2px 8px;font-size:12px;cursor:pointer;color:var(--ies-gray-500);">☆</button>`}</td>
+      <td style="padding:8px;font-weight:${star ? '700' : '500'};">${escapeHtml(m.scenario_label || 'Baseline')}</td>
+      <td style="padding:8px;text-align:right;">${rev > 0 ? '$' + (rev / 1e6).toFixed(2) + 'M' : '—'}</td>
+      <td style="padding:8px;text-align:right;">${rev > 0 ? (((rev - cost) / rev) * 100).toFixed(1) + '%' : '—'}</td>
+      <td style="padding:8px;color:var(--ies-gray-400);font-size:11px;">${m.updated_at ? formatDate(String(m.updated_at).slice(0, 10)) : '—'}</td>
+      <td style="padding:8px;text-align:right;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="open-cost-model-id" data-model-id="${escapeAttr(m.id)}">Open →</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="site-back">← Sites</button>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:16px;font-weight:800;">${escapeHtml(site.name)} <span style="vertical-align:2px;">${_siteStatusChip(site.status)}</span></div>
+        <div class="u-cap u-faint">${escapeHtml(site.market || '—')}${site.sqft > 0 ? ` · ${site.sqft.toLocaleString()} sq ft` : ''}${site.building ? ` · ${escapeHtml(site.building)}` : ''}</div>
+      </div>
+      <button class="hub-btn hub-btn-sm hub-btn--ghost" data-action="edit-site" data-site-id="${escapeAttr(site.id)}">Edit site</button>
+    </div>
+
+    <div class="hub-kpi-strip" style="margin-bottom:14px;">
+      <div class="hub-kpi-tile"><div class="hub-kpi-tile__label">★ Y1 Revenue</div><div class="hub-kpi-tile__value">${starRev > 0 ? '$' + (starRev / 1e6).toFixed(1) + 'M' : '—'}</div></div>
+      <div class="hub-kpi-tile"><div class="hub-kpi-tile__label">★ Margin</div><div class="hub-kpi-tile__value">${starRev > 0 ? (((starRev - starCost) / starRev) * 100).toFixed(1) + '%' : '—'}</div></div>
+      <div class="hub-kpi-tile"><div class="hub-kpi-tile__label">Scenarios</div><div class="hub-kpi-tile__value">${group.length}</div></div>
+      <div class="hub-kpi-tile"><div class="hub-kpi-tile__label">Designs</div><div class="hub-kpi-tile__value">${atSite.length}</div></div>
+    </div>
+
+    <div class="hub-card u-p-4" style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div class="u-13 u-bold">Cost-model scenarios (${group.length})</div>
+        <button class="hub-btn hub-btn-sm hub-btn-primary" data-action="create-cost-model" data-deal-id="${escapeAttr(d.id)}" data-site-id="${escapeAttr(site.id)}">+ New scenario</button>
+      </div>
+      ${group.length === 0 ? '<div class="u-cap u-faint">No scenarios at this site yet.</div>' : `
+      <table class="u-table">
+        <thead><tr class="u-th-rule">
+          <th style="padding:8px;">★</th><th style="text-align:left;padding:8px;">Scenario</th>
+          <th style="text-align:right;padding:8px;">Y1 Revenue</th><th style="text-align:right;padding:8px;">Margin</th>
+          <th style="text-align:left;padding:8px;">Updated</th><th></th>
+        </tr></thead>
+        <tbody>${scenarioRows}</tbody>
+      </table>
+      <div class="u-cap u-faint" style="margin-top:10px;border-top:1px solid var(--ies-gray-100);padding-top:9px;">
+        Exactly one ★ per site — the deal roll-up and Financials read ★ rows.
+      </div>`}
+    </div>
+
+    <div class="hub-card u-p-4">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div class="u-13 u-bold">Designs at this site (${atSite.length})</div>
+        <div style="display:flex;gap:6px;">
+          ${TOOLS.map(t => `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="launch-tool" data-tool-route="${t.route}" data-site-id="${escapeAttr(site.id)}">+ ${t.label}</button>`).join('')}
+        </div>
+      </div>
+      ${atSite.length === 0 ? '<div class="u-cap u-faint" style="margin-bottom:8px;">No designs attached. Launching a tool from here pre-binds deal + site, so new saves land at this site.</div>' : `
+      <table class="u-table">
+        <thead><tr class="u-th-rule"><th style="text-align:left;padding:8px;">Tool</th><th style="text-align:left;padding:8px;">Scenario</th><th style="text-align:left;padding:8px;">Updated</th></tr></thead>
+        <tbody>${atSite.map(r => `
+          <tr style="border-bottom:1px solid var(--ies-gray-100);">
+            <td style="padding:8px;"><span style="display:inline-flex;border-radius:14px;padding:2px 9px;font-size:11px;font-weight:600;background:${r.tool.bg};color:${r.tool.ink};">${r.tool.label}</span></td>
+            <td style="padding:8px;font-weight:600;">${escapeHtml(r.name || 'Untitled')}</td>
+            <td style="padding:8px;color:var(--ies-gray-400);font-size:11px;">${r.updated_at ? formatDate(String(r.updated_at).slice(0, 10)) : '—'}</td>
+          </tr>`).join('')}</tbody>
+      </table>`}
+      ${looseDesigns.length ? `
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--ies-gray-100);">
+        <span class="u-cap u-faint">Deal-level designs not at any site:</span>
+        ${looseDesigns.map(r => `
+          <span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--ies-gray-200);background:#fff;border-radius:14px;padding:2px 6px 2px 10px;font-size:11px;margin:3px 4px 0 0;">
+            <span style="color:${r.tool.ink};font-weight:700;">${r.tool.label}</span> ${escapeHtml(r.name || 'Untitled')}
+            <button class="hub-btn hub-btn-sm hub-btn--ghost" data-action="attach-design" data-tool="${r.tool.key}" data-design-id="${escapeAttr(r.id)}" data-site-id="${escapeAttr(site.id)}" style="padding:2px 8px;">Attach here</button>
+          </span>`).join('')}
+      </div>` : ''}
+    </div>
+  `;
+}
+
+/** S1 — Add/Edit Site modal. */
+async function openSiteModal(dealId, site) {
+  const d = DEALS.find(x => x.id === dealId) || selectedDeal;
+  if (!d) return;
+  const markets = await api.listMarkets();
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(28,25,23,0.45);z-index:1000;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `
+    <div class="hub-card" style="width:440px;max-width:92vw;padding:20px;">
+      <div style="font-size:15px;font-weight:800;margin-bottom:14px;">${site ? 'Edit site' : 'Add site'}</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <label class="u-cap" style="font-weight:700;color:var(--ies-gray-500);">Site name
+          <input id="site-name" class="hub-input" style="width:100%;margin-top:4px;" value="${site ? escapeAttr(site.name) : ''}" placeholder="e.g. Columbus DC">
+        </label>
+        <label class="u-cap" style="font-weight:700;color:var(--ies-gray-500);">Market
+          <select id="site-market" class="hub-input" style="width:100%;margin-top:4px;">
+            <option value="">— none —</option>
+            ${markets.map(m => `<option value="${escapeAttr(m.id)}" ${site && String(site.marketId) === String(m.id) ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('')}
+          </select>
+        </label>
+        <label class="u-cap" style="font-weight:700;color:var(--ies-gray-500);">Building / address <span style="font-weight:400;">(optional)</span>
+          <input id="site-building" class="hub-input" style="width:100%;margin-top:4px;" value="${site && site.building ? escapeAttr(site.building) : ''}" placeholder="e.g. 4155 Holmes Rd">
+        </label>
+        <label class="u-cap" style="font-weight:700;color:var(--ies-gray-500);">Status
+          <select id="site-status" class="hub-input" style="width:100%;margin-top:4px;">
+            ${Object.entries(SITE_STATUS_META).map(([k, v]) => `<option value="${k}" ${site && site.status === k ? 'selected' : (!site && k === 'proposed' ? 'selected' : '')}>${v.label}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="site-cancel">Cancel</button>
+        <button class="hub-btn hub-btn-sm hub-btn-primary" id="site-save">${site ? 'Save' : 'Create site'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  overlay.querySelector('#site-cancel')?.addEventListener('click', close);
+  overlay.querySelector('#site-save')?.addEventListener('click', async () => {
+    const name = /** @type {HTMLInputElement} */ (overlay.querySelector('#site-name'))?.value?.trim();
+    const marketId = /** @type {HTMLSelectElement} */ (overlay.querySelector('#site-market'))?.value || null;
+    const building = /** @type {HTMLInputElement} */ (overlay.querySelector('#site-building'))?.value?.trim() || null;
+    const status = /** @type {HTMLSelectElement} */ (overlay.querySelector('#site-status'))?.value || 'proposed';
+    if (!name) { showToast('Site name is required', 'error'); return; }
+    const marketName = marketId ? (markets.find(m => String(m.id) === String(marketId))?.name || marketId) : '—';
+    try {
+      if (site) {
+        await api.updateSite(site.id, { name, market_id: marketId, building, status });
+        Object.assign(site, { name, marketId, market: marketName, building, status });
+      } else {
+        const row = await api.createSite(d.id, { name, market_id: marketId, building, status });
+        d.sites = d.sites || [];
+        d.sites.push({ id: row.id, name, market: marketName, marketId, building, status, sqft: 0, type: '—', modelCount: 0, inBidModelId: null });
+      }
+      _recomputeDealRollup(d);
+      close();
+      renderDetail();
+      showToast(site ? 'Site updated' : `Site "${name}" created`, 'success');
+    } catch (err) {
+      console.error('[deal-mgmt] site save failed', err);
+      showToast('Site save failed: ' + (err.message || err), 'error');
+    }
+  });
 }
 
 function renderDealDos() {

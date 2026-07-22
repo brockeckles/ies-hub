@@ -14,14 +14,14 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean, listDirty as 
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260705-u1a';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260722-s1a';
 // Note: MOST intentionally opts out of run-state tracking. Its Quick Analysis
 // tab recomputes inline on every render — the primary "Run"
 // button is a convenience trigger rather than a discrete compute step, so a
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
 import * as calc from './calc.js?v=20260704-ux2d';
-import * as api from './api.js?v=20260704-wcr1';
+import * as api from './api.js?v=20260722-s1a';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================

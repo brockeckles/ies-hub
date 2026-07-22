@@ -8,7 +8,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260705-u1a';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260722-s1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { renderToolChrome, refreshToolChrome, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260710-r2';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';

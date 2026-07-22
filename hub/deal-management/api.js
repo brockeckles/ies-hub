@@ -9,6 +9,8 @@
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
+// S1 (2026-07-22): Σ★ roll-up is pure — one formula shared with ui.js.
+import { computeStarRollup } from './calc.js?v=20260722-s1a';
 
 /**
  * Fetch the 6 canonical DOS stages.
@@ -91,11 +93,15 @@ export async function listRealDeals() {
     // last we checked) and read-only ref data, so the extra round-trip is
     // cheap. .catch fallback keeps deals listing functional even if ref_markets
     // is gated by RLS or unreachable — sites just fall back to "—".
-    const [deals, models, marketRows, stagesRows] = await Promise.all([
+    const [deals, models, marketRows, stagesRows, siteRows] = await Promise.all([
       db.fetchAll('deal_deals', 'id, deal_name, client_name, deal_owner, status, current_stage_id, created_at, updated_at, est_annual_revenue, target_margin_pct, contract_term_years, target_go_live, industry_vertical, site_count'),
-      db.fetchAll('cost_model_projects', 'id, name, scenario_label, client_name, market_id, facility_sqft, target_margin_pct, total_annual_cost, deal_deals_id, updated_at, in_bid'),
+      db.fetchAll('cost_model_projects', 'id, name, scenario_label, client_name, market_id, facility_sqft, target_margin_pct, total_annual_cost, deal_deals_id, updated_at, in_bid, site_id'),
       db.fetchAll('ref_markets', 'id, name').catch(() => []),
       db.fetchAll('stages', 'id, stage_number').catch(() => []),
+      // S1 (2026-07-22, rulings #6/#7): first-class Site records. Sites are
+      // no longer derived from a market_id|name string collapse — they are
+      // real deal_sites rows seeded by the S1 migration from that exact key.
+      db.fetchAll('deal_sites', 'id, deal_id, name, market_id, building, status, in_bid_model_id, sort_order, updated_at').catch(() => []),
     ]);
     const stagesByIdLocal = new Map();
     for (const r of stagesRows || []) {
@@ -112,48 +118,66 @@ export async function listRealDeals() {
       if (!byDeal.has(k)) byDeal.set(k, []);
       byDeal.get(k).push(m);
     }
+    const sitesByDeal = new Map();
+    for (const s of siteRows || []) {
+      if (!s.deal_id) continue;
+      if (!sitesByDeal.has(s.deal_id)) sitesByDeal.set(s.deal_id, []);
+      sitesByDeal.get(s.deal_id).push(s);
+    }
     return (deals || []).map(d => {
       const attached = byDeal.get(d.id) || [];
-      // Roll a single per-site representative from each unique market_id (if set)
-      // so the Sites tab has something to show. When models share a market_id /
-      // name (4 scenarios for 1 site = the Wayfair Memphis FC case), they collapse
-      // into a single site row.
-      const sitesMap = new Map();
-      for (const m of attached) {
-        const k = `${m.market_id || ''}|${m.name || ''}`;
-        // 2026-04-27 EVE: resolve market_id to display name. Sites tab was
-        // showing raw UUIDs — this lookup gets the human-readable market.
-        // Fall back to the FK string when the lookup misses (legacy data),
-        // and to "—" when no market_id at all.
-        const marketName = m.market_id
-          ? (marketNameById.get(m.market_id) || m.market_id)
-          : '—';
-        if (!sitesMap.has(k)) {
-          sitesMap.set(k, {
-            name: m.name || 'Unnamed Site',
-            market: marketName,
-            sqft: Number(m.facility_sqft) || 0,
-            type: '—',
-            modelCount: 0,
-          });
-        }
-        sitesMap.get(k).modelCount += 1;
-      }
-      const sites = [...sitesMap.values()];
+      const modelById = new Map(attached.map(m => [String(m.id), m]));
+      // S1: sites are REAL rows. Each site's scenario group = models with
+      // site_id === site.id; ★ authority = deal_sites.in_bid_model_id (the
+      // in_bid boolean stays mirrored during S1 but is no longer read here).
+      const siteRowsForDeal = (sitesByDeal.get(d.id) || [])
+        .sort((a, b) => (a.sort_order ?? 1e9) - (b.sort_order ?? 1e9) || String(a.name).localeCompare(String(b.name)));
+      const sites = siteRowsForDeal.map(s => {
+        const group = attached.filter(m => String(m.site_id || '') === String(s.id));
+        const starModel = s.in_bid_model_id != null ? modelById.get(String(s.in_bid_model_id)) : null;
+        // sqft: prefer the ★ scenario's facility, else the biggest in the group.
+        const sqft = starModel ? (Number(starModel.facility_sqft) || 0)
+          : group.reduce((mx, m) => Math.max(mx, Number(m.facility_sqft) || 0), 0);
+        return {
+          id: s.id,
+          name: s.name || 'Unnamed Site',
+          market: s.market_id ? (marketNameById.get(s.market_id) || s.market_id) : '—',
+          marketId: s.market_id || null,
+          building: s.building || null,
+          status: s.status || 'proposed',
+          sqft,
+          type: '—',
+          modelCount: group.length,
+          inBidModelId: s.in_bid_model_id != null ? s.in_bid_model_id : null,
+        };
+      });
+      // Models not attached to any site → Unassigned bucket (migration
+      // leftovers + future site-less saves). They keep working; they just
+      // don't feed any site's roll-up.
+      const unassigned = attached.filter(m => !m.site_id);
+      // Reflect ★ from the site authority onto the model summaries the UI
+      // renders (chips read m.in_bid).
+      const starIds = new Set(sites.map(s => (s.inBidModelId != null ? String(s.inBidModelId) : null)).filter(Boolean));
+      for (const m of attached) m.in_bid = starIds.has(String(m.id));
       // R6 (2026-04-29): prefer deal-level columns from the modal entry, fall
       // back to attached-model averages so older deals without the columns
       // still render meaningful values.
       const dealMargin = Number(d.target_margin_pct);
       const margins = attached.map(m => Number(m.target_margin_pct)).filter(n => Number.isFinite(n) && n > 0);
-      const margin = Number.isFinite(dealMargin) && dealMargin > 0
+      const legacyMargin = Number.isFinite(dealMargin) && dealMargin > 0
         ? dealMargin
         : (margins.length ? margins.reduce((a, b) => a + b, 0) / margins.length : 0);
       // est_annual_revenue is stored in $M; convert to dollars for the rest of the UI.
       const dealRevenue = Number(d.est_annual_revenue);
       const totals = attached.map(m => Number(m.total_annual_cost)).filter(n => Number.isFinite(n) && n > 0);
-      const revenue = Number.isFinite(dealRevenue) && dealRevenue > 0
+      const legacyRevenue = Number.isFinite(dealRevenue) && dealRevenue > 0
         ? dealRevenue * 1e6
-        : (totals.length ? totals.reduce((a, b) => a + b, 0) / (1 - (margin / 100 || 0.1)) : 0);
+        : (totals.length ? totals.reduce((a, b) => a + b, 0) / (1 - (legacyMargin / 100 || 0.1)) : 0);
+      // S1 roll-up (ruling #6): Σ of each site's ★ scenario when any ★
+      // exists; the exact legacy heuristic above passes through otherwise
+      // (byte-identical list/pipeline numbers for no-★ deals).
+      const { revenue, margin, rollupFromStars, rollupIsEstimate, bidCoverage } =
+        computeStarRollup(sites, modelById, { revenue: legacyRevenue, margin: legacyMargin });
       // 2026-04-29 (R6): deal_deals.current_stage_id is the stages.id (PK),
       // but the UI groups deals by stage_number (1..6). Map via stagesById.
       const stagesIdToNum = (typeof stagesByIdLocal === 'undefined') ? null : stagesByIdLocal;
@@ -168,6 +192,10 @@ export async function listRealDeals() {
         client: d.client_name || '—',
         stage,
         sites,
+        unassignedModelIds: unassigned.map(m => m.id),
+        bidCoverage,
+        rollupIsEstimate,
+        rollupFromStars,
         revenue,
         margin,
         owner: d.deal_owner || '—',
@@ -187,8 +215,10 @@ export async function listRealDeals() {
           market_id: m.market_id,
           facility_sqft: m.facility_sqft,
           target_margin_pct: m.target_margin_pct,
+          total_annual_cost: m.total_annual_cost,
           updated_at: m.updated_at,
           in_bid: !!m.in_bid,
+          site_id: m.site_id || null,
         })),
       };
     });
@@ -421,28 +451,145 @@ export async function getLatestDealOutcome(dealId) {
 }
 
 /**
- * UX-1 D1p2-B (2026-07-03): mark a scenario ★-in-bid, exclusively within its
- * site group (deal models collapsed by market_id|name — same key the Sites
- * rollup uses). App-side exclusivity: clear siblings, set target.
+ * S1 (2026-07-22, rulings #6/#7): mark a scenario ★-in-bid FOR ITS SITE.
+ * The ★ authority is deal_sites.in_bid_model_id — one UPDATE, exclusivity
+ * enforced by the FK rather than app-side sibling-clearing over a string
+ * key (the pre-S1 setModelInBid). cost_model_projects.in_bid stays
+ * MIRRORED through S1 (spec ruling: retire with the S2 arc) so any
+ * downstream reader keeps working: clear siblings' flags, set the target's.
+ *
  * @param {string} dealId
- * @param {number|string} modelId
+ * @param {number|string} modelId — must be attached to a site on this deal
  */
 export async function setModelInBid(dealId, modelId) {
   const { data, error } = await db.from('cost_model_projects')
-    .select('id, name, market_id, in_bid')
+    .select('id, name, site_id, in_bid')
     .eq('deal_deals_id', dealId);
   if (error) throw error;
   const rows = data || [];
   const target = rows.find(r => String(r.id) === String(modelId));
   if (!target) throw new Error('setModelInBid: model not on this deal');
-  const groupKey = `${target.market_id || ''}|${target.name || ''}`;
+  if (!target.site_id) throw new Error('setModelInBid: model is Unassigned — attach it to a site first');
+  // Authority: one UPDATE on the site row.
+  await db.update('deal_sites', target.site_id, { in_bid_model_id: target.id });
+  // Mirror (S1 soak): keep the legacy boolean consistent within the site.
   const siblings = rows.filter(r =>
-    `${r.market_id || ''}|${r.name || ''}` === groupKey && String(r.id) !== String(modelId) && r.in_bid);
+    String(r.site_id || '') === String(target.site_id) && String(r.id) !== String(modelId) && r.in_bid);
   for (const sib of siblings) {
     await db.update('cost_model_projects', sib.id, { in_bid: false });
   }
-  await db.update('cost_model_projects', target.id, { in_bid: true });
-  recordAudit({ table: 'cost_model_projects', id: target.id, action: 'mark_in_bid', fields: { deal_deals_id: dealId } });
+  if (!target.in_bid) await db.update('cost_model_projects', target.id, { in_bid: true });
+  recordAudit({ table: 'deal_sites', id: target.site_id, action: 'set_site_in_bid', fields: { deal_deals_id: dealId, model_id: target.id } });
+}
+
+// ============================================================
+// S1 — Site CRUD (2026-07-22, rulings #6/#7 + spec rulings s2)
+// ============================================================
+
+/**
+ * Small read-only markets list for the Add/Edit Site modal.
+ * @returns {Promise<Array<{id:string,name:string}>>}
+ */
+export async function listMarkets() {
+  try {
+    const rows = await db.fetchAll('ref_markets', 'id, name');
+    return (rows || []).filter(r => r && r.id).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  } catch (err) {
+    console.warn('[deal-mgmt] listMarkets failed', err);
+    return [];
+  }
+}
+
+/**
+ * List Site rows for a deal, ordered by sort_order then name.
+ * @param {string} dealId
+ */
+export async function listSitesByDeal(dealId) {
+  if (!dealId) return [];
+  try {
+    const { data, error } = await db.from('deal_sites')
+      .select('id, name, market_id, building, status, in_bid_model_id, sort_order, updated_at')
+      .eq('deal_id', dealId)
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('name', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.warn('[deal-mgmt] listSitesByDeal failed', err);
+    return [];
+  }
+}
+
+/**
+ * Create a Site record under a deal. This is the S1 "+ Add Site" — it
+ * creates a deal_sites row, NOT a cost model (pre-S1 behavior).
+ * @param {string} dealId
+ * @param {{ name:string, market_id?:string|null, building?:string|null, status?:string }} payload
+ */
+export async function createSite(dealId, payload) {
+  if (!dealId || !payload?.name) throw new Error('createSite: dealId + name required');
+  const row = await db.insert('deal_sites', {
+    deal_id: dealId,
+    name: String(payload.name),
+    market_id: payload.market_id || null,
+    building: payload.building || null,
+    status: payload.status || 'proposed',
+  });
+  recordAudit({ table: 'deal_sites', id: row?.id, action: 'create_site', fields: { deal_id: dealId } });
+  return row;
+}
+
+/**
+ * Patch a Site (name / market_id / building / status / sort_order).
+ * @param {string} siteId
+ * @param {Object} patch
+ */
+export async function updateSite(siteId, patch) {
+  if (!siteId) throw new Error('updateSite: siteId required');
+  const allowed = {};
+  for (const k of ['name', 'market_id', 'building', 'status', 'sort_order']) {
+    if (patch[k] !== undefined) allowed[k] = patch[k];
+  }
+  return db.update('deal_sites', siteId, allowed);
+}
+
+/**
+ * Attach a cost model to a site (or detach with siteId=null → Unassigned).
+ * Mirrors ★ hygiene: a model leaving a site that ★'d it clears that ★.
+ * @param {number|string} modelId
+ * @param {string|null} siteId
+ */
+export async function assignModelToSite(modelId, siteId) {
+  if (modelId == null) throw new Error('assignModelToSite: modelId required');
+  const { data, error } = await db.from('cost_model_projects')
+    .select('id, site_id, in_bid').eq('id', modelId).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('assignModelToSite: model not found');
+  const prevSite = data.site_id;
+  await db.update('cost_model_projects', modelId, { site_id: siteId || null, ...(data.in_bid && prevSite && String(prevSite) !== String(siteId || '') ? { in_bid: false } : {}) });
+  if (prevSite && String(prevSite) !== String(siteId || '')) {
+    // If this model was the previous site's ★, clear it there.
+    const { data: prev } = await db.from('deal_sites')
+      .select('id, in_bid_model_id').eq('id', prevSite).maybeSingle();
+    if (prev && String(prev.in_bid_model_id) === String(modelId)) {
+      await db.update('deal_sites', prevSite, { in_bid_model_id: null });
+    }
+  }
+  return true;
+}
+
+/**
+ * Attach a design-tool scenario to a site (or detach with siteId=null).
+ * @param {'wsc'|'most'|'cog'} tool
+ * @param {string} scenarioId
+ * @param {string|null} siteId
+ */
+export async function assignDesignToSite(tool, scenarioId, siteId) {
+  const table = tool === 'wsc' ? 'wsc_facility_configs'
+    : tool === 'most' ? 'most_analyses'
+    : tool === 'cog' ? 'cog_scenarios' : null;
+  if (!table || !scenarioId) throw new Error('assignDesignToSite: bad args');
+  return db.update(table, scenarioId, { site_id: siteId || null });
 }
 
 /**
@@ -457,7 +604,7 @@ export async function listDesignScenariosByDeal(dealId) {
   const grab = async (table) => {
     try {
       const { data, error } = await db.from(table)
-        .select('id, name, updated_at')
+        .select('id, name, updated_at, site_id')
         .eq('parent_deal_id', dealId)
         .order('updated_at', { ascending: false });
       if (error) throw error;
@@ -530,4 +677,6 @@ export default { fetchStages, fetchActivityTemplates, listRealDeals, createDeal,
   loadStrategy, saveStrategy,
   listArtifactsByDeal, createArtifact, deleteArtifact,
   loadDosStatusByDeal, setDosElementStatus, advanceDealStage,
+  setModelInBid, listDesignScenariosByDeal, recordDealOutcome, getLatestDealOutcome,
+  listSitesByDeal, createSite, updateSite, assignModelToSite, assignDesignToSite, listMarkets,
 };
