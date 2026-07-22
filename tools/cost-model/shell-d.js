@@ -82,11 +82,12 @@ export const D_STATIONS = [
   { key: 'volume',    num: 2, name: 'Volume',    sections: ['volumes'] },
   // 2026-07-16 (Brock): 'facility' rides Operation, not Economics — the
   // building the operation runs in belongs with the people and equipment
-  // that run it (the Operation sub already summarizes its areas). Flow-first
-  // ruling preserved: flow → labor lead; facility sits with the physical
-  // resources (before equipment — equipment counts derive from areas/aisles).
+  // that run it (the Operation sub already summarizes its areas).
+  // 2026-07-22 (Brock): facility pill sits DIRECTLY AFTER FLOW — the
+  // building reads as flow's closest neighbor, ahead of the labor and
+  // equipment resources that occupy it.
   { key: 'operation', num: 3, name: 'Operation',
-    sections: ['flow', 'labor', 'shiftPlanning', 'shifts', 'facility', 'equipment', 'vas', 'implementation'] },
+    sections: ['flow', 'facility', 'labor', 'shiftPlanning', 'shifts', 'equipment', 'vas', 'implementation'] },
   { key: 'economics', num: 4, name: 'Economics',
     sections: ['overhead', 'startup', 'financial', 'assumptions', 'summary', 'timeline', 'whatif'] },
   { key: 'price',     num: 5, name: 'Price',     sections: ['pricingBuckets', 'pricing', 'scenarios'] },

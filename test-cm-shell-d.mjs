@@ -25,7 +25,7 @@ globalThis.window = globalThis.window || { location: { hostname: '', pathname: '
 
 // ?v= pin MUST match ui.js's import (feedback_test_cache_bust_match — a
 // mismatched pin loads a SECOND module instance with its own state).
-const shellD = await import('./tools/cost-model/shell-d.js?v=20260716-w7c');
+const shellD = await import('./tools/cost-model/shell-d.js?v=20260722-s3');
 const { getShellPref, setShellPref, D_STATIONS, stationForSection, renderShellD, renderDSpine,
         renderDScenarioRow, updateDRail, RAIL_ROW_KEYS, WHATIF_BY_CELL, railWhatIfSection,
         whatIfKeysForCell } = shellD;
@@ -507,7 +507,10 @@ t('essentials: assumptions is an economics essential (pill no longer vanishes)',
 // ---- 2026-07-14 (Brock): Operation is flow-first; drop-to-connect retired ----
 t('operation station: flow pill leads (define the flow, then staff it)', () => {
   const op = D_STATIONS.find(s => s.key === 'operation');
-  assert(op.sections[0] === 'flow' && op.sections[1] === 'labor', 'flow must precede labor');
+  // 2026-07-22 (Brock): facility sits directly after flow — the building is
+  // flow's closest neighbor; labor follows.
+  assert(op.sections[0] === 'flow' && op.sections[1] === 'facility' && op.sections[2] === 'labor',
+    'order must be flow → facility → labor');
 });
 
 // ---- 2026-07-16 (Brock): facility rides Operation, not Economics ----
