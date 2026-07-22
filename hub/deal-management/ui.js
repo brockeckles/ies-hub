@@ -7,7 +7,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260722-s3b';
+import * as api from './api.js?v=20260722-s3c';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260722-s1a';
@@ -17,7 +17,7 @@ import { icon } from '../../shared/icons.js?v=20260710-r2';
 import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260722-s2b';
 import * as msaApi from '../../tools/deal-manager/api.js?v=20260722-s3b';
 // S1 (2026-07-22): shared pure Σ★ roll-up (same module api.js computes with).
-import * as dmCalc from './calc.js?v=20260722-s1a';
+import * as dmCalc from './calc.js?v=20260722-s3c';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -30,9 +30,18 @@ const _designScenariosByDeal = new Map();
 // site rows per deal (scenario-level, from msaApi.listSites) + compare slots.
 const _outcomeByDeal = new Map();
 const _msaSitesByDeal = new Map();
+// S3-P1 (2026-07-22): Package station state. _strategyRowByDeal keeps the RAW
+// loadStrategy row (snake_case, null = no row yet) — distinct from the
+// camelCase editing seed in _strategyByDeal, because the manifest must read
+// DB truth, not seeded demo copy. _bidMetaByDeal caches deal_bid_meta rows
+// (null = none yet); _bidMetaLoaded marks deals whose meta fetch completed so
+// the rail can fail-soft (meta:null) before it lands.
+const _strategyRowByDeal = new Map();
+const _bidMetaByDeal = new Map();
+const _bidMetaLoaded = new Set();
 let _cmpSiteA = null;
 let _cmpSiteB = null;
-let detailTab = 'overview'; // overview | sites | dos | financials | documents | strategy
+let detailTab = 'overview'; // overview | sites | dos | financials | sensitivity | compare | strategy | package | artifacts
 // S1 (2026-07-22): drilled-in site on the Sites tab (null = card grid).
 let selectedSiteId = null;
 let dealSearch = '';
@@ -546,6 +555,18 @@ function bindDelegatedEvents() {
       return;
     }
 
+    // S3-P1 — Package tab: manual review toggle (deal_bid_meta.manual_checks).
+    const chk = target.closest('[data-action="toggle-manual-check"]');
+    if (chk) {
+      const key = chk.getAttribute('data-check-key');
+      const d = selectedDeal;
+      if (!d || !key) return;
+      const checks = { ...((_bidMetaByDeal.get(d.id) || {}).manual_checks || {}) };
+      checks[key] = checks[key] !== true;
+      _saveBidMetaField({ manualChecks: checks });
+      return;
+    }
+
     // Stage auto-advance
     if (target.closest('[data-action="advance-stage"]')) {
       if (selectedDeal && selectedDeal.stage < 6) {
@@ -654,6 +675,18 @@ function bindDelegatedEvents() {
           showToast('Assign failed: ' + (err.message || err), 'error');
         }
       })();
+      return;
+    }
+    // S3-P1 — Package tab: submission due (date input) + exec summary
+    // (textarea 'change' fires on blur). Optimistic save via _saveBidMetaField.
+    const due = /** @type {HTMLElement} */ (e.target).closest?.('[data-bid-due]');
+    if (due) {
+      _saveBidMetaField({ submissionDue: /** @type {HTMLInputElement} */ (due).value || null });
+      return;
+    }
+    const execTa = /** @type {HTMLElement} */ (e.target).closest?.('[data-bid-exec]');
+    if (execTa) {
+      _saveBidMetaField({ execSummary: /** @type {HTMLTextAreaElement} */ (execTa).value });
       return;
     }
     const sel = /** @type {HTMLElement} */ (e.target).closest?.('[data-cmp-slot]');
@@ -1164,6 +1197,7 @@ function renderDetail() {
         <button class="hub-tab ${detailTab === 'sensitivity' ? 'active' : ''}" data-detail-tab="sensitivity">Sensitivity</button>
         <button class="hub-tab ${detailTab === 'compare' ? 'active' : ''}" data-detail-tab="compare">Compare</button>
         <button class="hub-tab ${detailTab === 'strategy' ? 'active' : ''}" data-detail-tab="strategy">Win Strategy</button>
+        <button class="hub-tab ${detailTab === 'package' ? 'active' : ''}" data-detail-tab="package">Package</button>
         <button class="hub-tab ${detailTab === 'artifacts' ? 'active' : ''}" data-detail-tab="artifacts">Artifacts</button>
       </div>
 
@@ -1186,6 +1220,7 @@ function renderDetailContent() {
     case 'dos': el.innerHTML = renderDealDos(); break;
     case 'financials': el.innerHTML = renderDealFinancialsMsa(); break;
     case 'strategy': el.innerHTML = renderDealWinStrategy(); break;
+    case 'package': el.innerHTML = renderPackageTab(); _ensureBidMeta(); break;
     case 'artifacts': el.innerHTML = renderDealArtifacts(); break;
   }
 }
@@ -1343,13 +1378,16 @@ async function _hydrateDealDetail(dealId) {
   if (_hydratedDeals.has(dealId)) return;
   _hydratedDeals.add(dealId);
   try {
-    const [strategy, artifacts, dosStatus, designScenarios, outcome, msaSites] = await Promise.all([
+    const [strategy, artifacts, dosStatus, designScenarios, outcome, msaSites, bidMeta] = await Promise.all([
       api.loadStrategy(dealId),
       api.listArtifactsByDeal(dealId),
       api.loadDosStatusByDeal(dealId),
       api.listDesignScenariosByDeal(dealId),
       api.getLatestDealOutcome(dealId),
       msaApi.listSites(dealId).catch(() => []),
+      // S3-P1: bid-meta rides the hydrate so the rail's manifest pct is
+      // exact after first paint (getBidMeta is fail-soft null, never throws).
+      api.getBidMeta(dealId),
     ]);
 
     // Workflow rail data (UX-1 D1 phase 1).
@@ -1359,6 +1397,11 @@ async function _hydrateDealDetail(dealId) {
     // Compare tabs + ★-in-bid rollups all read these).
     _outcomeByDeal.set(dealId, outcome || null);
     _msaSitesByDeal.set(dealId, Array.isArray(msaSites) ? msaSites : []);
+
+    // S3-P1: raw strategy row + bid meta feed computeBidManifest directly.
+    _strategyRowByDeal.set(dealId, strategy || null);
+    _bidMetaByDeal.set(dealId, bidMeta || null);
+    _bidMetaLoaded.add(dealId);
 
     // Strategy: merge over the seeded defaults so any null-valued columns
     // fall back to the seed; non-null DB values win.
@@ -1419,6 +1462,12 @@ function _scheduleStrategySave(dealId) {
         asks:              s.asks,
         differentiators:   s.differentiators,
         competitorThreats: s.competitorThreats,
+      });
+      // S3-P1: a strategy row now exists — mirror it in the raw-row cache so
+      // the Package manifest's win-strategy item flips without a refetch.
+      _strategyRowByDeal.set(dealId, {
+        value_prop: s.valueProp, risks: s.risks, asks: s.asks,
+        differentiators: s.differentiators, competitor_threats: s.competitorThreats,
       });
     } catch (err) {
       console.warn('[deal-mgmt] strategy save failed', err);
@@ -1721,7 +1770,9 @@ function renderDealOverview() {
 function renderWorkflowRail(d) {
   const ds = _designScenariosByDeal.get(d.id) || { wsc: [], most: [], cog: [] };
   const models = Array.isArray(d.models) ? d.models : [];
-  const artifacts = getArtifacts(d.id) || [];
+  // S3-P1: Package stage reads bid-manifest completeness (fail-soft — with
+  // meta/designs still loading the pct is computed over what's cached).
+  const bidMan = _bidManifestFor(d);
 
   // DOS completion across ALL stages reached so far (mirrors detail KPI).
   let dosTotal = 0, dosDone = 0;
@@ -1767,8 +1818,13 @@ function renderWorkflowRail(d) {
             : 'designtools/center-of-gravity';
         return `<button class="hub-btn hub-btn-sm ${n ? 'hub-btn-secondary' : 'hub-btn-primary'}" data-action="launch-tool" data-tool-route="${route}">${smartLabel(n, 'network')}</button>`;
       })() },
-    { key: 'package', name: 'Package', sub: 'Artifacts · Strategy', count: artifacts.length,
-      btn: `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-detail-tab="artifacts">Open artifacts →</button>` },
+    // S3-P1 (2026-07-22): Package stage = bid-manifest completeness (was an
+    // artifacts count). The count slot shows the manifest pct; the dot goes
+    // green only at 100% bid-ready.
+    { key: 'package', name: 'Package', sub: 'Manifest · Exec Summary', count: null,
+      dotHtml: `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:${bidMan.pct >= 100 ? 'var(--c-success)' : bidMan.pct > 0 ? 'var(--c-warn)' : 'var(--ies-gray-200)'};"></span>`,
+      countTxt: `${bidMan.pct}%`,
+      btn: `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-detail-tab="package">Open package →</button>` },
   ];
 
   return `
@@ -2027,6 +2083,174 @@ function renderDealCompare() {
         </tbody>
       </table>
       <div style="margin-top:10px;font-size:11px;color:var(--ies-gray-400);">Bold = better of the pair. Engine: Multi-Site calc (computeSiteFinancials).</div>
+    </div>
+  `;
+}
+
+// ============================================================
+// S3-P1 — PACKAGE TAB (2026-07-22: bid manifest station)
+// One pure readiness formula (calc.computeBidManifest) renders the
+// completeness meter, grouped checklist, review toggles, and exec summary.
+// All persistence lands on deal_bid_meta via api.getBidMeta/saveBidMeta.
+// ============================================================
+
+const MANIFEST_GROUP_LABELS = [
+  ['sites', 'Sites & ★'],
+  ['economics', 'Economics'],
+  ['narrative', 'Narrative'],
+  ['reviews', 'Reviews'],
+];
+
+/** Compute the deal's bid manifest from cached detail state. Every input is
+ *  fail-soft: missing designs/strategy/meta simply read as empty — the pure
+ *  calc never throws — so the rail can render a meaningful pct pre-hydrate. */
+function _bidManifestFor(d) {
+  const msaRows = _msaSitesByDeal.get(d.id) || [];
+  // The deal's model summaries drop total_annual_revenue; the MSA-shape rows
+  // (same cost_model_projects set) carry it as annualRevenue — join by id so
+  // the engine-priced item reads the CM-stamped revenue.
+  const revById = new Map(msaRows.map(r => [String(r.costModelId), Number(r.annualRevenue) || 0]));
+  const models = (d.models || []).map(m => ({
+    id: m.id,
+    site_id: m.site_id ?? null,
+    total_annual_revenue: revById.get(String(m.id)) ?? 0,
+  }));
+  return dmCalc.computeBidManifest({
+    sites: d.sites || [],
+    models,
+    designs: _designScenariosByDeal.get(d.id) || null,
+    strategy: _strategyRowByDeal.get(d.id) || null,
+    meta: _bidMetaByDeal.get(d.id) || null,
+  });
+}
+
+/** Lazy meta fetch for the Package tab — covers entry paths that skipped
+ *  _hydrateDealDetail (or a failed hydrate). getBidMeta is fail-soft null. */
+function _ensureBidMeta() {
+  const d = selectedDeal;
+  if (!d || _bidMetaLoaded.has(d.id) || !_isRealDealId(d.id)) return;
+  const dealId = d.id;
+  api.getBidMeta(dealId).then(row => {
+    _bidMetaLoaded.add(dealId);
+    _bidMetaByDeal.set(dealId, row || null);
+    if (viewMode === 'detail' && selectedDeal?.id === dealId && detailTab === 'package') {
+      renderDetailContent();
+    }
+  });
+}
+
+/** Optimistic deal_bid_meta save: local cache first, re-render, then persist
+ *  (real deals only — demo deals stay in-memory, matching strategy). Rollback
+ *  + error toast on failure; subtle 'Saved' toast on success. */
+function _saveBidMetaField(patch) {
+  const d = selectedDeal;
+  if (!d) return;
+  const dealId = d.id;
+  const prev = _bidMetaByDeal.get(dealId) || null;
+  const next = {
+    deal_id: dealId,
+    exec_summary:   prev?.exec_summary ?? '',
+    submission_due: prev?.submission_due ?? null,
+    manual_checks:  prev?.manual_checks ?? {},
+  };
+  if ('execSummary' in patch)   next.exec_summary   = patch.execSummary ?? '';
+  if ('submissionDue' in patch) next.submission_due = patch.submissionDue ?? null;
+  if ('manualChecks' in patch)  next.manual_checks  = patch.manualChecks ?? {};
+  _bidMetaByDeal.set(dealId, next);
+  renderDetailContent();
+  if (!_isRealDealId(dealId)) return;
+  api.saveBidMeta(dealId, patch).then(row => {
+    _bidMetaByDeal.set(dealId, row || next);
+    _bidMetaLoaded.add(dealId);
+    showToast('Saved', 'success');
+  }).catch(err => {
+    console.warn('[deal-mgmt] saveBidMeta failed', err);
+    _bidMetaByDeal.set(dealId, prev);
+    if (viewMode === 'detail' && selectedDeal?.id === dealId && detailTab === 'package') {
+      renderDetailContent();
+    }
+    showToast('Save failed: ' + (err?.message || err), 'error');
+  });
+}
+
+function _manifestStatusChip(status) {
+  if (status === 'done') {
+    return '<span class="hub-badge hub-badge-green" style="min-width:24px;justify-content:center;">✓</span>';
+  }
+  if (status === 'partial') {
+    return '<span class="hub-badge" style="background:var(--c-warn-bg);color:var(--c-warn-deep);min-width:24px;justify-content:center;">◐</span>';
+  }
+  return '<span class="hub-badge hub-badge-gray" style="min-width:24px;justify-content:center;">○</span>';
+}
+
+function renderPackageTab() {
+  const d = selectedDeal;
+  if (!d) return '';
+  const man = _bidManifestFor(d);
+  const meta = _bidMetaByDeal.get(d.id) || null;
+  const metaPending = _isRealDealId(d.id) && !_bidMetaLoaded.has(d.id);
+  const fill = man.pct >= 100 ? 'var(--c-success)' : 'var(--c-info)';
+
+  const itemRow = (item) => {
+    const isReview = item.group === 'reviews';
+    const checked = isReview && item.status === 'done';
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--ies-gray-50);">
+        ${_manifestStatusChip(item.status)}
+        <div style="flex:1;min-width:0;">
+          <span style="font-size:13px;font-weight:600;">${escapeHtml(item.label)}</span>
+          ${item.required ? '' : '<span style="font-size:10px;font-weight:700;color:var(--ies-gray-400);border:1px solid var(--ies-gray-200);border-radius:10px;padding:1px 7px;margin-left:6px;vertical-align:1px;">optional</span>'}
+          <div class="u-faint" style="font-size:12px;margin-top:1px;">${escapeHtml(item.detail || '')}</div>
+        </div>
+        ${isReview
+          ? `<button class="hub-btn hub-btn-sm ${checked ? '' : 'hub-btn-secondary'}" data-action="toggle-manual-check" data-check-key="${escapeAttr(item.key)}"
+               title="${checked ? 'Un-check this review' : 'Check this review off'}"
+               style="${checked ? 'background:var(--c-success);border-color:var(--c-success);color:#fff;' : ''}">${checked ? '✓ Checked' : 'Mark done'}</button>`
+          : (item.fixTab
+              ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-detail-tab="${escapeAttr(item.fixTab)}">Open →</button>`
+              : '')}
+      </div>`;
+  };
+
+  const groupCards = MANIFEST_GROUP_LABELS.map(([g, label]) => {
+    const rows = man.items.filter(i => i.group === g);
+    if (!rows.length) return '';
+    return `
+      <div class="hub-card" style="padding:14px 16px;">
+        <div style="font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">${label}</div>
+        ${rows.map(itemRow).join('')}
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="hub-card" style="padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:240px;">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px;">
+            <span style="font-size:13px;font-weight:800;">Bid package readiness</span>
+            <span style="font-size:13px;font-weight:700;color:${fill};">${man.pct}% bid-ready · ${man.requiredDone}/${man.requiredTotal} required items</span>
+          </div>
+          <div style="height:10px;background:var(--ies-gray-100);border-radius:5px;overflow:hidden;">
+            <div style="width:${man.pct}%;height:100%;background:${fill};border-radius:5px;"></div>
+          </div>
+          ${metaPending ? '<div class="u-faint" style="font-size:12px;margin-top:6px;">Loading checklist state…</div>' : ''}
+        </div>
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.04em;">Submission due
+          <input type="date" class="hub-input" data-bid-due value="${escapeAttr(man.dueDate || '')}" style="width:170px;">
+        </label>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;">
+      ${groupCards}
+    </div>
+
+    <div class="hub-card" style="padding:16px;margin-top:16px;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Executive summary</div>
+      <textarea class="hub-input" data-bid-exec rows="5"
+        placeholder="One tight paragraph: what we're bidding, why we win, and the number."
+        style="width:100%;resize:vertical;font-family:var(--font-ui);font-size:13px;line-height:1.5;">${escapeHtml(meta?.exec_summary || '')}</textarea>
+      <div class="u-faint" style="font-size:12px;margin-top:6px;">Saves on blur — feeds the 'Executive summary written' item above.</div>
     </div>
   `;
 }

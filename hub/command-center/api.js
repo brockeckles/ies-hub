@@ -9,7 +9,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
-import { listRealDeals } from '../deal-management/api.js?v=20260722-s3b';
+import { listRealDeals } from '../deal-management/api.js?v=20260722-s3c';
 
 /**
  * Fetch all dashboard data. Tries Supabase first, falls back to demo data.
@@ -217,6 +217,11 @@ export async function fetchDashboardData() {
     console.warn('[CC] listRealDeals for pipeline snapshot failed, using demo:', err);
   }
 
+  // S3-P1 (2026-07-22): win/loss calibration read surface. deal_outcomes was
+  // write-only — DM's outcome dialog promised a calibration loop but nothing
+  // ever read the data back. Fail-soft to zeros/empties inside the fetch.
+  const winLoss = await fetchWinLossCalibration();
+
   return {
     supabaseConnected,
     kpis,
@@ -226,8 +231,92 @@ export async function fetchDashboardData() {
     intel,
     sparks,
     pipeline,
+    winLoss,
     activity: DEMO_ACTIVITY,
   };
+}
+
+/**
+ * Win/Loss calibration summary — the read side of the deal_outcomes loop.
+ * One fetch of deal_outcomes plus a slim deal_deals fetch for deal names
+ * (deal_outcomes carries only deal_id); all aggregation happens in JS.
+ *
+ * Real deal_outcomes columns (20260511180000 migration): outcome
+ * ('won'|'lost'|'withdrawn'|'no_decision'), reason_category, reason_detail,
+ * competitor_won_to, recorded_at. NOTE: the timestamp column is recorded_at —
+ * it is surfaced on `recent` items under the `created_at` key per the CC
+ * contract shape.
+ *
+ * Fail-soft: any fetch/aggregation failure returns zeros/empties so the card
+ * renders its empty state instead of breaking the dashboard.
+ *
+ * @returns {Promise<{total:number, wins:number, losses:number, withdrawn:number,
+ *   winRatePct:number, topLossReasons:{reason:string,n:number}[],
+ *   topCompetitors:{competitor:string,n:number}[],
+ *   recent:{deal_name:string,outcome:string,reason:string,competitor:string,created_at:string|null}[]}>}
+ */
+export async function fetchWinLossCalibration() {
+  const empty = {
+    total: 0, wins: 0, losses: 0, withdrawn: 0, winRatePct: 0,
+    topLossReasons: [], topCompetitors: [], recent: [],
+  };
+  try {
+    const [rows, deals] = await Promise.all([
+      db.fetchAll('deal_outcomes').catch(() => []),
+      db.fetchAll('deal_deals', 'id,deal_name').catch(() => []),
+    ]);
+    if (!Array.isArray(rows) || rows.length === 0) return empty;
+
+    const nameById = new Map((Array.isArray(deals) ? deals : []).map(d => [d.id, d.deal_name || '']));
+
+    const wins = rows.filter(r => r.outcome === 'won').length;
+    const losses = rows.filter(r => r.outcome === 'lost').length;
+    // Everything that reached a terminal state without a W or L — the table's
+    // CHECK allows 'withdrawn' and 'no_decision'; both land in this bucket so
+    // W + L + withdrawn always sums to total.
+    const withdrawn = rows.length - wins - losses;
+    const decided = wins + losses;
+    const winRatePct = decided > 0 ? Math.round((wins / decided) * 100) : 0;
+
+    // Count-by-value helper → top N [{key, n}] sorted by n desc.
+    const topN = (values, n) => {
+      const counts = new Map();
+      for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
+      return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
+    };
+
+    const lossRows = rows.filter(r => r.outcome === 'lost');
+    const topLossReasons = topN(
+      lossRows.map(r => formatReasonCategory(r.reason_category)).filter(Boolean), 3
+    ).map(([reason, n]) => ({ reason, n }));
+
+    const topCompetitors = topN(
+      lossRows.map(r => String(r.competitor_won_to || '').trim()).filter(Boolean), 3
+    ).map(([competitor, n]) => ({ competitor, n }));
+
+    const recent = [...rows]
+      .sort((a, b) => String(b.recorded_at || '').localeCompare(String(a.recorded_at || '')))
+      .slice(0, 5)
+      .map(r => ({
+        deal_name: nameById.get(r.deal_id) || '',
+        outcome: r.outcome || '',
+        reason: formatReasonCategory(r.reason_category) || String(r.reason_detail || '').trim(),
+        competitor: String(r.competitor_won_to || '').trim(),
+        created_at: r.recorded_at || null,
+      }));
+
+    return { total: rows.length, wins, losses, withdrawn, winRatePct, topLossReasons, topCompetitors, recent };
+  } catch (err) {
+    console.warn('[CC] fetchWinLossCalibration failed, using empty state:', err);
+    return empty;
+  }
+}
+
+/** 'incumbent_relationship' → 'Incumbent Relationship'; null/blank → ''. */
+function formatReasonCategory(v) {
+  if (!v) return '';
+  return String(v).replace(/_/g, ' ').trim().split(/\s+/)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
 /**

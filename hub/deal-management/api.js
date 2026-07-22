@@ -10,7 +10,7 @@ import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 // S1 (2026-07-22): Σ★ roll-up is pure — one formula shared with ui.js.
-import { computeStarRollup } from './calc.js?v=20260722-s1a';
+import { computeStarRollup } from './calc.js?v=20260722-s3c';
 // S2 (2026-07-22, Brock ruling: wire the score): deal health grade from the
 // same MSA engine the Financials tab runs, ★-preferred basis, per-★-model
 // CM escalation knobs.
@@ -765,10 +765,77 @@ export async function advanceDealStage(dealId, stageNumber) {
   return data;
 }
 
+// ============================================================
+// S3-P1 — Bid package meta (2026-07-22)
+// ============================================================
+// One row per deal in deal_bid_meta (deal_id uuid PK/FK):
+//   exec_summary text default '', submission_due date | null,
+//   manual_checks jsonb default {} (e.g. {'commercial-review': true}).
+// Read is fail-soft null (loadStrategy pattern); save is a merge-upsert so a
+// partial payload never blanks the other columns.
+// ============================================================
+
+/**
+ * Fetch the bid-meta row for a deal. Returns null when no row exists yet —
+ * the manifest treats a missing row as "nothing checked/written yet".
+ *
+ * @param {string} dealId  deal_deals.id (uuid)
+ * @returns {Promise<{deal_id:string, exec_summary:string, submission_due:string|null,
+ *                    manual_checks:Object, updated_at:string}|null>}
+ */
+export async function getBidMeta(dealId) {
+  if (!dealId) return null;
+  try {
+    const { data, error } = await db.from('deal_bid_meta')
+      .select('deal_id, exec_summary, submission_due, manual_checks, updated_at')
+      .eq('deal_id', dealId).maybeSingle();
+    if (error) { console.warn('[deal-mgmt] getBidMeta failed', error); return null; }
+    return data || null;
+  } catch (err) {
+    console.warn('[deal-mgmt] getBidMeta threw', err);
+    return null;
+  }
+}
+
+/**
+ * Upsert the bid-meta row for a deal. Pass camelCase from the UI; this maps
+ * to the snake_case DB columns (execSummary → exec_summary, submissionDue →
+ * submission_due, manualChecks → manual_checks).
+ *
+ * Only the keys the caller passed are changed: a bare upsert with partial
+ * columns would null the others on first INSERT, so we read the existing row
+ * first, merge the payload over it (defaults for a fresh row), and upsert the
+ * full row on the deal_id conflict target.
+ *
+ * @param {string} dealId
+ * @param {{ execSummary?:string, submissionDue?:string|null,
+ *           manualChecks?:Object }} payload
+ * @returns {Promise<Object>} the upserted row
+ */
+export async function saveBidMeta(dealId, payload = {}) {
+  if (!dealId) throw new Error('saveBidMeta: dealId required');
+  const existing = await getBidMeta(dealId);
+  const row = {
+    deal_id: dealId,
+    exec_summary:   existing?.exec_summary ?? '',
+    submission_due: existing?.submission_due ?? null,
+    manual_checks:  existing?.manual_checks ?? {},
+  };
+  if ('execSummary' in payload)   row.exec_summary   = payload.execSummary ?? '';
+  if ('submissionDue' in payload) row.submission_due = payload.submissionDue ?? null;
+  if ('manualChecks' in payload)  row.manual_checks  = payload.manualChecks ?? {};
+  const { data, error } = await db.from('deal_bid_meta')
+    .upsert(row, { onConflict: 'deal_id' }).select().single();
+  if (error) { console.warn('[deal-mgmt] saveBidMeta failed', error); throw error; }
+  recordAudit({ table: 'deal_bid_meta', id: dealId, action: 'update', fields: { keys: Object.keys(payload) } });
+  return data;
+}
+
 export default { fetchStages, fetchActivityTemplates, listRealDeals, createDeal, deleteDeal,
   loadStrategy, saveStrategy,
   listArtifactsByDeal, createArtifact, deleteArtifact,
   loadDosStatusByDeal, setDosElementStatus, advanceDealStage,
   setModelInBid, listDesignScenariosByDeal, recordDealOutcome, getLatestDealOutcome,
   listSitesByDeal, createSite, updateSite, deleteSite, assignModelToSite, assignDesignToSite, listMarkets,
+  getBidMeta, saveBidMeta,
 };

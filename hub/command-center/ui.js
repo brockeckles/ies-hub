@@ -8,8 +8,8 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260722-s3b';
-import { safeHttpUrl } from '../../shared/escape.js?v=20260702-sec2';
+import * as api from './api.js?v=20260722-s3c';
+import { escapeHtml, safeHttpUrl } from '../../shared/escape.js?v=20260702-sec2';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -132,6 +132,7 @@ function render() {
         <!-- RIGHT rail — Pipeline Snapshot + RFP Signals (flex-grow, internal scroll) + Tool Shortcuts -->
         <div style="display:flex;flex-direction:column;gap:16px;height:100%;min-height:0;">
           ${renderPipelineSnapshot(d.pipeline)}
+          ${renderWinLossCard(d.winLoss)}
 
           <div class="hub-card" id="cc-rfp-feed" style="padding:0;display:flex;flex-direction:column;overflow:hidden;flex:1 1 0;min-height:0;">
             <div style="padding:12px 14px 8px;font-size:13px;font-weight:700;border-bottom:1px solid var(--ies-gray-100);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
@@ -257,6 +258,107 @@ function renderPipelineSnapshot(p) {
         </div>
       </div>
     </a>
+  `;
+}
+
+/**
+ * Win / Loss Calibration — the read surface for deal_outcomes (S3-P1).
+ * KPI row (win rate + W-L-withdrawn counts), top loss reasons, top
+ * competitors, and the 5 most recent outcomes. Every DB string is escaped
+ * with escapeHtml — this panel class had a stored-XSS finding in the RFP
+ * feed, so no interpolated deal/reason/competitor text goes in raw.
+ * Static display card: no listeners, so the bind-once delegation in
+ * bindEvents() is untouched.
+ * @param {Object|null} wl — api.fetchWinLossCalibration() result
+ */
+function renderWinLossCard(wl) {
+  if (!wl) return '';
+
+  const header = `
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div class="u-13 u-bold">Win / Loss Calibration</div>
+      <span style="font-size:11px;color:var(--ies-gray-400);font-weight:600;">${wl.total} outcome${wl.total === 1 ? '' : 's'}</span>
+    </div>`;
+
+  if (!wl.total) {
+    return `
+    <div class="hub-card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+      ${header}
+      <div style="font-size:13px;color:var(--ies-gray-500);line-height:1.5;">No outcomes recorded yet — close a deal Won/Lost to start the calibration loop.</div>
+    </div>`;
+  }
+
+  // Outcome chip — green won / red lost / gray withdrawn+no_decision.
+  const outcomeChip = (outcome) => {
+    const o = String(outcome || '').toLowerCase();
+    const cfg = o === 'won'
+      ? { bg: 'var(--c-success-bg)', fg: 'var(--c-success-ink)', label: 'WON' }
+      : o === 'lost'
+        ? { bg: 'var(--c-danger-bg)', fg: 'var(--c-danger-ink)', label: 'LOST' }
+        : { bg: 'var(--ies-gray-100)', fg: 'var(--ies-gray-600)', label: o === 'no_decision' ? 'NO DEC' : 'W/D' };
+    return `<span style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:3px;background:${cfg.bg};color:${cfg.fg};letter-spacing:.04em;white-space:nowrap;flex-shrink:0;">${cfg.label}</span>`;
+  };
+
+  const fmtDate = (iso) => {
+    if (!iso) return '';
+    try { return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+    catch { return ''; }
+  };
+
+  const compactRows = (title, rows) => {
+    if (!rows.length) return '';
+    return `
+      <div style="min-width:0;flex:1;">
+        <div style="font-size:10px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">${title}</div>
+        ${rows.map(r => `
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:2px 0;min-width:0;">
+            <span style="font-size:13px;color:var(--ies-gray-600);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.label)}</span>
+            <span style="font-size:11px;font-weight:700;color:var(--ies-gray-500);flex-shrink:0;">×${r.n}</span>
+          </div>`).join('')}
+      </div>`;
+  };
+
+  const lossReasonRows = (wl.topLossReasons || []).map(r => ({ label: r.reason, n: r.n }));
+  const competitorRows = (wl.topCompetitors || []).map(r => ({ label: r.competitor, n: r.n }));
+  const midSection = (lossReasonRows.length || competitorRows.length)
+    ? `<div style="display:flex;gap:14px;border-top:1px solid var(--ies-gray-100);padding-top:8px;">
+        ${compactRows('Top loss reasons', lossReasonRows)}
+        ${compactRows('Top competitors', competitorRows)}
+      </div>`
+    : '';
+
+  const recentList = (wl.recent || []).map(r => `
+    <div style="display:flex;align-items:center;gap:8px;padding:4px 0;min-width:0;">
+      ${outcomeChip(r.outcome)}
+      <span style="font-size:13px;font-weight:600;color:var(--ies-gray-700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${escapeHtml(r.deal_name || 'Unknown deal')}</span>
+      ${r.reason || r.competitor
+        ? `<span style="font-size:11px;color:var(--ies-gray-500);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${escapeHtml([r.reason, r.competitor].filter(Boolean).join(' — '))}</span>`
+        : ''}
+      <span style="font-size:10px;color:var(--ies-gray-400);white-space:nowrap;flex-shrink:0;margin-left:auto;">${escapeHtml(fmtDate(r.created_at))}</span>
+    </div>`).join('');
+
+  return `
+    <div class="hub-card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+      ${header}
+      <div style="display:flex;gap:18px;align-items:flex-start;">
+        <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+          <span class="hub-kpi-tile__label" style="min-height:0;">Win rate</span>
+          <span class="hub-kpi-tile__value" style="font-size:24px;color:${wl.winRatePct >= 50 ? 'var(--c-success)' : 'var(--c-danger)'};">${wl.winRatePct}%</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+          <span class="hub-kpi-tile__label" style="min-height:0;">W · L · W/D</span>
+          <span class="hub-kpi-tile__value" style="font-size:20px;">
+            <span style="color:var(--c-success);">${wl.wins}</span><span style="color:var(--ies-gray-300);"> · </span><span style="color:var(--c-danger);">${wl.losses}</span><span style="color:var(--ies-gray-300);"> · </span><span style="color:var(--ies-gray-500);">${wl.withdrawn}</span>
+          </span>
+        </div>
+      </div>
+      ${midSection}
+      ${recentList ? `
+      <div style="border-top:1px solid var(--ies-gray-100);padding-top:8px;">
+        <div style="font-size:10px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;">Recent outcomes</div>
+        ${recentList}
+      </div>` : ''}
+    </div>
   `;
 }
 
