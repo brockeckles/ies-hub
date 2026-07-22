@@ -114,7 +114,7 @@ export async function unlinkFromCm(scenarioId) {
  */
 export async function duplicateConfig(id) {
   const config = await getConfig(id);
-  if (!config) throw new Error('Config not found');
+  if (!config) throw new Error('Scenario not found');
 
   const { id: _, created_at, updated_at, ...rest } = config;
   const u = auth.getUser();

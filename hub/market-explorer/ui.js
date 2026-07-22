@@ -5,8 +5,8 @@
  * @module hub/market-explorer/ui
  */
 
-import * as calc from './calc.js?v=20260418-sK';
-import * as api from './api.js?v=20260610-honest1';
+import * as calc from './calc.js?v=20260722-s4a';
+import * as api from './api.js?v=20260722-s4a';
 import { escapeHtml, safeHttpUrl } from '../../shared/escape.js?v=20260702-sec2';
 
 // Per-market signal cache: marketId → { news, alerts, fetchedAt }
@@ -21,6 +21,46 @@ const marketSignalCache = new Map();
 let _liveMeta = { matched: 0, asOf: null, loaded: false };
 
 const _LIVE_MSA_ALIASES = { njy: 'New York', dal: 'Dallas', lax: 'Los Angeles' };
+
+// C3 (2026-07-22): live deal counts from deal_sites.market_id. The old
+// hardcoded `activeDeals` literals in calc.DEMO_MARKETS are gone — until
+// this overlay lands (or when it fails / signed-out), activeDeals is
+// undefined and the UI renders an em-dash, never a fabricated count.
+let _dealCounts = { loaded: false, ok: false };
+
+/** Map ref_markets-keyed counts onto the curated demo catalog by name. */
+function _applyDealCounts(demoMarkets, counts) {
+  const norm = (x) => String(x || '').toLowerCase().trim();
+  const tokens = (name) => norm(name).split(/[-,/]/).map(t => t.replace(/ metro| msa/g, '').trim()).filter(t => t.length >= 3);
+  return demoMarkets.map(m => {
+    const toks = tokens(m.name);
+    const aliasName = _LIVE_MSA_ALIASES[m.id] ? norm(_LIVE_MSA_ALIASES[m.id]) : null;
+    let total = 0;
+    for (const c of counts || []) {
+      const rn = norm(c.marketName);
+      if (!rn) continue;
+      const hit = (aliasName && rn === aliasName) || toks.some(t => rn.includes(t) || t.includes(rn));
+      if (hit) total += Number(c.dealCount) || 0;
+    }
+    // Counts loaded OK → zero is an honest zero.
+    return { ...m, activeDeals: total };
+  });
+}
+
+async function _loadDealCounts() {
+  try {
+    const res = await api.fetchDealCountsByMarket();
+    if (!rootEl) return; // unmounted while fetching
+    if (!res.ok) { _dealCounts = { loaded: true, ok: false }; return; } // keep em-dashes
+    markets = _applyDealCounts(markets, res.counts);
+    if (selectedMarket) selectedMarket = markets.find(m => m.id === selectedMarket.id) || selectedMarket;
+    _dealCounts = { loaded: true, ok: true };
+    render();
+  } catch (err) {
+    console.warn('[ME] deal-count overlay failed:', err);
+    _dealCounts = { loaded: true, ok: false };
+  }
+}
 
 function _overlayLiveFundamentals(demoMarkets, labor, realEstate) {
   const norm = (x) => String(x || '').toLowerCase().trim();
@@ -113,6 +153,10 @@ export function mount(el) {
   // renders immediately from the curated catalog, then refreshes).
   _liveMeta = { matched: 0, asOf: null, loaded: false };
   _loadLiveFundamentals();
+  // C3: overlay real deal counts from deal_sites.market_id (async; UI shows
+  // em-dashes until the counts land, and keeps them if the query fails).
+  _dealCounts = { loaded: false, ok: false };
+  _loadDealCounts();
 }
 
 export function unmount() {
@@ -326,13 +370,13 @@ function render() {
 
       <!-- KPI strip -->
       ${_liveMeta.loaded && _liveMeta.matched > 0
-        ? `<div style="display:inline-flex;align-items:center;gap:6px;background:var(--c-success-soft);border:1px solid #bbf7d0;color:var(--c-success-ink);padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;margin-bottom:8px;" title="Wages, labor scores, lease rates, and vacancy overlay live from the hub's labor_markets / industrial_real_estate tables (same source as Command Center). Freight index, unemployment, verticals, and deal counts remain modeled estimates.">● LIVE — ${_liveMeta.matched} of ${markets.length} markets carry live wage/real-estate data${_liveMeta.asOf ? ' (as of ' + _liveMeta.asOf + ')' : ''} · other fields modeled</div>`
+        ? `<div style="display:inline-flex;align-items:center;gap:6px;background:var(--c-success-soft);border:1px solid #bbf7d0;color:var(--c-success-ink);padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;margin-bottom:8px;" title="Wages, labor scores, lease rates, and vacancy overlay live from the hub's labor_markets / industrial_real_estate tables (same source as Command Center). Freight index, unemployment, and verticals remain modeled estimates; deal counts come live from deal_sites (— when unavailable).">● LIVE — ${_liveMeta.matched} of ${markets.length} markets carry live wage/real-estate data${_liveMeta.asOf ? ' (as of ' + _liveMeta.asOf + ')' : ''} · other fields modeled</div>`
         : `<div style="display:inline-flex;align-items:center;gap:6px;background:var(--c-warn-bg);border:1px solid #fde68a;color:var(--c-warn-ink);padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;margin-bottom:8px;" title="No live rows matched from labor_markets / industrial_real_estate — every figure on this page is a modeled estimate.">MODELED ESTIMATES — live market data ${_liveMeta.loaded ? 'unavailable' : 'loading…'}</div>`}
       <div class="hub-kpi-strip" style="margin-bottom: var(--sp-3);">
         ${meKpi('Markets Tracked', String(stats.totalMarkets), 'Count of MSAs in the filter set (of ' + markets.length + ' total tracked).')}
         ${meKpi('Avg Labor Score', calc.scoreBadge(stats.avgLaborScore), 'Composite labor-availability score (0-100) for filtered markets. Higher = more available workforce.')}
         ${meKpi('Avg Warehouse Wage', calc.fmt$(stats.avgWage) + '/hr', 'Average hourly warehouse wage (filtered set). BLS OEWS data, seasonally adjusted.')}
-        ${meKpi('Markets with Deals', String(stats.marketsWithDeals), 'Markets in the filtered set that have at least one active deal in the IES pipeline.')}
+        ${meKpi('Markets with Deals', _dealCounts.ok ? String(stats.marketsWithDeals) : '—', 'Markets in the filtered set with at least one pipeline deal that has a Site assigned to that market (live from deal_sites). Shows — when live deal data is unavailable.')}
       </div>
 
       <!-- Color-mode chips (replaces top-level tabs) -->
@@ -668,7 +712,7 @@ function renderDetailTab(m) {
           </div>
           <div>
             <div class="text-caption text-muted">Active Deals</div>
-            <div class="text-subtitle">${m.activeDeals}</div>
+            <div class="text-subtitle" title="Deals with a Site assigned to this market (live from deal_sites)">${m.activeDeals == null ? '—' : m.activeDeals}</div>
           </div>
         </div>
         <div style="margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--ies-gray-200);">

@@ -1,9 +1,21 @@
 /**
  * IES Hub v3 — Global Search
- * Static index + dynamic Supabase search, dropdown UI, keyboard navigation.
+ * Static index (registered routes + well-known screens/tools) PLUS live
+ * Supabase results for Deals and Sites, with dropdown UI + keyboard nav.
+ *
+ * Static entries render instantly on every keystroke. Live entries are
+ * debounced (250ms) name-substring lookups:
+ *   - Deals: deal_deals.deal_name ilike %q%  → routes to `deals?deal=<id>`
+ *   - Sites: deal_sites.name     ilike %q%  → routes to `deals?deal=<deal_id>`
+ * (the `?deal=` hash param is the deep-link contract shared/deal-context.js
+ * reads; the router strips the query for route matching).
+ *
+ * Fail-soft by design: no session, RLS-denied, or failed queries silently
+ * yield zero live results — the static index still works and nothing throws
+ * into the UI.
  *
  * Usage:
- *   import { search } from './search.js?v=20260722-s3b';
+ *   import { search } from './search.js?v=20260722-s4a';
  *   search.init(document.querySelector('.hub-search-container'));
  *
  * @module shared/search
@@ -12,6 +24,14 @@
 import { router } from './router.js?v=20260722-s3b';
 import { bus } from './event-bus.js?v=20260418-sK';
 import { escapeHtml as _h } from './escape.js?v=20260702-sec2';
+import { db } from './supabase.js?v=20260703-hw1';
+
+/** Debounce for the live Supabase lookups (ms). */
+const LIVE_DEBOUNCE_MS = 250;
+/** Max live rows fetched per entity type. */
+const LIVE_LIMIT = 8;
+/** Minimum query length before hitting the network. */
+const LIVE_MIN_CHARS = 2;
 
 /**
  * @typedef {Object} SearchEntry
@@ -35,6 +55,12 @@ class GlobalSearch {
     this._focusedIdx = -1;
     /** @type {SearchEntry[]} */
     this._results = [];
+    /** @type {SearchEntry[]} — last static filter pass (live rows append) */
+    this._staticResults = [];
+    /** @type {number|null} */
+    this._liveTimer = null;
+    /** @type {number} — monotonically increasing fetch token (stale guard) */
+    this._liveSeq = 0;
   }
 
   /**
@@ -102,7 +128,7 @@ class GlobalSearch {
   }
 
   /**
-   * Filter results based on query.
+   * Filter static results based on query.
    * @param {string} query
    * @returns {SearchEntry[]}
    */
@@ -131,13 +157,109 @@ class GlobalSearch {
       .slice(0, 8);
   }
 
+  // ---- Live Supabase lookups (Deals + Sites) ----
+
+  /**
+   * Fetch live Deal + Site matches by name substring. Returns [] on ANY
+   * problem — missing session, network failure, RLS denial — so the static
+   * index keeps working and nothing throws into the UI.
+   * @param {string} q — trimmed query
+   * @returns {Promise<SearchEntry[]>}
+   */
+  async searchLive(q) {
+    try {
+      // No session → skip silently. getClient() throws when the CDN lib is
+      // absent (e.g. tests); that lands in the catch below.
+      const { data: sess } = await db.getClient().auth.getSession();
+      if (!sess || !sess.session) return [];
+
+      // Strip chars that would break the PostgREST ilike pattern.
+      const cleaned = q.replace(/[%_,()]/g, '').trim();
+      if (cleaned.length < LIVE_MIN_CHARS) return [];
+      const pattern = `%${cleaned}%`;
+
+      const [dealsRes, sitesRes] = await Promise.all([
+        db.from('deal_deals')
+          .select('id, deal_name, client_name')
+          .ilike('deal_name', pattern)
+          .limit(LIVE_LIMIT),
+        db.from('deal_sites')
+          .select('id, name, deal_id')
+          .ilike('name', pattern)
+          .limit(LIVE_LIMIT),
+      ]);
+
+      /** @type {SearchEntry[]} */
+      const out = [];
+      if (!dealsRes.error) {
+        for (const d of dealsRes.data || []) {
+          if (!d || !d.id) continue;
+          out.push({
+            title: d.deal_name || 'Untitled Deal',
+            route: `deals?deal=${encodeURIComponent(d.id)}`,
+            section: d.client_name ? `Deal · ${d.client_name}` : 'Deal',
+          });
+        }
+      }
+      if (!sitesRes.error) {
+        for (const s of sitesRes.data || []) {
+          if (!s || !s.id) continue;
+          out.push({
+            title: s.name || 'Unnamed Site',
+            route: s.deal_id ? `deals?deal=${encodeURIComponent(s.deal_id)}` : 'deals',
+            section: 'Site',
+          });
+        }
+      }
+      return out;
+    } catch (err) {
+      // Fail-soft: live search is a bonus layer, never an error surface.
+      return [];
+    }
+  }
+
+  /** Debounce a live lookup for the current query. */
+  _scheduleLive(query) {
+    if (this._liveTimer) clearTimeout(this._liveTimer);
+    this._liveTimer = null;
+    const q = (query || '').trim();
+    if (q.length < LIVE_MIN_CHARS) return;
+    this._liveTimer = setTimeout(() => {
+      this._liveTimer = null;
+      this._runLive(q);
+    }, LIVE_DEBOUNCE_MS);
+  }
+
+  async _runLive(q) {
+    const seq = ++this._liveSeq;
+    const rows = await this.searchLive(q);
+    // Stale guards: a newer fetch started, or the input has moved on.
+    if (seq !== this._liveSeq) return;
+    if (!this._input || this._input.value.trim() !== q) return;
+    if (rows.length === 0) return;
+    // Append after the static hits, dedup by route.
+    const seen = new Set(this._staticResults.map(e => e.route));
+    const merged = [...this._staticResults];
+    for (const r of rows) {
+      if (seen.has(r.route)) continue;
+      seen.add(r.route);
+      merged.push(r);
+    }
+    this._results = merged;
+    // Keep keyboard focus only if it still points at the same (static) row.
+    if (this._focusedIdx >= this._staticResults.length) this._focusedIdx = -1;
+    this._render();
+  }
+
   // ---- Internal UI handlers ----
 
   _onInput() {
     const query = this._input.value;
-    this._results = this.filter(query);
+    this._staticResults = this.filter(query);
+    this._results = this._staticResults;
     this._focusedIdx = -1;
     this._render();
+    this._scheduleLive(query);
   }
 
   _onKeydown(e) {
@@ -199,6 +321,8 @@ class GlobalSearch {
   }
 
   _close() {
+    if (this._liveTimer) { clearTimeout(this._liveTimer); this._liveTimer = null; }
+    this._liveSeq++; // invalidate any in-flight live fetch
     this._dropdown.classList.remove('visible');
     this._focusedIdx = -1;
   }

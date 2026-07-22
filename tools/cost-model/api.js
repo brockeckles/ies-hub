@@ -1397,6 +1397,48 @@ export async function reassignModelToDeal(modelId, dealId) {
   });
 }
 
+/**
+ * C3 (2026-07-22): explicit, confirmed detach from CM Setup's "Link to Deal"
+ * select — the single-purpose CM-side path that nulls deal_deals_id.
+ * Deliberately NOT routed through _modelUpdatePayload: that payload OMITS
+ * deal_deals_id when the model carries no dealId (C1 rule — ordinary saves
+ * can never silently detach), so an intentional detach needs this dedicated
+ * explicit-null update.
+ *
+ * Side-effect hygiene mirrors DM (hub/deal-management/api.js
+ * assignModelToSite / deleteSite): leaving the deal also leaves the deal's
+ * site (site_id → null), sweeps the retiring cost_model_projects.in_bid
+ * mirror false WITHOUT reading it (C1 soak: the column is write-only until
+ * the C4 drop), and clears deal_sites.in_bid_model_id — the ★ authority —
+ * anywhere it points at this model, so no orphaned ★ remains.
+ *
+ * @param {number|string} modelId
+ * @returns {Promise<any>}
+ */
+export async function detachModelFromDeal(modelId) {
+  if (modelId == null) throw new Error('detachModelFromDeal: modelId required');
+  // Explicit null set — the mirror sweep rides as a spread so it keeps the
+  // sanctioned write-only payload shape (see test-dm-star-authority scan).
+  const row = await db.update('cost_model_projects', modelId, {
+    deal_deals_id: null,
+    site_id: null,
+    updated_at: new Date().toISOString(),
+    ...{ in_bid: false },
+  });
+  // ★ authority hygiene — null the pointer on any site that starred this
+  // model. Failure is non-fatal: the detach itself already landed.
+  try {
+    const { error } = await db.from('deal_sites')
+      .update({ in_bid_model_id: null })
+      .eq('in_bid_model_id', modelId);
+    if (error) throw error;
+  } catch (err) {
+    console.warn('[CM] detachModelFromDeal: deal_sites star clear failed:', err);
+  }
+  recordAudit({ table: 'cost_model_projects', id: modelId, action: 'detach_from_deal', fields: { deal_deals_id: null, site_id: null } }).catch(() => {});
+  return row;
+}
+
 // ============================================================
 // CM-SET-2 — DEFAULT REFERENCE DATA SEEDS
 // ============================================================

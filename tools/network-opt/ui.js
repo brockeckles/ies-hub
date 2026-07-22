@@ -16,7 +16,7 @@ import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadXLSX } from '../../shared/export.js?v=20260702-p1m1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import * as calc from './calc.js?v=20260702-p23a';
-import * as api from './api.js?v=20260722-s3b';
+import * as api from './api.js?v=20260722-s4a';
 import { createChart } from '../../shared/cdn-wrappers/chart-wrapper.js?v=20260710-r2';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
@@ -1049,7 +1049,7 @@ function applyArchetype(key) {
  */
 function findOptimalLocations() {
   if (demands.length === 0) {
-    alert('Add demand points first. The optimizer needs demand to cluster against.\n\nTip: pick an industry preset from the Quick-seed bar above the Demand table to load a demo demand set.');
+    showToast('Add demand points first — the optimizer needs demand to cluster against. Tip: pick an industry preset from the Quick-seed bar above the Demand table to load a demo demand set.', 'warning', { duration: 7000 });
     return;
   }
   const k = Math.max(1, Math.min(maxDCsToTest || 3, 8));
@@ -1063,7 +1063,7 @@ function findOptimalLocations() {
     { excludeCities: existingCities },
   );
   if (!recs || recs.length === 0) {
-    alert('Could not recommend locations — check that demand points have lat/lng coordinates.');
+    showToast('Could not recommend locations — check that demand points have lat/lng coordinates.', 'error');
     return;
   }
   // Add recommendations as candidate facilities (isOpen false — user picks which to activate).
@@ -1171,12 +1171,12 @@ function addToComparison() {
 // @param {{ force?: 'heuristic' | 'exhaustive' }} [opts]
 function optimizeNetwork(opts = {}) {
   if (demands.length === 0) {
-    alert('Please add demand points first.');
+    showToast('Add demand points first.', 'warning');
     return;
   }
   const candidates = facilities.filter(f => f.isOpen !== false);
   if (candidates.length === 0) {
-    alert('Please activate at least one facility candidate to consider in the optimization.');
+    showToast('Activate at least one facility candidate to consider in the optimization.', 'warning');
     return;
   }
   // Estimate combinatorial size: sum of C(n, k) for k=1..min(maxDCsToTest, n)
@@ -1262,7 +1262,7 @@ function _binomial(n, k) {
 
 function exportToCSV() {
   if (!activeScenario && !comparisonResults) {
-    alert('Run a scenario first to export data.');
+    showToast('Run a scenario first to export data.', 'warning');
     return;
   }
 
@@ -1361,7 +1361,7 @@ const renderSubTabStrip = () => '';
 /** Quick-seed archetype bar shown above the Inputs phase content. */
 function renderArchetypeSeedBar() {
   return `
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--ies-gray-50,#f9fafb);border:1px solid var(--ies-gray-200);border-radius:8px;margin-top:14px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--ies-gray-50);border:1px solid var(--ies-gray-200);border-radius:8px;margin-top:14px;flex-wrap:wrap;">
       <span style="font-size:11px;font-weight:700;letter-spacing:0.4px;color:var(--ies-gray-500);text-transform:uppercase;">Quick-seed</span>
       ${calc.listArchetypes().map(a => `
         <button class="hub-btn hub-btn-sm hub-btn-secondary" data-archetype="${a.key}"
@@ -1965,7 +1965,7 @@ function renderModeMix(el) {
             <div class="hub-card" style="margin-top:12px;padding:14px 18px;">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px;">
                 <div style="font-size:13px;font-weight:700;display:inline-flex;align-items:center;">Channel: ${escapeHtml(k)}${renderCmDrillbackChip({ cmId: activeParentCmId, channelKey: k, channelName: k })}</div>
-                <button class="hub-btn hub-btn-sm hub-btn-secondary" data-cm-reset="${escapeAttr(k)}" title="Reset this channel's mix to the project default" style="font-size:11px;padding:4px 8px;">&#x21bb; Reset to project mix</button>
+                <button class="hub-btn hub-btn-sm hub-btn-secondary" data-cm-reset="${escapeAttr(k)}" title="Reset this channel's mix to the scenario default" style="font-size:11px;padding:4px 8px;">&#x21bb; Reset to scenario mix</button>
               </div>
               <div style="display:flex;flex-direction:column;gap:14px;">
                 <div>
@@ -1991,7 +1991,7 @@ function renderModeMix(el) {
           <div style="margin-top:24px;">
             <h3 class="text-section" style="margin:0 0 8px;">Channel-specific modes</h3>
             <div style="font-size:12px;color:var(--ies-gray-500);line-height:1.5;margin-bottom:8px;">
-              Phase 4 of volumes-as-nucleus &mdash; per-channel modeMix overrides. assignDemand looks up each demand's channelKey and uses that channel's mix; demands without a channelKey fall back to the project mix above.
+              Per-channel mode overrides. Each demand point mapped to a channel ships on that channel's mix; demand points without a channel fall back to the scenario mix above.
             </div>
             ${cards}
           </div>`;
@@ -2928,7 +2928,7 @@ function renderResults(el) {
   }
 
   const s = activeScenario;
-  const slaColor = s.serviceLevel >= 95 ? '#22c55e' : s.serviceLevel >= 90 ? '#f59e0b' : '#ef4444';
+  const slaColor = s.serviceLevel >= 95 ? 'var(--c-success-bright)' : s.serviceLevel >= 90 ? 'var(--c-warn)' : '#ef4444';
 
   el.innerHTML = `
     <div>
@@ -3131,9 +3131,9 @@ function costBreakdownBar(breakdown, total) {
   const trnPct = (trn / safeTot) * 100;
   const hndPct = (hnd / safeTot) * 100;
   const swatch = (color) => `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color};margin-right:6px;vertical-align:middle;"></span>`;
-  const COLOR_FAC = '#1d4ed8';   // navy
-  const COLOR_TRN = '#0891b2';   // teal
-  const COLOR_HND = '#f59e0b';   // amber
+  const COLOR_FAC = 'var(--c-info-strong)';   // navy
+  const COLOR_TRN = '#0891b2';                // teal (no matching token)
+  const COLOR_HND = 'var(--c-warn)';          // amber
   const handlingTip = 'Handling = Σ (annualDemand × facility.variableCost) across all assigned demand. Variable cost is per-unit handling, set on each facility row (defaults $2.80–$4.00/unit on the demo network).';
   const cell = (label, amt, pct, color, tip) => `
     <div style="flex:1;padding:0 12px;border-left:1px solid var(--ies-gray-200);">
@@ -3189,8 +3189,8 @@ function renderComparison(el) {
 function renderOptimizationChip(meta) {
   if (!meta) return '';
   const isExact = meta.algorithm === 'exhaustive';
-  const bg = isExact ? '#dbeafe' : '#fef3c7';
-  const fg = isExact ? '#1e40af' : '#92400e';
+  const bg = isExact ? 'var(--c-info-bg)' : 'var(--c-warn-bg)';
+  const fg = isExact ? 'var(--c-info-ink)' : 'var(--c-warn-ink)';
   const kCap = meta.kCap;
   const totalCombos = (meta.totalCombos || 0).toLocaleString();
   const label = isExact
@@ -3260,12 +3260,12 @@ function renderMultiDCComparison(el) {
                 const savings = baseline - s.totalCost;
                 const isRecommended = i === rec.recommendedIdx;
                 const failsSLA = haveTarget && Number(s.serviceLevel) < slaTarget - 1e-6;
-                const rowBg = isRecommended ? '#f0fdf4' : (failsSLA ? '#fef9f9' : 'transparent');
+                const rowBg = isRecommended ? 'var(--c-success-soft)' : (failsSLA ? '#fef9f9' : 'transparent');
                 const rowOpacity = failsSLA && !isRecommended ? '0.65' : '1';
                 const slLevel = Number(s.serviceLevel) || 0;
                 const slColor = haveTarget
-                  ? (slLevel >= slaTarget ? '#22c55e' : slLevel >= slaTarget - 5 ? '#f59e0b' : '#ef4444')
-                  : (slLevel >= 95 ? '#22c55e' : slLevel >= 90 ? '#f59e0b' : '#ef4444');
+                  ? (slLevel >= slaTarget ? 'var(--c-success-bright)' : slLevel >= slaTarget - 5 ? 'var(--c-warn)' : '#ef4444')
+                  : (slLevel >= 95 ? 'var(--c-success-bright)' : slLevel >= 90 ? 'var(--c-warn)' : '#ef4444');
                 let statusBadge = '';
                 if (isRecommended) {
                   statusBadge = `<span style="display:inline-block;padding:4px 12px;background:var(--c-success-bright);color:#fff;border-radius:12px;font-size:11px;font-weight:700;">RECOMMENDED</span>`;
@@ -3424,9 +3424,9 @@ function renderScenarioComparison(el) {
           <tbody>
             ${compared.map(s => {
               const verdictColor = {
-                'OPTIMAL': '#22c55e', 'BEST COST': 'var(--ies-blue)', 'BEST SERVICE': '#8b5cf6',
-                'VIABLE': '#6b7280', 'SERVICE RISK': '#ef4444',
-              }[s.verdict] || '#6b7280';
+                'OPTIMAL': 'var(--c-success-bright)', 'BEST COST': 'var(--ies-blue)', 'BEST SERVICE': 'var(--c-purple-bright)',
+                'VIABLE': 'var(--c-muted)', 'SERVICE RISK': '#ef4444',
+              }[s.verdict] || 'var(--c-muted)';
 
               return `
                 <tr style="border-bottom:1px solid var(--ies-gray-200);">
@@ -3456,9 +3456,9 @@ function renderScenarioComparison(el) {
           const maxCost = Math.max(...compared.map(sc => sc.totalCost));
           const pct = maxCost > 0 ? (s.totalCost / maxCost) * 100 : 0;
           const verdictColor = {
-            'OPTIMAL': '#22c55e', 'BEST COST': 'var(--ies-blue)', 'BEST SERVICE': '#8b5cf6',
-            'VIABLE': '#6b7280', 'SERVICE RISK': '#ef4444',
-          }[s.verdict] || '#6b7280';
+            'OPTIMAL': 'var(--c-success-bright)', 'BEST COST': 'var(--ies-blue)', 'BEST SERVICE': 'var(--c-purple-bright)',
+            'VIABLE': 'var(--c-muted)', 'SERVICE RISK': '#ef4444',
+          }[s.verdict] || 'var(--c-muted)';
 
           return `
             <div class="u-mb-3">

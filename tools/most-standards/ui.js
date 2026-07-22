@@ -2184,7 +2184,7 @@ function showAllowanceProfileModal() {
       // Mark for refresh
       dirty[id] = '__deleted__';
     } catch (err) {
-      alert('Delete failed: ' + (err?.message || err));
+      showToast('Delete failed: ' + (err?.message || err), 'error');
       btn.disabled = false;
     }
   });
@@ -2225,7 +2225,7 @@ function showAllowanceProfileModal() {
       overlay.remove();
       rerenderPreservingFocus();
     } catch (err) {
-      alert('Save failed: ' + (err?.message || err));
+      showToast('Save failed: ' + (err?.message || err), 'error');
       btn.disabled = false;
       btn.textContent = 'Save All';
     }
@@ -2466,7 +2466,7 @@ async function saveTemplateAction() {
   const desc = /** @type {HTMLInputElement} */ (container.querySelector('#edit-tpl-desc')).value || '';
 
   if (!name || !area || editorElements.length === 0) {
-    alert('Activity name, process area, and at least 1 element are required.');
+    showToast('Activity name, process area, and at least 1 element are required.', 'warning');
     return;
   }
 
@@ -2513,7 +2513,7 @@ async function saveTemplateAction() {
     renderContent();
   } catch (err) {
     console.error('[MOST] Save template failed:', err);
-    alert('Failed to save template. See console for details.');
+    showToast('Failed to save template: ' + (err?.message || err), 'error');
   }
 }
 
@@ -2524,7 +2524,7 @@ async function saveTemplateAction() {
 async function saveCurrentScenario() {
   const linesWithVolume = (analysis.lines || []).filter(l => l.daily_volume > 0).length;
   if (linesWithVolume === 0) {
-    alert('Add at least one activity with volume before saving.');
+    showToast('Add at least one activity with volume before saving.', 'warning');
     return;
   }
 
@@ -2585,7 +2585,7 @@ async function saveCurrentScenario() {
       localStorage.setItem('most_scenarios', JSON.stringify(savedScenarios));
     } catch {}
     renderContent();
-    alert('Saved locally — Supabase save failed: ' + (err.message || 'unknown'));
+    showToast('Saved locally — cloud save failed: ' + (err.message || 'unknown'), 'warning');
   }
 }
 
@@ -2606,7 +2606,7 @@ async function deleteScenario(idx) {
       await api.deleteAnalysis(sc.id);
     } catch (err) {
       console.warn('[MOST] deleteAnalysis failed:', err);
-      alert('Could not delete from Supabase: ' + (err.message || 'unknown'));
+      showToast('Could not delete scenario: ' + (err.message || 'unknown'), 'error');
       return;
     }
   }
@@ -2642,7 +2642,7 @@ async function copyScenario(idx) {
     renderContent();
   } catch (err) {
     console.warn('[MOST] copyScenario failed:', err);
-    alert('Could not duplicate scenario: ' + (err.message || 'unknown'));
+    showToast('Could not duplicate scenario: ' + (err.message || 'unknown'), 'error');
   }
 }
 

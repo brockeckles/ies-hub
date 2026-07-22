@@ -1,7 +1,7 @@
 /**
  * IES Hub v3 — Fleet Modeler UI
  * Analyzer-pattern layout: top tab bar + full-width content.
- * Tabs: Lanes, Configuration, Results, Map.
+ * Phases: Inputs (lanes), Parameters, Run.
  *
  * @module tools/fleet-modeler/ui
  */
@@ -90,9 +90,9 @@ let activeScenarioId = null;
 let activeParentCmId = null;
 let activeScenarioName = null;
 
-// Run-state tracker — flips the "Calculate Fleet" button between orange and
+// Run-state tracker — flips the "Run" button between orange and
 // the muted "✓ Results current" state based on whether inputs have changed
-// since the last calculate.
+// since the last run.
 const runState = new RunStateTracker();
 function runStateInputs() {
   return { lanes, vehicles, config };
@@ -107,10 +107,10 @@ function updateRunButtonState() {
   btn.setAttribute('data-run-state', s);
   const iconSpan = btn.querySelector('.hub-run-icon');
   const labelSpan = btn.querySelector('span:not(.hub-run-icon):not(.hub-run-shortcut)');
-  if (labelSpan) labelSpan.textContent = isClean ? '✓ Results current' : 'Calculate Fleet';
+  if (labelSpan) labelSpan.textContent = isClean ? '✓ Results current' : 'Run';
   if (iconSpan) iconSpan.style.display = isClean ? 'none' : '';
   btn.setAttribute('title', isClean
-    ? 'Inputs unchanged since the last calculate — fleet results match the current lanes + config. Click to force a re-run.'
+    ? 'Inputs unchanged since the last run — fleet results match the current lanes + parameters. Click to force a re-run.'
     : 'Run the analyzer (Cmd/Ctrl+Enter)');
 }
 
@@ -304,7 +304,7 @@ async function openEditor(savedRow) {
     // If inputs have diverged from the last successful Calculate, warn before
     // jumping to scenarios (user may have unsaved edits).
     const state = runState.state(runStateInputs());
-    if (state === 'dirty' && result && !(await showConfirm('You have unsaved changes since the last calculate. Leave anyway?'))) return;
+    if (state === 'dirty' && result && !(await showConfirm('You have unsaved changes since the last run. Leave anyway?'))) return;
     await renderLanding();
   });
 
@@ -372,7 +372,7 @@ function _buildFleetChromeOpts() {
       kind: 'primary',
       runState: runStateClass,
       cleanLabel: '✓ Results current',
-      cleanTitle: 'Inputs unchanged since the last run — fleet results match the current lanes + config. Click to force a re-run.' },
+      cleanTitle: 'Inputs unchanged since the last run — fleet results match the current lanes + parameters. Click to force a re-run.' },
   ];
 
   const sidebarFooter = activeParentCmId
@@ -495,7 +495,7 @@ function renderHosFeasibilityChip() {
   if (existing) existing.remove();
   const chip = document.createElement('div');
   chip.id = 'fm-hos-chip';
-  chip.style.cssText = 'background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:8px 14px;font-size:12px;line-height:1.5;display:flex;align-items:center;gap:10px;';
+  chip.style.cssText = 'background:var(--c-danger-soft);border:1px solid var(--c-danger-border);color:var(--c-danger-ink);padding:8px 14px;font-size:12px;line-height:1.5;display:flex;align-items:center;gap:10px;';
   chip.innerHTML = `<span class="u-bold">⚠ HOS feasibility:</span> ${failing.length} of ${lanes.length} lane${failing.length===1?'':'s'} exceed${failing.length===1?'s':''} the ${budget.toFixed(0)}h weekly driving budget. The 3-way comparison will reflect this — open <b>Run · Feasibility</b> for details.`;
   stepperEl.parentNode.insertBefore(chip, stepperEl.nextSibling);
 }
@@ -534,7 +534,7 @@ async function bindShellEvents() {
     },
     onBack: async () => {
       const state = runState.state(runStateInputs());
-      if (state === 'dirty' && result && !(await showConfirm('You have unsaved changes since the last calculate. Leave anyway?'))) return;
+      if (state === 'dirty' && result && !(await showConfirm('You have unsaved changes since the last run. Leave anyway?'))) return;
       await renderLanding();
     },
     onAction: (id) => {
@@ -624,7 +624,7 @@ function renderRunPhase(el) {
   if (!result) {
     el.innerHTML = `
       <div class="hub-card" style="padding:24px;text-align:center;">
-        <div style="font-size:14px;color:var(--ies-gray-500);">No fleet calc yet. Add lanes (Inputs phase), tune assumptions (Parameters), then click <b>Run</b> in the header.</div>
+        <div style="font-size:14px;color:var(--ies-gray-500);">No results yet. Add lanes (Inputs), tune assumptions (Parameters), then click <b>Run</b> in the header.</div>
       </div>
     `;
     return;
@@ -661,7 +661,7 @@ function renderLanes(el) {
             <tr class="u-th-rule">
               <th style="text-align:left;padding:8px 6px;font-weight:700;">Origin</th>
               <th style="text-align:left;padding:8px 6px;font-weight:700;">Destination</th>
-              <th style="text-align:right;padding:8px 6px;font-weight:700;">Weekly Ships</th>
+              <th style="text-align:right;padding:8px 6px;font-weight:700;">Weekly Shipments</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;">Avg Wt (lbs)</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;">Avg Cube (ft³)</th>
               <th style="text-align:right;padding:8px 6px;font-weight:700;">Distance (mi)</th>
@@ -928,7 +928,7 @@ function renderOperatingSubTab(el) {
       </div>
 
       <div style="padding:14px;background:var(--ies-gray-50);border-radius:6px;font-size:12px;color:var(--ies-gray-600);">
-        <strong>Carrier Rate Deck</strong> lives in its own sub-tab — switch to the <em>Rate Deck</em> tab above to edit base rate, fuel surcharge, min charge, and notes per vehicle class.
+        <strong>Carrier Rate Deck</strong> lives in its own section — open <em>Rate Deck</em> above to edit base rate, fuel surcharge, min charge, and notes per vehicle class.
       </div>
     </div>
   `;
@@ -975,9 +975,10 @@ function renderRateDeck(el) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <div>
           <h3 class="text-section" style="margin:0 0 4px 0;">Common-Carrier Rate Deck</h3>
-          <div style="font-size:12px;color:var(--ies-gray-500);">Edits save to <code>ref_fleet_carrier_rates</code> on blur. Effective rate = base × (1 + fuel surcharge). Used by the carrier column of the 3-way comparison.</div>
+          <div style="font-size:12px;color:var(--ies-gray-500);">Edits save on blur and apply hub-wide (shared reference data). Effective rate = base × (1 + fuel surcharge). Used by the carrier column of the 3-way comparison.</div>
         </div>
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-rd-add">+ Add Class</button>
+        <!-- C3 (2026-07-22): dead "+ Add Class" button removed — no handler was
+             ever bound (api.createCarrierRate exists but was never wired). -->
       </div>
       <div class="hub-card u-p-4">
         ${carrierRateDeck.length === 0 ? `
@@ -1092,7 +1093,7 @@ function renderFeasibilitySubTab(el) {
     const inner = el;
     const card = document.createElement('div');
     card.className = 'hub-card';
-    card.style.cssText = 'padding:16px;background:#f0fdf4;border-left:4px solid #22c55e;margin-top:8px;';
+    card.style.cssText = 'padding:16px;background:var(--c-success-soft);border-left:4px solid var(--c-success-bright);margin-top:8px;';
     card.innerHTML = '<div style="font-size:13px;font-weight:700;color:var(--c-success-strong);">✓ HOS Feasibility — all lanes within driving budget</div>';
     inner.appendChild(card);
   }
@@ -1100,12 +1101,12 @@ function renderFeasibilitySubTab(el) {
 
 function renderResults(el) {
   if (!result) {
-    el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Click "Calculate Fleet" to see results.</p></div>';
+    el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Click <b>Run</b> in the header to see results.</p></div>';
     return;
   }
 
   const r = result;
-  const atriColor = { 'BELOW': '#22c55e', 'AT': '#f59e0b', 'ABOVE': '#ef4444' }[r.atriBenchmark.verdict];
+  const atriColor = { 'BELOW': 'var(--c-success-bright)', 'AT': 'var(--c-warn)', 'ABOVE': '#ef4444' }[r.atriBenchmark.verdict];
 
   el.innerHTML = `
     <div>
@@ -1748,7 +1749,7 @@ function kpi(label, value, color) {
 
 function renderMap(el) {
   if (!result) {
-    el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Calculate fleet first to see route map.</p></div>';
+    el.innerHTML = '<div class="hub-card"><p class="text-body text-muted">Run the analyzer first to see the route map.</p></div>';
     return;
   }
 

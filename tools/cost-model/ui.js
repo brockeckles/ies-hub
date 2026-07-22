@@ -14,7 +14,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import ofpStyles from './operational-flow-styles.js?v=20260714-a2';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
 import * as calc from './calc.js?v=20260722-e1';
-import * as api from './api.js?v=20260722-s3b';
+import * as api from './api.js?v=20260722-s4a';
 import * as scenarios from './calc.scenarios.js?v=20260722-e1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260705-u3d';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260705-u3d';
@@ -34,6 +34,9 @@ import { refreshKpiStrip, bindToolChromeEvents, applyToolCrumb } from '../../sha
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import * as dealContext from '../../shared/deal-context.js?v=20260722-s1a';
+// C3 (2026-07-22): shared saved-scenarios landing — CM's cold-start first
+// screen, same as WSC/MOST/COG/NetOpt/Fleet. Pin matches all other importers.
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260722-s2a';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { computeAll } from './compute-all.js?v=20260722-e1';
@@ -1130,8 +1133,55 @@ export async function mount(el) {
   // same eager profile load before first paint. Empty-model mounts have no
   // market → instant no-op.
   await ensureMarketLaborProfileLoaded();
+
+  // C3 (2026-07-22): COLD-START GATE — if no entry path above flipped us into
+  // the editor (no cm_pending_open deep link, no cm_pending_new_for_deal, no
+  // WSC/MOST/NetOpt push relay, no drillback consume), viewMode is still
+  // 'landing' and CM opens on the shared scenario landing like every other
+  // revamped tool. Every targeted entry path sets viewMode='editor' before
+  // this line (directly or via loadModelByCmId/handle*Push) and is therefore
+  // byte-identical to pre-C3 behavior. In-session returns to the landing
+  // (Load button → handleLoad) still render the classic renderLanding grid.
+  if (viewMode === 'landing') {
+    await renderCmScenarioLanding();
+    return;
+  }
   renderCurrentView();
 
+}
+
+/**
+ * C3 (2026-07-22): shared scenario-landing as CM's cold-start first screen
+ * (audit: "CM is the only revamped tool not on scenario-landing"). Called
+ * ONLY from mount()'s cold-start gate above. Uses existing CM api fns only:
+ * listModels / duplicateModel / deleteModel, loadModelByCmId for open and
+ * openCmTemplatePicker for new — no new mutation paths.
+ */
+async function renderCmScenarioLanding() {
+  if (!rootEl) return;
+  applyToolCrumb(''); // same as renderLanding — no model crumb on the landing
+  await renderScenarioLanding(rootEl, {
+    toolName: 'Cost Model',
+    toolKey: 'cm',
+    accent: '#ff3a00', // CM's existing accent (see renderLanding hover color)
+    list: () => api.listModels(),
+    getId: (r) => r.id,
+    getName: (r) => r.name || 'Untitled Model',
+    getUpdated: (r) => r.updated_at || r.created_at,
+    // A cost model has no parent CM; deal linkage rides deal_deals_id.
+    getParent: (r) => ({ cmId: null, dealId: r.deal_deals_id || null }),
+    getSubtitle: (r) => [r.scenario_label, r.client_name].filter(Boolean).join(' · '),
+    onOpen: (row) => loadModelByCmId(row.id),
+    onNew: () => openCmTemplatePicker(),
+    onCopy: async (row) => {
+      await api.duplicateModel(row.id);
+      try { savedModels = await api.listModels(); } catch (_) {}
+    },
+    onDelete: async (row) => {
+      await api.deleteModel(row.id);
+      savedModels = savedModels.filter(m => m.id !== row.id);
+    },
+  });
 }
 
 /**
@@ -9204,6 +9254,46 @@ function bindSectionEvents(section, container) {
           }
         }
       } else {
+        // C3 (2026-07-22): EXPLICIT CONFIRMED DETACH — choosing "— No linked
+        // deal —" on a SAVED model that currently carries a linked deal is a
+        // real detach, not a silent no-op. Since C1, _modelUpdatePayload
+        // intentionally OMITS deal_deals_id when unlinked (a stale in-memory
+        // model must never null a DM-side link), so the ordinary save path
+        // can never persist this selection. Confirm, then persist through
+        // the dedicated single-purpose api.detachModelFromDeal. Cancel
+        // reverts the select to the prior deal — no writes. New models and
+        // already-unlinked models fall through to the old no-op assignment
+        // (no confirm spam).
+        if (field === 'projectDetails.dealId' && !val
+            && model?.id && model?.projectDetails?.dealId) {
+          const prevDealId = model.projectDetails.dealId;
+          const _deal = (savedDeals || []).find(d => String(d.id) === String(prevDealId));
+          const _dealLabel = _deal
+            ? _deal.deal_name + (_deal.client_name ? ` (${_deal.client_name})` : '')
+            : 'its linked deal';
+          (async () => {
+            const ok = await showConfirm(
+              `Detach this model from ${_dealLabel}? The deal keeps its other links; this model becomes stand-alone.`,
+              { okLabel: 'Detach', danger: true });
+            if (!ok) { input.value = prevDealId; return; } // revert — no writes
+            try {
+              await api.detachModelFromDeal(model.id);
+              model.projectDetails.dealId = null;
+              // The api also nulls site_id (a model off the deal can't keep
+              // the deal's site) — mirror that in memory so the next save's
+              // conditional site stamp doesn't resurrect the binding.
+              if (model.projectDetails.siteId) model.projectDetails.siteId = null;
+              const _sm = (savedModels || []).find(m => String(m.id) === String(model.id));
+              if (_sm) _sm.deal_deals_id = null;
+              showToast('Model detached — now stand-alone.', 'success');
+              renderSection();
+            } catch (err) {
+              input.value = prevDealId; // revert on failure
+              showToast('Detach failed: ' + (err?.message || err), 'error');
+            }
+          })();
+          return; // persisted (or reverted) via the dedicated path — skip dirty/assign
+        }
         // Dot-path assignment
         setNestedValue(model, field, val);
         // Phase 2.3: dual-write — only mirror channel-0 mutations back to
@@ -13324,7 +13414,8 @@ async function handleLoad() {
 
 function handleExportExcel() {
   if (!window.XLSX) {
-    alert('Excel library not loaded. Refresh the page and try again.');
+    // C3 (2026-07-22): blocking alert() → non-blocking shared toast.
+    showToast('Excel library not loaded. Refresh the page and try again.', 'error');
     return;
   }
   try {
@@ -13440,7 +13531,8 @@ function handleExportExcel() {
     XLSX.writeFile(wb, fileName);
   } catch (err) {
     console.error('[CM] Excel export failed:', err);
-    alert('Excel export failed: ' + (err.message || 'unknown error'));
+    // C3 (2026-07-22): blocking alert() → non-blocking shared toast.
+    showToast('Excel export failed: ' + (err.message || 'unknown error'), 'error');
   }
 }
 

@@ -263,7 +263,7 @@ function renderPipelineSnapshot(p) {
   // ★ coverage — deals whose every active site carries a ★ scenario.
   const cov = p.starCoverage;
   const covChip = cov && Number(cov.total) > 0
-    ? `<span title="Deals with a ★ scenario on every active site" style="font-size:11px;font-weight:700;color:var(--ies-gray-500);white-space:nowrap;flex-shrink:0;"><span style="color:var(--c-warn-strong);">★</span> ${Number(cov.covered) || 0}/${Number(cov.total)} covered</span>`
+    ? `<span title="Deals where every active site has a starred design" style="font-size:11px;font-weight:700;color:var(--ies-gray-500);white-space:nowrap;flex-shrink:0;"><span style="color:var(--c-warn-strong);">★</span> ${Number(cov.covered) || 0}/${Number(cov.total)} deals fully covered</span>`
     : '';
   const detailRow = (gradeChips || covChip)
     ? `<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;min-width:0;">

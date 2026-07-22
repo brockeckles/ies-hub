@@ -16,7 +16,7 @@
  * @property {number} warehouseRate — $/sqft/yr industrial real estate
  * @property {number} availabilityPct — % vacant industrial space
  * @property {number} freightIndex — normalized freight cost index
- * @property {number} activeDeals — count of active deals in market
+ * @property {number} [activeDeals] — live count of pipeline deals with a Site in this market (from deal_sites.market_id); undefined until the overlay loads or when the query fails (UI shows —)
  * @property {string[]} verticals — primary verticals
  * @property {string} gxoPresence — 'active' | 'target' | 'none'
  */

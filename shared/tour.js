@@ -5,8 +5,8 @@
  * popover; the rest of the page stays fully interactive (no modal overlay).
  *
  * Usage:
- *   import { tour } from './shared/tour.js?v=20260710-r2';
- *   tour.start('overview');   // start a named tour
+ *   import { tour } from './shared/tour.js?v=20260722-s4a';
+ *   tour.start('welcome');    // start a named tour (unknown names → 'welcome')
  *   tour.next();              // advance manually (normally user clicks)
  *   tour.stop();              // end immediately
  *
@@ -23,85 +23,38 @@
 import { bus } from './event-bus.js?v=20260418-sK';
 
 // ---------------------------------------------------------------------------
-// Tour definitions — 10 section tours for v3.
+// Tour definitions — C3 rewrite (2026-07-22): ONE honest orientation tour
+// that narrates the current hub (rail nav, Command Center pipeline card,
+// Deal Management deals→sites→scenarios with ★/Σ★, Design Tools scenario
+// landings, deal-context launching). The old per-section tours described
+// pre-revamp screens (kanban classes, cm-nav, NetOpt, wiki search) that no
+// longer exist. Any unknown tour name — the header button still passes
+// section names like 'cost-model' or 'netopt' — falls back to 'welcome'.
 // ---------------------------------------------------------------------------
 
 /** @typedef {{ selector?: string, route?: string, title: string, body: string, placement?: 'top'|'bottom'|'left'|'right' }} TourStep */
 
 /** @type {Record<string, TourStep[]>} */
 const TOURS = {
-  // 1. First-time visitor orientation
   welcome: [
     { route: 'overview', title: 'Welcome to the IES Hub',
-      body: 'This 90-second tour covers the six things you should know on day one. Press → or click Next.' },
-    { selector: '.hub-sidebar-nav', placement: 'right', title: 'Navigation',
-      body: 'Left rail groups everything by function — Intelligence (market data), Work (deals + tools), Resources (wiki + feedback), and Admin.' },
-    { selector: '.hub-search-input', placement: 'right', title: 'Global search (Ctrl + K)',
-      body: 'Searches everything — deals, cost models, wiki articles, master tables. Fastest way to navigate once you know the hub.' },
-    { selector: '[data-route="overview"]', placement: 'right', title: 'Command Center',
-      body: 'Your landing page — alerts, KPIs, RFP signals, steel prices, wage trends. Start the day here.' },
-    { selector: '[data-route="designtools"]', placement: 'right', title: 'Design Tools',
-      body: 'Seven tools for sizing, pricing, and network analysis. Each saves scenarios to Supabase so your team can pick up where you left off.' },
-    { selector: '[data-route="deals"]', placement: 'right', title: 'Deal Management',
-      body: 'Pipeline across the six GXO DOS stages. Deal detail pages carry DOS templates, artifacts, hours, and weekly updates.' },
-  ],
-  // 2. Command Center
-  overview: [
-    { route: 'overview', selector: '.hub-kpi-strip', placement: 'bottom', title: 'KPI strip',
-      body: 'Leading indicators refreshed nightly by Supabase ingesters. Hover any tile for source + last-refresh time.' },
-    { selector: '.hub-alerts', placement: 'bottom', title: 'Inline alerts',
-      body: 'Live feed from hub_alerts (severity: critical / high / medium). Click any alert to open the source article.' },
-    { selector: '.hub-rfp-tile', placement: 'top', title: 'Active RFP Signals',
-      body: 'rfp_signals table — 3PL RFPs surfaced from public filings + vendor channels. Updated by ingest-rfp-signals cron.' },
-    { selector: '.hub-wage-chart', placement: 'top', title: 'Wage trend chart',
-      body: 'BLS wages for 5 key 3PL markets with city-specific growth rates. Shows directional spread, not absolute comparison.' },
-  ],
-  // 3. Deal Management
-  deals: [
-    { route: 'deals', selector: '.hub-deal-kanban', placement: 'top', title: 'DOS pipeline',
-      body: 'Six stages: Pre-Sales Engagement → Deal Qualification → Kick-Off & Solution Design → Operations Review → Executive Review → Delivery Handover.' },
-    { selector: '.hub-deal-card', placement: 'right', title: 'Deal cards',
-      body: 'Click any card for the 5-tab detail view: Overview / Activities / Artifacts / Hours / Updates.' },
-    { selector: '[data-action="new-deal"]', placement: 'left', title: 'Create a deal',
-      body: 'New deals start in Pre-Sales Engagement. Stage templates populate automatically from stage_element_templates.' },
-  ],
-  // 4. Design Tools landing
-  designtools: [
-    { route: 'designtools', selector: '.hub-dt-categories', placement: 'bottom', title: 'Tool categories',
-      body: 'Three groupings: Solutions (Cost Model, Deal Manager), Engineering (WSC, MOST), Logistics (NetOpt, Fleet, COG).' },
-    { selector: '.hub-dt-card', placement: 'top', title: 'Tool cards',
-      body: 'Each card opens the tool landing page with saved scenarios. Click card body to open; use filter tabs above to narrow.' },
-  ],
-  // 5. Cost Model Builder
-  'cost-model': [
-    { route: 'designtools/cost-model', selector: '.cm-nav', placement: 'right', title: 'Cost model sections',
-      body: 'Thirteen sections build up the P&L: Setup → Volumes → Labor → Equipment → Facility → Startup → Overhead → Pricing → Summary.' },
-    { selector: '.cm-summary-kpis', placement: 'bottom', title: 'Live KPIs',
-      body: 'EBITDA %, gross margin, pricing mix — all computed reactively as you edit upstream sections.' },
-  ],
-  // 6. Warehouse Sizing
-  wsc: [
-    { route: 'designtools/warehouse-sizing', selector: '.wsc-view-toggle', placement: 'bottom', title: 'Three views',
-      body: 'Dashboard (KPIs + recs), Elevation (side view of rack structure), 3D (Three.js interactive walkthrough), 2D Plan (top-down floorplan).' },
-    { selector: '.wsc-inputs', placement: 'right', title: 'Inputs',
-      body: 'Enter peak pallets, SKU count, turn rate, clearance height. Storage type blend, dock config, and DIOH refine the calc.' },
-  ],
-  // 7. Network Optimizer
-  netopt: [
-    { route: 'designtools/network-opt', selector: '.netopt-map', placement: 'right', title: 'Network map',
-      body: 'Leaflet map with facility pins, demand heatmap overlay, flow polylines (color-coded by mode), and service zone circles (SLA radii).' },
-    { selector: '.netopt-solver', placement: 'bottom', title: 'Exact solver',
-      body: 'Exhaustive enumeration + greedy heuristics evaluate the TL/LTL/Parcel mix per lane (frequency-driven shipments). Elbow chart suggests optimal DC count.' },
-  ],
-  // 8. MOST Standards
-  most: [
-    { route: 'designtools/most-standards', selector: '.most-library', placement: 'right', title: 'Template library',
-      body: 'Reference templates (activity → UPH) stored in ref_most_templates. Edit templates here, then push rows to Cost Model labor.' },
-  ],
-  // 9. Admin
-  admin: [
-    { route: 'admin', selector: '.admin-tables', placement: 'bottom', title: 'Master tables',
-      body: 'CRUD for reference data: escalation rules, cost buckets, vehicle types, DOS templates, SCCs, accounts, competitors, markets, verticals.' },
+      body: 'A 90-second orientation — the rail, the deal pipeline, and the design tools. Press → or click Next; Esc exits anytime.' },
+    { selector: '.hub-sidebar-nav', placement: 'right', title: 'Navigation rail',
+      body: 'Everything lives here. Intelligence: Command Center and Market Explorer. Work: Deal Management and Design Tools — Cost Model Builder, Warehouse Sizing, MOST Labor Standards, Center of Gravity, Fleet Modeler. Plus Ideas & Feedback.' },
+    { selector: '.hub-search-input', placement: 'right', title: 'Quick nav (Ctrl + K)',
+      body: 'Jump to any page or tool by name — press Ctrl+K from anywhere and type "cost model", "deals", or "fleet".' },
+    { route: 'overview', selector: 'a.hub-card[href="#deals"]', placement: 'left', title: 'Pipeline Snapshot',
+      body: 'Active deals, pipeline $, Sites, and grade mix at a glance. "★ n/m covered" counts deals with a starred scenario on every active site. An amber est badge means the total includes estimated Σ★ roll-ups.' },
+    { route: 'deals', selector: '#dm-content', placement: 'top', title: 'Deal Management',
+      body: 'Deals move through the six DOS stages — switch between Pipeline, List, Customers, and My Hours views. Each Deal holds Sites; each Site holds design Scenarios. Click any deal card to open it.' },
+    { title: 'Starred designs (★ and Σ★)',
+      body: 'Inside a deal, star the Cost Model scenario that is in the bid for each Site. Deal revenue is the Σ★ roll-up across starred sites — badged est while coverage is partial or a ★ scenario is heuristic-priced.' },
+    { route: 'designtools', selector: '.hub-dt-categories', placement: 'top', title: 'Design Tools',
+      body: 'Five production tools: Cost Model Builder (Solutions); Warehouse Sizing and MOST Labor Standards (Engineering); Center of Gravity and Fleet Modeler (Logistics). Every scenario saves to Supabase.' },
+    { selector: '.hub-dt-card', placement: 'bottom', title: 'Scenario-first tools',
+      body: 'Each tool opens on its scenario landing — your saved Scenarios with linkage chips (stand-alone vs linked to a Cost Model or Deal) and a + New Scenario button. No cold-start blank forms.' },
+    { title: 'Work in deal context',
+      body: 'Launch a tool from a Deal ("Start cost model") and new scenarios stamp to that deal — the landing shows a "Working in deal" chip and floats that deal\'s scenarios to the top. Re-run this tour anytime from the compass button in the header.' },
   ],
 };
 
@@ -115,11 +68,16 @@ let popover = null;
 /** @param {string} name */
 function start(name) {
   stop();
-  const steps = TOURS[name];
+  // C3 (2026-07-22): the header tour button still passes legacy section
+  // names ('cost-model', 'netopt', ...). Unknown names fall back to the
+  // single 'welcome' orientation tour instead of silently doing nothing.
+  let steps = TOURS[name];
   if (!steps || !steps.length) {
-    console.warn(`[tour] unknown tour: ${name}`);
-    return;
+    console.info(`[tour] no tour named "${name}" — starting 'welcome'`);
+    name = 'welcome';
+    steps = TOURS[name];
   }
+  if (!steps || !steps.length) return;
   activeTour = { name, steps, idx: 0 };
   advance(0);
 }
@@ -141,6 +99,10 @@ function prev() {
   advance(activeTour.idx - 1);
 }
 
+// Monotonic token so an in-flight advance() (route settle / selector poll)
+// aborts cleanly when the user advances again or stops the tour.
+let advanceSeq = 0;
+
 async function advance(targetIdx) {
   if (!activeTour) return;
   if (targetIdx < 0) targetIdx = 0;
@@ -148,6 +110,8 @@ async function advance(targetIdx) {
 
   activeTour.idx = targetIdx;
   const step = activeTour.steps[targetIdx];
+  const seq = ++advanceSeq;
+  const stale = () => !activeTour || activeTour.idx !== targetIdx || seq !== advanceSeq;
 
   // If step has a route, navigate first and wait a tick for DOM.
   if (step.route && typeof window !== 'undefined') {
@@ -155,10 +119,22 @@ async function advance(targetIdx) {
     if (currentHash !== step.route) {
       window.location.hash = step.route;
       await new Promise(r => setTimeout(r, 350));
+      if (stale()) return;
     }
   }
 
-  const target = step.selector ? document.querySelector(step.selector) : null;
+  // Views mount async (router lazy-loads + fetches) — poll briefly for the
+  // target instead of giving up on the first miss. Falls back to a centered
+  // popover if the selector never appears (C3, 2026-07-22).
+  let target = step.selector ? document.querySelector(step.selector) : null;
+  if (step.selector && !target) {
+    const deadline = Date.now() + 2500;
+    while (!target && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 150));
+      if (stale()) return;
+      target = document.querySelector(step.selector);
+    }
+  }
   renderPopover(step, target);
 }
 
