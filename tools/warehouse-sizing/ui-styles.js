@@ -121,6 +121,56 @@ export function wscExtraStyles() {
         background: transparent;
       }
 
+      /* Concept-B hotspots (2026-07-22) — engineered figures projected onto
+         the 3D canvas. Layer is click-through; chips are interactive and
+         carry data-wsw-cell, so the shell-w inspector delegation + its
+         selected-class refresh work on them unchanged. */
+      .wsc-3d-hs-layer {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 8; /* under the HUD (10), over the canvas */
+      }
+      .wsc-3d-hs {
+        position: absolute;
+        transform: translate(-50%, -120%);
+        pointer-events: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border: 1px solid rgba(148, 163, 184, 0.6);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.92);
+        color: var(--c-ink, #0f172a);
+        font-size: 11px;
+        line-height: 1.2;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(15, 27, 46, 0.18);
+        backdrop-filter: blur(2px);
+        transition: box-shadow 120ms ease, border-color 120ms ease;
+      }
+      .wsc-3d-hs:hover {
+        border-color: var(--ies-orange, #ff6b00);
+        box-shadow: 0 3px 12px rgba(15, 27, 46, 0.28);
+      }
+      /* Selection sync: _refreshWswInspector toggles wsw-krow--sel on every
+         [data-wsw-cell] node — rail rows AND these chips. */
+      .wsc-3d-hs.wsw-krow--sel {
+        border-color: var(--ies-orange, #ff6b00);
+        background: #fff7ed;
+      }
+      .wsc-3d-hs__dot {
+        width: 7px;
+        height: 7px;
+        flex: none; /* fixed-size-in-flex class — never squash */
+        border-radius: 50%;
+        background: var(--ies-orange, #ff6b00);
+        box-shadow: 0 0 0 3px rgba(255, 107, 0, 0.18);
+      }
+
       /* P0-2: 3D RenderedFacts HUD — fixed top-right overlay on the 3D canvas. */
       .wsc-3d-hud {
         position: absolute;

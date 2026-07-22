@@ -15,6 +15,7 @@
 
 import * as calc from './calc.js?v=20260722-s2';
 import { buildScenePlan, positionsPerFaceSegment } from './scene-plan.js?v=20260705-n7a';
+import { buildHotspots } from './hotspot-calc.js?v=20260722-h1';
 
 // P3-1: single-live window.mouseup for the no-OrbitControls drag fallback
 let _wsc3dPrevMouseUp = null;
@@ -38,6 +39,10 @@ let _wscShowRoof = true;
 // an unobstructed view of the rendered layout for screenshots / demos.
 // Default ON; toggle button in the View: row alongside Walls / Roof.
 let _wscShowHud = true;
+// Concept-B hotspots (2026-07-22) — engineered figures floating ON the
+// model, each opening its W3 inspector chain. Default ON; toggle persists
+// across scene rebuilds like Walls/Roof/HUD.
+let _wscShowHotspots = true;
 
 // ============================================================
 // LIFECYCLE
@@ -87,6 +92,9 @@ export function render3DView(container, ctx) {
         <button type="button" class="hub-btn hub-btn-sm ${_wscShowHud ? '' : 'hub-btn--ghost'}" data-3d-toggle="hud" title="Toggle the achieved-vs-target HUD table that overlays the top-right of the 3D canvas. Hide for a clean view of the rendered layout.">
           ${_wscShowHud ? 'Hide HUD' : 'Show HUD'}
         </button>
+        <button type="button" class="hub-btn hub-btn-sm ${_wscShowHotspots ? '' : 'hub-btn--ghost'}" data-3d-toggle="hotspots" title="Toggle the engineered-figure hotspots anchored to the model. Click a hotspot to open that figure's derivation chain in the inspector.">
+          ${_wscShowHotspots ? 'Hide Hotspots' : 'Show Hotspots'}
+        </button>
         <!-- Phase A.A5 (2026-05-26) — Camera presets. Click tweens the
              camera+target via cubic ease-out. OrbitControls take over again
              once the tween completes. -->
@@ -99,6 +107,9 @@ export function render3DView(container, ctx) {
       </div>
       <div id="wsc-3d-container" style="position:relative; width:100%; height:520px; background:#e9eef5; border-radius:6px; overflow:hidden;">
         <div id="wsc-3d-hud" class="wsc-3d-hud" aria-live="polite"></div>
+        <!-- Concept-B hotspots (2026-07-22): chips projected from 3D anchors
+             each frame; layer is click-through, the chips are not. -->
+        <div id="wsc-3d-hotspots" class="wsc-3d-hs-layer"></div>
       </div>
       <div style="font-size:11px; color:var(--ies-gray-500); margin-top:8px;">
         Drag to orbit  ·  Scroll to zoom  ·  Racks shown at 50% opacity for floor visibility  ·  HUD shows achieved vs sized target
@@ -141,6 +152,12 @@ export function render3DView(container, ctx) {
       if (hudEl) hudEl.style.display = _wscShowHud ? '' : 'none';
       btn.textContent = _wscShowHud ? 'Hide HUD' : 'Show HUD';
       btn.classList.toggle('hub-btn--ghost', !_wscShowHud);
+    } else if (kind === 'hotspots') {
+      _wscShowHotspots = !_wscShowHotspots;
+      const hsEl = container.querySelector('#wsc-3d-hotspots');
+      if (hsEl) hsEl.style.display = _wscShowHotspots ? '' : 'none';
+      btn.textContent = _wscShowHotspots ? 'Hide Hotspots' : 'Show Hotspots';
+      btn.classList.toggle('hub-btn--ghost', !_wscShowHotspots);
     }
   });
 
@@ -2095,6 +2112,51 @@ function build3DScene(ctx) {
       }, { passive: false });
     }
 
+    // ------------------------------------------------------------
+    // Concept-B hotspots (2026-07-22, Brock blend ruling 07-15) —
+    // engineered figures anchored ON the model. Pure list from
+    // hotspot-calc; chips carry data-wsw-cell so the EXISTING shell-w
+    // capture delegation opens the W3 inspector chain on click (and the
+    // inspector's selection refresh highlights the chip) — no new wiring.
+    // Projection runs each frame in the animate loop below (5 chips ×
+    // Vector3.project is negligible next to the render call).
+    // ------------------------------------------------------------
+    let _projectHotspots = null;
+    try {
+      const hsLayer = el.querySelector('#wsc-3d-hotspots');
+      if (hsLayer) {
+        const spots = buildHotspots({
+          sized, facility: ctx.facility,
+          dims: { W, D, H, rackTop: rackHeightFt * scale },
+        });
+        hsLayer.innerHTML = spots.map((s, i) =>
+          `<button type="button" class="wsc-3d-hs" data-wsw-cell="${s.cell}" data-hs-idx="${i}"`
+          + ` title="Open the ${s.label} derivation chain in the inspector">`
+          + `<span class="wsc-3d-hs__dot"></span>${s.label} · <strong>${s.value}</strong></button>`).join('');
+        // Honor the persistent toggle across scene rebuilds (HUD pattern).
+        hsLayer.style.display = _wscShowHotspots ? '' : 'none';
+        const anchors = spots.map(s => new THREE.Vector3(s.anchor.x, s.anchor.y, s.anchor.z));
+        const chips = Array.from(hsLayer.querySelectorAll('[data-hs-idx]'));
+        const _pv = new THREE.Vector3();
+        _projectHotspots = () => {
+          for (let i = 0; i < chips.length; i++) {
+            _pv.copy(anchors[i]).project(camera);
+            // Behind the camera or outside the frustum → hide (don't move a
+            // stale chip to a mirrored position).
+            const off = _pv.z > 1 || _pv.x < -1.05 || _pv.x > 1.05 || _pv.y < -1.05 || _pv.y > 1.05;
+            chips[i].style.visibility = off ? 'hidden' : 'visible';
+            if (!off) {
+              chips[i].style.left = (((_pv.x + 1) / 2) * width).toFixed(1) + 'px';
+              chips[i].style.top  = (((1 - _pv.y) / 2) * height).toFixed(1) + 'px';
+            }
+          }
+        };
+        _projectHotspots();
+      }
+    } catch (hsErr) {
+      console.warn('[WSC] hotspot layer failed:', hsErr);
+    }
+
     // Animate. Capture a local "alive" flag so the loop stops as soon as
     // dispose() is called (e.g. on re-render from a data-field commit).
     let alive = true;
@@ -2105,6 +2167,7 @@ function build3DScene(ctx) {
       // so the user-facing damping still feels natural after the tween.
       if (el.__wsc3d && typeof el.__wsc3d._stepTween === 'function') el.__wsc3d._stepTween();
       if (controls) controls.update();
+      if (_projectHotspots) _projectHotspots();
       renderer.render(scene, camera);
     }
     animate();
