@@ -20,7 +20,7 @@ import * as cmApi from '../cost-model/api.js?v=20260704-cmp1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
-import { render3DView, disposeScene3d } from './ui-3d.js?v=20260722-s2';
+import { render3DView, disposeScene3d } from './ui-3d.js?v=20260722-h1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260722-s2';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260722-s2';
@@ -33,7 +33,7 @@ import { buildRailInspector, renderInspectorHtml } from './rail-inspector.js?v=2
 import { renderShellW, updateWRail, getShellPref as getWShellPref, setShellPref as setWShellPref, stationForSection as wStationForSection, W_STATIONS } from './shell-w.js?v=20260722-s5';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260722-s2';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260722-s2';
-import { wscExtraStyles } from './ui-styles.js?v=20260710-r2';
+import { wscExtraStyles } from './ui-styles.js?v=20260722-h1';
 import { bindShellEvents } from './ui-shell-events.js?v=20260722-s5';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 

@@ -11929,7 +11929,7 @@ function _launchToTool(target) {
       // state. Invisible to the cache-bust guard because the './tools/...'
       // path resolves module-relative in the scanner but page-relative at
       // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260722-s5',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260722-h1',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {
