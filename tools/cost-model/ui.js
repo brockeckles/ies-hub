@@ -523,7 +523,8 @@ const DEMO_MARKETS_FALLBACK = [
 // indirect) + synthesized BY-WMS direct roles.
 // ============================================================
 
-/** Standard role catalog — 14 direct + 29 indirect = 43 positions. */
+/** Standard role catalog — 12 direct (4 generic + 8-role ladder) + 29
+ *  indirect = 41 positions. */
 const STANDARD_POSITIONS = [
   // ── DIRECT (4) ── Brock 2026-04-21 pm: key delineator is whether the
   // associate operates MHE (forklift / reach truck / order picker / etc).
@@ -534,6 +535,24 @@ const STANDARD_POSITIONS = [
   { name: 'Equipment Operator (Temp)', category: 'direct', is_salaried: false, hourly_wage: 22.00, temp_markup_pct: 38, employment_type: 'temp_agency', notes: 'Temp-agency MHE operator. 38% markup on base wage per heuristics §2.3. Catalog entry is distinct from the permanent Equipment Operator for roster reporting clarity.' },
   { name: 'Material Handler',          category: 'direct', is_salaried: false, hourly_wage: 18.00, notes: 'Permanent warehouse associate — non-MHE (receive / pick / pack / load / VAS / QC / cycle count).' },
   { name: 'Temp Material Handler',     category: 'direct', is_salaried: false, hourly_wage: 18.00, temp_markup_pct: 38, employment_type: 'temp_agency', notes: 'Temp-agency warehouse associate — non-MHE. 38% markup on base wage per heuristics §2.3 (contractual wage load).' },
+
+  // ── DIRECT — 8-role wage ladder (Brock ruling 2026-07-22). NEW models
+  // seed differentiated roles so lines land linked and divergence-free from
+  // day one (the 07-22 prod migration lesson: the coarse 2-rate catalog
+  // couldn't express a realistic wage ladder). Rates follow the Wayfair
+  // precedent ladder relative to the $18 MH / $22 EO bases — market wage
+  // lookup still adjusts per model. CATALOG_VERSION deliberately NOT bumped:
+  // existing models (incl. the four enriched by the 07-22 migration) keep
+  // their catalogs; the ladder reaches them only via the explicit
+  // "Replace with Standard Roles" action.
+  { name: 'Receiver',          category: 'direct', is_salaried: false, hourly_wage: 19.50, notes: 'Receive & unload, dock check-in — non-MHE. Ladder: MH base +$1.50.' },
+  { name: 'Picker',            category: 'direct', is_salaried: false, hourly_wage: 18.75, notes: 'Each/case picking — non-MHE. Ladder: MH base +$0.75.' },
+  { name: 'Packer',            category: 'direct', is_salaried: false, hourly_wage: 18.50, notes: 'Pack, label, cartonize — non-MHE. Ladder: MH base +$0.50.' },
+  { name: 'VAS Kitter',        category: 'direct', is_salaried: false, hourly_wage: 19.00, notes: 'Value-added services / kitting — non-MHE. Ladder: MH base +$1.00.' },
+  { name: 'Inventory Control', category: 'direct', is_salaried: false, hourly_wage: 22.50, notes: 'Cycle counts, audits, inventory integrity — senior non-MHE. Ladder top.' },
+  { name: 'Replenishment',     category: 'direct', is_salaried: false, hourly_wage: 20.00, notes: 'Replen to forward pick — MHE. Ladder: EO base −$2.00 (short-haul).' },
+  { name: 'Shipper/Loader',    category: 'direct', is_salaried: false, hourly_wage: 20.25, notes: 'Stage & load outbound trailers — MHE. Ladder: EO base −$1.75.' },
+  { name: 'Putaway Driver',    category: 'direct', is_salaried: false, hourly_wage: 21.50, notes: 'Putaway to reserve — MHE (reach truck). Ladder: EO base −$0.50.' },
 
   // ── INDIRECT — hourly leads + front-line support (heuristics §2.1) ──
   { name: 'Team Lead',                           category: 'indirect', is_salaried: false, hourly_wage: 22.00, notes: '1 : 15 direct FTE — front-line coordination' },
@@ -582,7 +601,13 @@ const STANDARD_POSITIONS = [
  *  v4 (2026-04-21 later pm): added Equipment Operator (Temp) as a 4th direct
  *  role — distinct catalog entry for temp MHE operators, mirroring the
  *  Material Handler / Temp Material Handler split so roster reports can
- *  differentiate cleanly. */
+ *  differentiate cleanly.
+ *  2026-07-22 (Brock ruling — ladder seed): 8-role direct ladder added
+ *  WITHOUT a version bump, ON PURPOSE. A bump would force-reseed every
+ *  existing project on next load and wipe the 07-22 per-model wage-ladder
+ *  migration (models 12/116/132/133). New models pick the ladder up via the
+ *  undefined-version seed path; existing models only via the explicit
+ *  Replace-with-Standard-Roles action. */
 const CATALOG_VERSION = 4;
 
 /** Keyword rules mapping a free-text activity/role name onto a standard role
@@ -591,6 +616,19 @@ const CATALOG_VERSION = 4;
  *  auto-migration to preserve labor-line ↔ position linkage after catalog
  *  wipe. */
 const ROLE_HINT_RULES = [
+  // ── Direct — 8-role ladder (2026-07-22), tested BEFORE the generic
+  // MHE/MH catch-alls so new models' lines auto-link to the differentiated
+  // roles. Order inside the ladder: most specific phrases first.
+  [/\binventory\s*control|\bcycle\s*count|\baudit/i,                       'direct', 'Inventory Control'],
+  [/\bput[\s-]?away/i,                                                     'direct', 'Putaway Driver'],
+  [/\breplen/i,                                                            'direct', 'Replenishment'],
+  [/\bstage\s*&?\s*load|\bload\s+(?:outbound|inbound)?\s*(?:trailer|truck)|\bship(?:per)?[\s\/]*load/i, 'direct', 'Shipper/Loader'],
+  [/\breceiv|\bunload|\bdock\s*check/i,                                    'direct', 'Receiver'],
+  [/value[\s-]?added|\bvas\b|\bkit/i,                                      'direct', 'VAS Kitter'],
+  [/\bpack\b|\bpack\s|\blabel|cartoniz/i,                                  'direct', 'Packer'],
+  // Pallet picks are MHE work — let them fall through to Equipment Operator.
+  [/^(?!.*\bpallet\b).*\bpick/i,                                           'direct', 'Picker'],
+
   // Direct (Brock 2026-04-21 pm): the distinction is MHE vs non-MHE.
   // Anything mentioning forklift / reach truck / order picker / yard jockey /
   // MHE / lift → Equipment Operator. Everything else → Material Handler.
