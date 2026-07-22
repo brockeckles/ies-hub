@@ -8,7 +8,8 @@
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 // P2-1 (2026-07-03) — pure site-field→CM-column mapper
-import { siteToCmColumns, NEW_SITE_DEFAULTS } from './calc.js?v=20260710-r4';
+// S2 (2026-07-22) — + per-site escalation extractor (DM adopts CM knobs)
+import { siteToCmColumns, NEW_SITE_DEFAULTS, siteEscalationFromRow } from './calc.js?v=20260722-s2a';
 
 // ============================================================
 // DEALS
@@ -311,6 +312,11 @@ function mapCmProjectToSite(row) {
     // computeSiteFinancials directly and the markup heuristic is skipped.
     annualRevenue: Number(row.total_annual_revenue) || 0,
     contractType: row.contract_type || null,
+    // S1: real Site linkage (deal_sites.id) when assigned.
+    siteRecordId: row.site_id || null,
+    // S2 (Brock ruling): this model's CM escalation knobs, blended to DM's
+    // rev/cost pair. Null when the row carries no signal → deal default.
+    escalation: siteEscalationFromRow(row),
   };
 }
 

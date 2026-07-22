@@ -75,18 +75,74 @@ export const DEFAULT_PRICING_MARKUPS = {
 };
 
 // ============================================================
-// DOS STAGES (reference)
+// DOS STAGES — SINGLE canonical in-code definition (S2, 2026-07-22).
+// Previously defined twice with drifting shapes (here w/ stale hardcoded
+// elementCounts · hub/deal-management/ui.js w/ colors). Canonical stage
+// NAMES still come from the DB at runtime (api.fetchStages); this constant
+// is the offline/presentation fallback. `id` aliases `number` so both
+// historical call styles work.
 // ============================================================
 
-/** @type {Array<{ number: number, name: string, elementCount: number }>} */
+/** @type {Array<{ number: number, id: number, name: string, color: string }>} */
 export const DOS_STAGES = [
-  { number: 1, name: 'Pre-Sales Engagement', elementCount: 4 },
-  { number: 2, name: 'Deal Qualification', elementCount: 6 },
-  { number: 3, name: 'Kick-Off & Solution Design', elementCount: 15 },
-  { number: 4, name: 'Operations Review', elementCount: 2 },
-  { number: 5, name: 'Executive Review', elementCount: 5 },
-  { number: 6, name: 'Delivery Handover', elementCount: 6 },
+  { number: 1, id: 1, name: 'Pre-Sales Engagement',       color: '#6b7280' },
+  { number: 2, id: 2, name: 'Deal Qualification',         color: '#2563eb' },
+  { number: 3, id: 3, name: 'Kick-Off & Solution Design', color: '#7c3aed' },
+  { number: 4, id: 4, name: 'Operations Review',          color: '#d97706' },
+  { number: 5, id: 5, name: 'Executive Review',           color: '#ea580c' },
+  { number: 6, id: 6, name: 'Delivery Handover',          color: '#16a34a' },
 ];
+
+// ============================================================
+// S2 (2026-07-22, Brock ruling: DM adopts ★ models' CM knobs) —
+// per-site escalation extracted from a cost_model_projects row.
+// ============================================================
+
+/** Typical 3PL warehouse cost composition — blend weights for collapsing
+ *  the CM's four category escalators into DM's single rev/cost pair.
+ *  Heuristic (labor-dominant ops); revisit if composition data lands on
+ *  the row someday. */
+export const ESC_BLEND_WEIGHTS = { labor: 0.55, cost: 0.15, facility: 0.20, equipment: 0.10 };
+
+/**
+ * Best-effort per-site escalation pair from a cost_model_projects row.
+ * Mirrors resolveCalcHeuristics' resting precedence per category:
+ * heuristic_overrides[snake] → project_data.financial.<camel legacy> → 3.
+ * (Transient/snapshot layers are CM-session concepts — a row read here is
+ * by definition at rest.) The four category knobs blend into one rate via
+ * ESC_BLEND_WEIGHTS, applied to BOTH revenue and cost — matching CM
+ * cost-plus semantics where price tracks escalated cost at constant
+ * margin. Returns null when the row carries no signal at all (caller
+ * falls back to the deal-level default pair → zero-diff).
+ *
+ * @param {Object} row — cost_model_projects row (needs heuristic_overrides
+ *        and/or project_data; both optional)
+ * @returns {{revenue: number, cost: number}|null}
+ */
+export function siteEscalationFromRow(row) {
+  const o = row?.heuristic_overrides || {};
+  const f = row?.project_data?.financial || {};
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+  const knob = (snake, ...legacy) => {
+    const ov = num(o[snake]);
+    if (ov !== null) return ov;
+    for (const k of legacy) { const lv = num(f[k]); if (lv !== null) return lv; }
+    return null;
+  };
+  const cats = {
+    labor:     knob('labor_escalation_pct', 'laborEscalation'),
+    cost:      knob('cost_escalation_pct', 'costEscalation', 'annualEscalation'),
+    facility:  knob('facility_escalation_pct', 'facilityEscalation'),
+    equipment: knob('equipment_escalation_pct', 'equipmentEscalation'),
+  };
+  if (Object.values(cats).every(v => v === null)) return null;
+  let blended = 0;
+  for (const [k, w] of Object.entries(ESC_BLEND_WEIGHTS)) {
+    blended += (cats[k] ?? DEFAULT_ESCALATION_PCT) * w;
+  }
+  blended = Number(blended.toFixed(2));
+  return { revenue: blended, cost: blended };
+}
 
 // ============================================================
 // SITE-LEVEL FINANCIALS
@@ -196,10 +252,30 @@ export function computeDealFinancials(sites, contractTermYears = DEFAULT_CONTRAC
   // the UI's dealConfig defaults).
   const escRev = Number(opts.escalation?.revenue ?? DEFAULT_ESCALATION_PCT);
   const escCost = Number(opts.escalation?.cost ?? DEFAULT_ESCALATION_PCT);
+  // S2 (2026-07-22, Brock ruling): per-site escalation. When a site carries
+  // its ★ model's CM-derived pair (site.escalation, or opts.escalationBySite
+  // keyed by site id), that site's series compounds at ITS rates; sites
+  // without a pair use the deal-level escRev/escCost above. With no per-site
+  // pairs anywhere this reduces EXACTLY to the old aggregate math
+  // (Σ·(1+r)^n === Σ(each·(1+r)^n) for a uniform r) — zero-diff.
+  const escBySite = opts.escalationBySite || null;
+  const perSite = sites.map((site, i) => {
+    const pair = site.escalation || (escBySite && (escBySite[site.id] ?? escBySite[String(site.id)])) || null;
+    return {
+      rev0: bySite[i].annualRevenue,
+      cost0: bySite[i].annualCost,
+      escRev: Number(pair?.revenue ?? escRev),
+      escCost: Number(pair?.cost ?? escCost),
+    };
+  });
+  const escInEffect = perSite.some(p => p.escRev !== escRev || p.escCost !== escCost);
   const ebitdaSeries = [];
   for (let yr = 1; yr <= contractTermYears; yr++) {
-    const rev = totalAnnualRevenue * Math.pow(1 + escRev / 100, yr - 1);
-    const cost = totalAnnualCost * Math.pow(1 + escCost / 100, yr - 1);
+    let rev = 0, cost = 0;
+    for (const p of perSite) {
+      rev += p.rev0 * Math.pow(1 + p.escRev / 100, yr - 1);
+      cost += p.cost0 * Math.pow(1 + p.escCost / 100, yr - 1);
+    }
     const gmPct = rev > 0 ? ((rev - cost) / rev) * 100 : 0;
     ebitdaSeries.push(rev * ((gmPct - ebitdaOverheadPct) / 100));
   }
@@ -224,6 +300,9 @@ export function computeDealFinancials(sites, contractTermYears = DEFAULT_CONTRAC
     revenuePerSqft: totalSqft > 0 ? totalAnnualRevenue / totalSqft : 0,
     costPerVolume: totalAnnualVolume > 0 ? totalAnnualCost / totalAnnualVolume : 0,
     revenuePerVolume: totalAnnualVolume > 0 ? totalAnnualRevenue / totalAnnualVolume : 0,
+    // S2: true when at least one site escalated at its own CM-derived pair
+    // (UI badges the escalation basis).
+    perSiteEscalation: escInEffect,
     bySite,
   };
 }

@@ -259,6 +259,7 @@ function renderShell({
           <div style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;font-size:12px;background:#fff7f5;border:1px solid #ffd9cf;border-radius:16px;padding:4px 12px;">
             <span class="u-muted">Working in deal:</span>
             <span style="font-weight:700;color:var(--ies-navy);">${escapeText(dealCtx.name || (dealsById && dealsById.get(String(dealCtx.id))) || dealCtx.id)}</span>
+            ${dealCtx.siteId && dealCtx.siteName ? `<span class="u-muted">·</span><span style="font-weight:600;color:var(--ies-gray-600);" title="Site binding — new scenarios save attached to this site">${escapeText(dealCtx.siteName)}</span>` : ''}
             <button type="button" data-sl-dc-clear title="Clear deal binding — new scenarios will start unassigned" style="border:none;background:none;cursor:pointer;color:var(--ies-gray-400);font-weight:700;font-size:12px;line-height:1;padding:0;">✕</button>
           </div>` : ''}
         </div>

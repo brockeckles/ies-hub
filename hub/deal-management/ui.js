@@ -7,15 +7,15 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260722-s1a';
+import * as api from './api.js?v=20260722-s2a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260722-s1a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 // UX-1 D1p2 (2026-07-03): the MSA merge — deal tabs reuse the Multi-Site
 // Analyzer's pure calc + site mapping instead of duplicating the math.
-import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260710-r4';
-import * as msaApi from '../../tools/deal-manager/api.js?v=20260710-r4';
+import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260722-s2a';
+import * as msaApi from '../../tools/deal-manager/api.js?v=20260722-s2a';
 // S1 (2026-07-22): shared pure Σ★ roll-up (same module api.js computes with).
 import * as dmCalc from './calc.js?v=20260722-s1a';
 
@@ -38,16 +38,11 @@ let selectedSiteId = null;
 let dealSearch = '';
 let customerFilter = ''; // empty = all
 
-/** DOS stage definitions — GXO Deal Operating System 6-stage framework
- *  (canonical names from public.stages table). */
-const DOS_STAGES = [
-  { id: 1, name: 'Pre-Sales Engagement',       color: '#6b7280' },
-  { id: 2, name: 'Deal Qualification',         color: '#2563eb' },
-  { id: 3, name: 'Kick-Off & Solution Design', color: '#7c3aed' },
-  { id: 4, name: 'Operations Review',          color: '#d97706' },
-  { id: 5, name: 'Executive Review',           color: '#ea580c' },
-  { id: 6, name: 'Delivery Handover',          color: '#16a34a' },
-];
+/** DOS stage definitions — GXO Deal Operating System 6-stage framework.
+ *  S2 (2026-07-22): SINGLE in-code definition now lives in
+ *  tools/deal-manager/calc.js (this was one of two drifting copies);
+ *  canonical stage names still load from public.stages at runtime. */
+const DOS_STAGES = msaCalc.DOS_STAGES;
 
 /** DOS templates per stage — from v2 38 templates */
 const DOS_TEMPLATES = {
@@ -1113,7 +1108,7 @@ function renderDetail() {
           </div>
         </div>
         <span style="display:inline-block;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;color:#fff;background:${stage.color};">Stage ${d.stage}: ${stage.name}</span>
-        ${d.score !== '—' ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;font-size:16px;font-weight:800;color:#fff;background:${d.score.startsWith('A') ? 'var(--c-success)' : 'var(--c-info)'};">${d.score}</span>` : ''}
+        ${d.score !== '—' ? `<span title="Deal health ${d.scoreNum != null ? d.scoreNum + '/100' : ''} — ★-basis financials · weights: margin 35 / EBITDA 25 / payback 20 / NPV 20" style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;font-size:16px;font-weight:800;color:#fff;background:${d.score.startsWith('A') ? 'var(--c-success)' : 'var(--c-info)'};">${d.score}</span>` : ''}
       </div>
 
       <!-- Quick Action chip group — surfaces most-used workflow actions without
@@ -1743,8 +1738,16 @@ function renderWorkflowRail(d) {
         : models.length === 1
           ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="open-cost-model-id" data-model-id="${escapeAttr(models[0].id)}">Open →</button>`
           : `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="choose-cost-model" data-deal-id="${escapeAttr(d.id)}">View ${models.length} →</button>` },
-    { key: 'network', name: 'Network', sub: 'Center of Gravity',   count: ds.cog.length,
-      btn: `<button class="hub-btn hub-btn-sm ${ds.cog.length ? 'hub-btn-secondary' : 'hub-btn-primary'}" data-action="launch-tool" data-tool-route="designtools/center-of-gravity">${smartLabel(ds.cog.length, 'network')}</button>` },
+    // S2 (2026-07-22, Brock ruling): Network = COG + NetOpt. NetOpt stamps
+    // parent_deal_id on save but the rail never read it. Smart button routes
+    // to whichever tool has scenarios (COG wins ties/empties).
+    { key: 'network', name: 'Network', sub: 'COG · Network Opt',   count: ds.cog.length + (ds.netopt || []).length,
+      btn: (() => {
+        const n = ds.cog.length + (ds.netopt || []).length;
+        const route = ds.cog.length === 0 && (ds.netopt || []).length > 0
+          ? 'designtools/network-opt' : 'designtools/center-of-gravity';
+        return `<button class="hub-btn hub-btn-sm ${n ? 'hub-btn-secondary' : 'hub-btn-primary'}" data-action="launch-tool" data-tool-route="${route}">${smartLabel(n, 'network')}</button>`;
+      })() },
     { key: 'package', name: 'Package', sub: 'Artifacts · Strategy', count: artifacts.length,
       btn: `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-detail-tab="artifacts">Open artifacts →</button>` },
   ];
@@ -1893,7 +1896,7 @@ function renderDealFinancialsMsa() {
     <div class="hub-card" style="padding:16px;margin-bottom:16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <div class="u-13 u-bold">Deal P&amp;L ${usingBid ? '<span style="color:var(--c-success);font-size:11px;font-weight:700;">★ in-bid scenarios only</span>' : '<span style="color:var(--ies-gray-400);font-size:11px;">all linked scenarios — mark ★ in bid on Site Details to pin the bid set</span>'}</div>
-        <div class="u-cap u-faint">${sites.length} scenario${sites.length === 1 ? '' : 's'} · ${d.contractTermYears || 5}-yr term · engine: Multi-Site calc · pricing: CM-authoritative</div>
+        <div class="u-cap u-faint">${sites.length} scenario${sites.length === 1 ? '' : 's'} · ${d.contractTermYears || 5}-yr term · engine: Multi-Site calc · pricing: CM-authoritative · esc: ${fin.perSiteEscalation ? 'per-★-model CM knobs' : 'default 3%/3%'}</div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;">
         ${[['Revenue', money(fin.totalAnnualRevenue)], ['Cost', money(fin.totalAnnualCost)],
@@ -2026,6 +2029,11 @@ function _siteStatusChip(status) {
   return `<span style="display:inline-flex;align-items:center;border-radius:14px;padding:2px 9px;font-size:11px;font-weight:600;background:${m.bg};color:${m.ink};">${m.label}</span>`;
 }
 
+/** S2 residue: is this site's displayed sqft the manual estimate? */
+function _sqftIsEst(s) {
+  return !!(s.sqftIsEstimate || (s.inBidModelId == null && Number(s.sqftEstimate) > 0 && s.sqft === s.sqftEstimate));
+}
+
 /** Scenario revenue estimate — the shared pure formula (calc.js). */
 function _modelRevenueEst(m, fallbackMarginPct) {
   return dmCalc.modelRevenueEst(m, fallbackMarginPct);
@@ -2110,7 +2118,7 @@ function renderDealSites() {
         <div style="font-size:13.5px;font-weight:800;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(s.name)}</div>
         ${_siteStatusChip(s.status)}
       </div>
-      <div class="u-cap u-faint">${escapeHtml(s.market || '—')}${s.sqft > 0 ? ` · ${s.sqft.toLocaleString()} sq ft` : ''}${s.building ? ` · ${escapeHtml(s.building)}` : ''}</div>
+      <div class="u-cap u-faint">${escapeHtml(s.market || '—')}${s.sqft > 0 ? ` · ${s.sqft.toLocaleString()} sq ft${_sqftIsEst(s) ? ' (est)' : ''}` : ''}${s.building ? ` · ${escapeHtml(s.building)}` : ''}</div>
       <div style="border-top:1px solid var(--ies-gray-100);padding-top:8px;">
         <div style="font-size:10.5px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Scenarios (${group.length})</div>
         ${group.length
@@ -2204,7 +2212,7 @@ function renderSiteDetail(d, site) {
       <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="site-back">← Sites</button>
       <div style="flex:1;min-width:0;">
         <div style="font-size:16px;font-weight:800;">${escapeHtml(site.name)} <span style="vertical-align:2px;">${_siteStatusChip(site.status)}</span></div>
-        <div class="u-cap u-faint">${escapeHtml(site.market || '—')}${site.sqft > 0 ? ` · ${site.sqft.toLocaleString()} sq ft` : ''}${site.building ? ` · ${escapeHtml(site.building)}` : ''}</div>
+        <div class="u-cap u-faint">${escapeHtml(site.market || '—')}${site.sqft > 0 ? ` · ${site.sqft.toLocaleString()} sq ft${_sqftIsEst(site) ? ' (est)' : ''}` : ''}${site.building ? ` · ${escapeHtml(site.building)}` : ''}</div>
       </div>
       <button class="hub-btn hub-btn-sm hub-btn--ghost" data-action="edit-site" data-site-id="${escapeAttr(site.id)}">Edit site</button>
     </div>
@@ -2293,31 +2301,68 @@ async function openSiteModal(dealId, site) {
             ${Object.entries(SITE_STATUS_META).map(([k, v]) => `<option value="${k}" ${site && site.status === k ? 'selected' : (!site && k === 'proposed' ? 'selected' : '')}>${v.label}</option>`).join('')}
           </select>
         </label>
+        <label class="u-cap" style="font-weight:700;color:var(--ies-gray-500);">Sq ft estimate <span style="font-weight:400;">(optional — a ★ scenario's facility always outranks it)</span>
+          <input id="site-sqft" class="hub-input" type="number" min="0" step="1000" style="width:100%;margin-top:4px;" value="${site && site.sqftEstimate ? escapeAttr(String(site.sqftEstimate)) : ''}" placeholder="e.g. 95000">
+        </label>
       </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" id="site-cancel">Cancel</button>
-        <button class="hub-btn hub-btn-sm hub-btn-primary" id="site-save">${site ? 'Save' : 'Create site'}</button>
+      <div style="display:flex;justify-content:${site ? 'space-between' : 'flex-end'};gap:8px;margin-top:16px;">
+        ${site ? '<button class="hub-btn hub-btn-sm hub-btn-danger" id="site-delete">Delete site</button>' : ''}
+        <div style="display:flex;gap:8px;">
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" id="site-cancel">Cancel</button>
+          <button class="hub-btn hub-btn-sm hub-btn-primary" id="site-save">${site ? 'Save' : 'Create site'}</button>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   overlay.querySelector('#site-cancel')?.addEventListener('click', close);
+  // S2 residue: two-step inline delete (no native confirm() — it freezes
+  // automation and stacks poorly over the overlay). FKs set-null, so the
+  // site's models/designs drop to Unassigned; api clears the ★ mirror.
+  overlay.querySelector('#site-delete')?.addEventListener('click', async (e) => {
+    const btn = /** @type {HTMLButtonElement} */ (e.currentTarget);
+    if (btn.dataset.armed !== '1') {
+      btn.dataset.armed = '1';
+      btn.textContent = 'Confirm delete? Scenarios become Unassigned';
+      return;
+    }
+    try {
+      await api.deleteSite(site.id);
+      d.sites = (d.sites || []).filter(s => String(s.id) !== String(site.id));
+      (d.models || []).forEach(m => {
+        if (String(m.site_id || '') === String(site.id)) { m.site_id = null; m.in_bid = false; }
+      });
+      if (String(selectedSiteId || '') === String(site.id)) selectedSiteId = null;
+      _recomputeDealRollup(d);
+      close();
+      renderDetail();
+      showToast(`Site "${site.name}" deleted — its scenarios are now Unassigned`, 'success');
+    } catch (err) {
+      console.error('[deal-mgmt] site delete failed', err);
+      showToast('Delete failed: ' + (err.message || err), 'error');
+    }
+  });
   overlay.querySelector('#site-save')?.addEventListener('click', async () => {
     const name = /** @type {HTMLInputElement} */ (overlay.querySelector('#site-name'))?.value?.trim();
     const marketId = /** @type {HTMLSelectElement} */ (overlay.querySelector('#site-market'))?.value || null;
     const building = /** @type {HTMLInputElement} */ (overlay.querySelector('#site-building'))?.value?.trim() || null;
     const status = /** @type {HTMLSelectElement} */ (overlay.querySelector('#site-status'))?.value || 'proposed';
+    const sqftRaw = Number(/** @type {HTMLInputElement} */ (overlay.querySelector('#site-sqft'))?.value);
+    const sqftEstimate = Number.isFinite(sqftRaw) && sqftRaw > 0 ? Math.round(sqftRaw) : null;
     if (!name) { showToast('Site name is required', 'error'); return; }
     const marketName = marketId ? (markets.find(m => String(m.id) === String(marketId))?.name || marketId) : '—';
     try {
       if (site) {
-        await api.updateSite(site.id, { name, market_id: marketId, building, status });
-        Object.assign(site, { name, marketId, market: marketName, building, status });
+        await api.updateSite(site.id, { name, market_id: marketId, building, status, sqft_estimate: sqftEstimate });
+        Object.assign(site, { name, marketId, market: marketName, building, status, sqftEstimate: sqftEstimate || 0 });
+        // Estimate only shows through when no scenario supplies a footprint.
+        const group = (d.models || []).filter(m => String(m.site_id || '') === String(site.id));
+        if (!group.some(m => Number(m.facility_sqft) > 0)) site.sqft = sqftEstimate || 0;
       } else {
-        const row = await api.createSite(d.id, { name, market_id: marketId, building, status });
+        const row = await api.createSite(d.id, { name, market_id: marketId, building, status, sqft_estimate: sqftEstimate });
         d.sites = d.sites || [];
-        d.sites.push({ id: row.id, name, market: marketName, marketId, building, status, sqft: 0, type: '—', modelCount: 0, inBidModelId: null });
+        d.sites.push({ id: row.id, name, market: marketName, marketId, building, status, sqft: sqftEstimate || 0, sqftEstimate: sqftEstimate || 0, type: '—', modelCount: 0, inBidModelId: null });
       }
       _recomputeDealRollup(d);
       close();

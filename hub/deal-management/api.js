@@ -11,6 +11,10 @@ import { auth } from '../../shared/auth.js?v=20260705-u1a';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 // S1 (2026-07-22): Σ★ roll-up is pure — one formula shared with ui.js.
 import { computeStarRollup } from './calc.js?v=20260722-s1a';
+// S2 (2026-07-22, Brock ruling: wire the score): deal health grade from the
+// same MSA engine the Financials tab runs, ★-preferred basis, per-★-model
+// CM escalation knobs.
+import { computeDealFinancials, computeDealScore, siteEscalationFromRow } from '../../tools/deal-manager/calc.js?v=20260722-s2a';
 
 /**
  * Fetch the 6 canonical DOS stages.
@@ -95,13 +99,13 @@ export async function listRealDeals() {
     // is gated by RLS or unreachable — sites just fall back to "—".
     const [deals, models, marketRows, stagesRows, siteRows] = await Promise.all([
       db.fetchAll('deal_deals', 'id, deal_name, client_name, deal_owner, status, current_stage_id, created_at, updated_at, est_annual_revenue, target_margin_pct, contract_term_years, target_go_live, industry_vertical, site_count'),
-      db.fetchAll('cost_model_projects', 'id, name, scenario_label, client_name, market_id, facility_sqft, target_margin_pct, total_annual_cost, deal_deals_id, updated_at, in_bid, site_id'),
+      db.fetchAll('cost_model_projects', 'id, name, scenario_label, client_name, market_id, facility_sqft, target_margin_pct, total_annual_cost, total_annual_revenue, startup_cost, pricing_model, heuristic_overrides, financial:project_data->financial, deal_deals_id, updated_at, in_bid, site_id'),
       db.fetchAll('ref_markets', 'id, name').catch(() => []),
       db.fetchAll('stages', 'id, stage_number').catch(() => []),
       // S1 (2026-07-22, rulings #6/#7): first-class Site records. Sites are
       // no longer derived from a market_id|name string collapse — they are
       // real deal_sites rows seeded by the S1 migration from that exact key.
-      db.fetchAll('deal_sites', 'id, deal_id, name, market_id, building, status, in_bid_model_id, sort_order, updated_at').catch(() => []),
+      db.fetchAll('deal_sites', 'id, deal_id, name, market_id, building, status, in_bid_model_id, sort_order, sqft_estimate, updated_at').catch(() => []),
     ]);
     const stagesByIdLocal = new Map();
     for (const r of stagesRows || []) {
@@ -135,9 +139,11 @@ export async function listRealDeals() {
       const sites = siteRowsForDeal.map(s => {
         const group = attached.filter(m => String(m.site_id || '') === String(s.id));
         const starModel = s.in_bid_model_id != null ? modelById.get(String(s.in_bid_model_id)) : null;
-        // sqft: prefer the ★ scenario's facility, else the biggest in the group.
+        // sqft: ★ scenario's facility → biggest in group → manual estimate
+        // (S2 residue: sqft_estimate covers ★-less / scenario-less sites).
         const sqft = starModel ? (Number(starModel.facility_sqft) || 0)
-          : group.reduce((mx, m) => Math.max(mx, Number(m.facility_sqft) || 0), 0);
+          : (group.reduce((mx, m) => Math.max(mx, Number(m.facility_sqft) || 0), 0)
+             || Number(s.sqft_estimate) || 0);
         return {
           id: s.id,
           name: s.name || 'Unnamed Site',
@@ -149,6 +155,8 @@ export async function listRealDeals() {
           type: '—',
           modelCount: group.length,
           inBidModelId: s.in_bid_model_id != null ? s.in_bid_model_id : null,
+          sqftEstimate: Number(s.sqft_estimate) || 0,
+          sqftIsEstimate: !starModel && group.every(m => !(Number(m.facility_sqft) > 0)) && Number(s.sqft_estimate) > 0,
         };
       });
       // Models not attached to any site → Unassigned bucket (migration
@@ -178,6 +186,32 @@ export async function listRealDeals() {
       // (byte-identical list/pipeline numbers for no-★ deals).
       const { revenue, margin, rollupFromStars, rollupIsEstimate, bidCoverage } =
         computeStarRollup(sites, modelById, { revenue: legacyRevenue, margin: legacyMargin });
+      // S2 (Brock ruling: wire computeDealScore). Basis mirrors the
+      // Financials tab's _binderSites semantics: ★ scenarios when any exist,
+      // else every attached model. Each entry escalates by its own CM knobs
+      // (siteEscalationFromRow; null → engine default 3/3).
+      const starIds2 = new Set(sites.map(s => (s.inBidModelId != null ? String(s.inBidModelId) : null)).filter(Boolean));
+      const scoreBasis = (starIds2.size ? attached.filter(m => starIds2.has(String(m.id))) : attached)
+        .map(m => ({
+          id: String(m.id),
+          name: m.name || '',
+          sqft: Number(m.facility_sqft) || 0,
+          annualCost: Number(m.total_annual_cost) || 0,
+          targetMarginPct: Number(m.target_margin_pct) || 0,
+          startupCost: Number(m.startup_cost) || 0,
+          pricingModel: m.pricing_model || 'cost-plus',
+          annualVolume: 0,
+          annualRevenue: Number(m.total_annual_revenue) || 0,
+          escalation: siteEscalationFromRow({ heuristic_overrides: m.heuristic_overrides, project_data: { financial: m.financial } }),
+        }))
+        .filter(s => s.annualCost > 0 || s.annualRevenue > 0);
+      let score = '—', scoreNum = null;
+      if (scoreBasis.length) {
+        const fin = computeDealFinancials(scoreBasis, Number(d.contract_term_years) || 5);
+        const sc = computeDealScore(fin);
+        score = sc.grade;
+        scoreNum = sc.score;
+      }
       // 2026-04-29 (R6): deal_deals.current_stage_id is the stages.id (PK),
       // but the UI groups deals by stage_number (1..6). Map via stagesById.
       const stagesIdToNum = (typeof stagesByIdLocal === 'undefined') ? null : stagesByIdLocal;
@@ -200,7 +234,8 @@ export async function listRealDeals() {
         margin,
         owner: d.deal_owner || '—',
         daysInStage: 0,
-        score: '—',
+        score,
+        scoreNum,
         startDate: d.created_at ? d.created_at.slice(0, 10) : null,
         targetClose: d.target_go_live || null,
         contractTermYears: Number(d.contract_term_years) || 5,
@@ -534,9 +569,32 @@ export async function createSite(dealId, payload) {
     market_id: payload.market_id || null,
     building: payload.building || null,
     status: payload.status || 'proposed',
+    sqft_estimate: Number(payload.sqft_estimate) > 0 ? Math.round(Number(payload.sqft_estimate)) : null,
   });
   recordAudit({ table: 'deal_sites', id: row?.id, action: 'create_site', fields: { deal_id: dealId } });
   return row;
+}
+
+/**
+ * S2 residue: delete a Site record. FKs are on-delete-set-null, so attached
+ * models/designs survive as Unassigned. Clears the mirrored in_bid flag on
+ * the site's ★ model first, so no orphaned ★ boolean remains.
+ * @param {string} siteId
+ */
+export async function deleteSite(siteId) {
+  if (!siteId) throw new Error('deleteSite: siteId required');
+  const { data, error } = await db.from('deal_sites')
+    .select('id, deal_id, in_bid_model_id').eq('id', siteId).maybeSingle();
+  if (error) throw error;
+  if (!data) return false;
+  if (data.in_bid_model_id != null) {
+    try { await db.update('cost_model_projects', data.in_bid_model_id, { in_bid: false }); }
+    catch (err) { console.warn('[deal-mgmt] deleteSite: in_bid mirror clear failed', err); }
+  }
+  const { error: delErr } = await db.from('deal_sites').delete().eq('id', siteId);
+  if (delErr) throw delErr;
+  recordAudit({ table: 'deal_sites', id: siteId, action: 'delete_site', fields: { deal_id: data.deal_id } });
+  return true;
 }
 
 /**
@@ -547,7 +605,7 @@ export async function createSite(dealId, payload) {
 export async function updateSite(siteId, patch) {
   if (!siteId) throw new Error('updateSite: siteId required');
   const allowed = {};
-  for (const k of ['name', 'market_id', 'building', 'status', 'sort_order']) {
+  for (const k of ['name', 'market_id', 'building', 'status', 'sort_order', 'sqft_estimate']) {
     if (patch[k] !== undefined) allowed[k] = patch[k];
   }
   return db.update('deal_sites', siteId, allowed);
@@ -614,12 +672,29 @@ export async function listDesignScenariosByDeal(dealId) {
       return [];
     }
   };
-  const [wsc, most, cog] = await Promise.all([
+  // S2 (2026-07-22, Brock ruling): NetOpt configs fold into the rail's
+  // Network stage. netopt_configs has no site_id column (deal-level only),
+  // so it gets its own select.
+  const grabNetopt = async () => {
+    try {
+      const { data, error } = await db.from('netopt_configs')
+        .select('id, name, updated_at')
+        .eq('parent_deal_id', dealId)
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.warn('[deal-mgmt] listDesignScenariosByDeal(netopt_configs) failed', err);
+      return [];
+    }
+  };
+  const [wsc, most, cog, netopt] = await Promise.all([
     grab('wsc_facility_configs'),
     grab('most_analyses'),
     grab('cog_scenarios'),
+    grabNetopt(),
   ]);
-  return { wsc, most, cog };
+  return { wsc, most, cog, netopt };
 }
 
 export async function loadDosStatusByDeal(dealId) {
@@ -678,5 +753,5 @@ export default { fetchStages, fetchActivityTemplates, listRealDeals, createDeal,
   listArtifactsByDeal, createArtifact, deleteArtifact,
   loadDosStatusByDeal, setDosElementStatus, advanceDealStage,
   setModelInBid, listDesignScenariosByDeal, recordDealOutcome, getLatestDealOutcome,
-  listSitesByDeal, createSite, updateSite, assignModelToSite, assignDesignToSite, listMarkets,
+  listSitesByDeal, createSite, updateSite, deleteSite, assignModelToSite, assignDesignToSite, listMarkets,
 };

@@ -9,7 +9,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260722-s1a';
+import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260722-s2a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 // Post-soak cleanup (2026-07-22): renderToolChrome/refreshToolChrome/
 // refreshToolChromeActions dropped with the classic chrome.

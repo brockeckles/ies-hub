@@ -11997,7 +11997,7 @@ function _launchToTool(target) {
       // state. Invisible to the cache-bust guard because the './tools/...'
       // path resolves module-relative in the scanner but page-relative at
       // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260722-s1a',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260722-s2a',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {
@@ -13676,6 +13676,7 @@ function renderLanding() {
           <div style="margin-top:10px;display:inline-flex;align-items:center;gap:8px;font-size:12px;background:#fff7f5;border:1px solid #ffd9cf;border-radius:16px;padding:4px 12px;">
             <span class="u-muted">Working in deal:</span>
             <span style="font-weight:700;color:var(--ies-navy);">${escapeHtml(_dcLabel)}</span>
+            ${_dcCtx.siteId && _dcCtx.siteName ? `<span class="u-muted">·</span><span style="font-weight:600;color:var(--ies-gray-600);" title="Site binding — new models save attached to this site">${escapeHtml(_dcCtx.siteName)}</span>` : ''}
             <button data-dc-clear title="Clear deal binding — new models will start unassigned" style="border:none;background:none;cursor:pointer;color:var(--ies-gray-400);font-weight:700;font-size:12px;line-height:1;">✕</button>
           </div>` : ''}
         </div>
