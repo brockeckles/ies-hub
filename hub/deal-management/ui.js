@@ -7,15 +7,15 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260722-s2a';
+import * as api from './api.js?v=20260722-s2b';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260722-s1a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 // UX-1 D1p2 (2026-07-03): the MSA merge — deal tabs reuse the Multi-Site
 // Analyzer's pure calc + site mapping instead of duplicating the math.
-import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260722-s2a';
-import * as msaApi from '../../tools/deal-manager/api.js?v=20260722-s2a';
+import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260722-s2b';
+import * as msaApi from '../../tools/deal-manager/api.js?v=20260722-s2b';
 // S1 (2026-07-22): shared pure Σ★ roll-up (same module api.js computes with).
 import * as dmCalc from './calc.js?v=20260722-s1a';
 

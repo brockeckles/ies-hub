@@ -9,7 +9,7 @@ import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 // P2-1 (2026-07-03) — pure site-field→CM-column mapper
 // S2 (2026-07-22) — + per-site escalation extractor (DM adopts CM knobs)
-import { siteToCmColumns, NEW_SITE_DEFAULTS, siteEscalationFromRow } from './calc.js?v=20260722-s2a';
+import { siteToCmColumns, NEW_SITE_DEFAULTS, siteEscalationFromRow } from './calc.js?v=20260722-s2b';
 
 // ============================================================
 // DEALS

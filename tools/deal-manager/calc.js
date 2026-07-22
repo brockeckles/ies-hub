@@ -601,7 +601,13 @@ export function computeDealScore(fin, opts = {}) {
   // Normalize each metric to 0-100
   const marginScore = clamp(fin.grossMarginPct / 15 * 100, 0, 100);
   const ebitdaScore = clamp(fin.ebitdaPct / 10 * 100, 0, 100);
-  const paybackScore = fin.paybackMonths > 0 ? clamp((36 - fin.paybackMonths) / 36 * 100, 0, 100) : 0;
+  // S2 (2026-07-22, surfaced by wiring the score live): paybackMonths === 0
+  // is AMBIGUOUS — "no startup capital at risk" (best case) vs "never pays
+  // back" (worst). Disambiguate on totalStartupCost: zero-startup deals get
+  // full marks; startup that the EBITDA series never recovers stays 0.
+  const paybackScore = fin.paybackMonths > 0
+    ? clamp((36 - fin.paybackMonths) / 36 * 100, 0, 100)
+    : ((fin.totalStartupCost || 0) <= 0 ? 100 : 0);
   const npvScore = fin.npv > 0 ? clamp(100, 0, 100) : clamp(50 + (fin.npv / 100000) * 50, 0, 100);
 
   // MUL-A2 — weights configurable (sums to 1.0 normalized).

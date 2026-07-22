@@ -14,7 +14,7 @@ import { computeStarRollup } from './calc.js?v=20260722-s1a';
 // S2 (2026-07-22, Brock ruling: wire the score): deal health grade from the
 // same MSA engine the Financials tab runs, ★-preferred basis, per-★-model
 // CM escalation knobs.
-import { computeDealFinancials, computeDealScore, siteEscalationFromRow } from '../../tools/deal-manager/calc.js?v=20260722-s2a';
+import { computeDealFinancials, computeDealScore, siteEscalationFromRow } from '../../tools/deal-manager/calc.js?v=20260722-s2b';
 
 /**
  * Fetch the 6 canonical DOS stages.

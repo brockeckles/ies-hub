@@ -90,6 +90,17 @@ const SITE = (id, cost, margin, startup, esc) => ({
   // Score consumes the fin — smoke the wired path end-to-end.
   const sc = computeDealScore(base);
   t('score returns 0-100 + grade', sc.score >= 0 && sc.score <= 100 && /^[ABCDF]$/.test(sc.grade));
+
+  // Payback disambiguation (S2 live-walk find): zero-startup deals must not
+  // be punished as "never pays back" — no capital at risk = full marks.
+  const noCap = computeDealFinancials([SITE('z', 1_000_000, 12, 0)], 5);
+  t('fixture: zero startup → paybackMonths 0', noCap.totalStartupCost === 0 && noCap.paybackMonths === 0);
+  const scNoCap = computeDealScore(noCap);
+  t('zero-startup payback scores 100', scNoCap.components.paybackScore === 100);
+  // A startup the series never recovers still scores 0 (negative EBITDA).
+  const sunk = computeDealFinancials([{ ...SITE('y', 1_000_000, 2, 5_000_000), annualRevenue: 900_000 }], 5);
+  const scSunk = computeDealScore(sunk);
+  t('unrecovered startup still scores 0', sunk.paybackMonths === 0 ? scSunk.components.paybackScore === 0 : sunk.paybackMonths > 0);
 }
 
 // ── 3. DOS single definition ──
