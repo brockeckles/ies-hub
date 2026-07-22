@@ -14,7 +14,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260702-p1m1';
 import { splitCsvLine } from '../../shared/export.js?v=20260702-p1m1';
-import * as api from './api.js?v=20260722-s3b';
+import * as api from './api.js?v=20260722-s4b';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 
@@ -70,7 +70,7 @@ let mapInstance = null;
  * Carrier rate deck loaded from ref_fleet_carrier_rates.
  * Stays as the raw row array; calc.indexCarrierDeck materialises a
  * vehicleType→rate map at run time.
- * @type {Array<import('./api.js?v=20260722-s3b').CarrierRate>}
+ * @type {Array<import('./api.js?v=20260722-s4b').CarrierRate>}
  */
 let carrierRateDeck = [];
 
@@ -978,7 +978,7 @@ function renderRateDeck(el) {
           <div style="font-size:12px;color:var(--ies-gray-500);">Edits save on blur and apply hub-wide (shared reference data). Effective rate = base × (1 + fuel surcharge). Used by the carrier column of the 3-way comparison.</div>
         </div>
         <!-- C3 (2026-07-22): dead "+ Add Class" button removed — no handler was
-             ever bound (api.createCarrierRate exists but was never wired). -->
+             ever bound. C4 removed the matching dead api.createCarrierRate export. -->
       </div>
       <div class="hub-card u-p-4">
         ${carrierRateDeck.length === 0 ? `
@@ -1546,7 +1546,7 @@ function renderVolumeSensitivityCard() {
           </thead>
           <tbody>
             ${scenarios.map(s => `
-              <tr style="border-bottom:1px solid var(--ies-gray-200);${Math.abs(s.multiplier - 1.0) < 0.01 ? 'background:var(--ies-blue)08;' : ''}">
+              <tr style="border-bottom:1px solid var(--ies-gray-200);${Math.abs(s.multiplier - 1.0) < 0.01 ? 'background:rgba(0,71,171,0.04);' : ''}">
                 <td style="padding:8px;font-weight:${Math.abs(s.multiplier - 1.0) < 0.01 ? '700' : '500'};">${s.scenario}</td>
                 <td style="padding:8px;text-align:right;">${s.totalVehicles}</td>
                 <td style="padding:8px;text-align:right;">${calc.formatCurrency(s.totalAnnualCost, { compact: true })}</td>

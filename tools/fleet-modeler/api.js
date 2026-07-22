@@ -206,23 +206,6 @@ export async function updateCarrierRate(id, patch) {
 }
 
 /**
- * Insert a new carrier rate row.
- * @param {Partial<CarrierRate>} data
- * @returns {Promise<CarrierRate>}
- */
-export async function createCarrierRate(data) {
-  return db.insert('ref_fleet_carrier_rates', {
-    vehicle_type: data.vehicle_type,
-    display_name: data.display_name || data.vehicle_type,
-    base_rate_per_mile: data.base_rate_per_mile ?? 3.00,
-    fuel_surcharge_pct: data.fuel_surcharge_pct ?? 0.18,
-    min_charge: data.min_charge ?? 0,
-    notes: data.notes || null,
-    is_active: data.is_active !== false,
-  });
-}
-
-/**
  * Soft-delete a carrier rate (sets is_active=false). Hard delete kept
  * out so historical scenario calcs can still resolve a rate by key.
  * @param {number|string} id

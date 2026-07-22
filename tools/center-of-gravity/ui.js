@@ -18,7 +18,7 @@ import { buildAnalysisCsv, buildPerShipmentCsv, buildGeoJson, buildPptxDeck, bui
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import * as calc from './calc.js?v=20260704-ux2c';
 import * as api from './api.js?v=20260722-s3a';
-import * as cmApi from '../cost-model/api.js?v=20260722-s4a';
+import * as cmApi from '../cost-model/api.js?v=20260722-s4b';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';

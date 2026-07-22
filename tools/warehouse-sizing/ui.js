@@ -15,8 +15,8 @@ import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 // refreshToolChromeActions dropped with the classic chrome.
 import { refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260710-r2';
 import * as calc from './calc.js?v=20260722-s2';
-import * as api from './api.js?v=20260722-s3b';
-import * as cmApi from '../cost-model/api.js?v=20260722-s4a';
+import * as api from './api.js?v=20260722-s4b';
+import * as cmApi from '../cost-model/api.js?v=20260722-s4b';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';

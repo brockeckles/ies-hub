@@ -120,8 +120,8 @@ const SITE = (id, cost, margin, startup, esc) => ({
     apiSrc.includes('total_annual_revenue, startup_cost, pricing_model, heuristic_overrides, financial:project_data->financial'));
   t('score: basis is ★-preferred', /starIds2\.size \? attached\.filter/.test(apiSrc));
   t('rail: netopt_configs grabbed by deal', apiSrc.includes("from('netopt_configs')") && apiSrc.includes('netopt'));
-  t('deleteSite exported + clears ★ mirror', apiSrc.includes('export async function deleteSite') &&
-    /deleteSite[\s\S]{0,600}in_bid: false/.test(apiSrc.slice(apiSrc.indexOf('export async function deleteSite'))));
+  t('deleteSite exported (C4: mirror clear retired with the in_bid column)',
+    apiSrc.includes('export async function deleteSite'));
   t('siteCount: real Site records outrank the manual site_count column',
     apiSrc.includes('siteCount: sites.length || Number(d.site_count) || 0'));
   t('sqft_estimate: selected + created + updatable',

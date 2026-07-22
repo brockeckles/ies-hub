@@ -7,7 +7,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260722-s3d';
+import * as api from './api.js?v=20260722-s4b';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260722-s1a';
@@ -15,7 +15,7 @@ import { icon } from '../../shared/icons.js?v=20260710-r2';
 // UX-1 D1p2 (2026-07-03): the MSA merge — deal tabs reuse the Multi-Site
 // Analyzer's pure calc + site mapping instead of duplicating the math.
 import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260722-s2b';
-import * as msaApi from '../../tools/deal-manager/api.js?v=20260722-s3b';
+import * as msaApi from '../../tools/deal-manager/api.js?v=20260722-s4b';
 // S1 (2026-07-22): shared pure Σ★ roll-up (same module api.js computes with).
 import * as dmCalc from './calc.js?v=20260722-s3d';
 
@@ -513,8 +513,8 @@ function bindDelegatedEvents() {
     }
 
     // S1 (2026-07-22): ★-in-bid is PER SITE — authority is
-    // deal_sites.in_bid_model_id (api.setModelInBid does one UPDATE there
-    // and mirrors the legacy in_bid boolean within the site).
+    // deal_sites.in_bid_model_id (api.setModelInBid does one UPDATE there;
+    // the legacy mirror column was retired in C4).
     const bidBtn = target.closest('[data-action="mark-in-bid"]');
     if (bidBtn) {
       const modelId = bidBtn.getAttribute('data-model-id');
@@ -530,8 +530,6 @@ function bindDelegatedEvents() {
             site.inBidModelId = t.id;
             if (t.facility_sqft) site.sqft = Number(t.facility_sqft) || site.sqft;
           }
-          const starIds = new Set((d.sites || []).map(s => (s.inBidModelId != null ? String(s.inBidModelId) : null)).filter(Boolean));
-          (d.models || []).forEach(m => { m.in_bid = starIds.has(String(m.id)); });
           // MSA rows (Financials tab) read inBid per scenario: sync the site group.
           const msaRows = _msaSitesByDeal.get(d.id) || [];
           const groupIds = new Set((d.models || []).filter(m => site && String(m.site_id || '') === String(site.id)).map(m => String(m.id)));
@@ -2685,7 +2683,7 @@ async function openSiteModal(dealId, site) {
       await api.deleteSite(site.id);
       d.sites = (d.sites || []).filter(s => String(s.id) !== String(site.id));
       (d.models || []).forEach(m => {
-        if (String(m.site_id || '') === String(site.id)) { m.site_id = null; m.in_bid = false; }
+        if (String(m.site_id || '') === String(site.id)) { m.site_id = null; }
       });
       if (String(selectedSiteId || '') === String(site.id)) selectedSiteId = null;
       _recomputeDealRollup(d);

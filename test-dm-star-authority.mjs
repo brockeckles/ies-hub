@@ -4,11 +4,12 @@
 //   1. ★-BASIS AUTHORITY: the merged deal tabs (Financials / Sensitivity /
 //      Compare) get their ★ from deal_sites.in_bid_model_id — the ONE
 //      authority — via tools/deal-manager/api.js listSites →
-//      fetchDealStarIds → mapCmProjectToSite(row, starIds). The retiring
-//      mirrored boolean cost_model_projects.in_bid is WRITE-ONLY through
-//      the C1 soak (column drops in C4): a repo-wide scan proves no source
-//      file under tools/ + hub/ + shared/ READS it (no `X.in_bid` member
-//      read, no select pulling the column).
+//      fetchDealStarIds → mapCmProjectToSite(row, starIds). C4 (2026-07-22):
+//      the legacy mirrored boolean cost_model_projects.in_bid is fully
+//      RETIRED — the C1→C3 write-only soak is over and the column drops
+//      with this wave. A repo-wide scan proves ZERO in_bid references
+//      (reads AND writes) under tools/ + hub/ + shared/; only the
+//      deal_sites.in_bid_model_id authority remains.
 //   2. RAIL (Brock ruling s3, supersedes the s2 Fleet-off-rail ruling):
 //      fleet_scenarios joins listDesignScenariosByDeal and the rail's
 //      Network stage count (COG + NetOpt + Fleet); routing keeps the
@@ -45,26 +46,31 @@ const msaApi = readFileSync(new URL('./tools/deal-manager/api.js', import.meta.u
     /fetchDealStarIds[\s\S]{0,800}return new Set\(\);/.test(msaApi));
 }
 
-// ── 1b. hub api: authority-only reads; mirror stays write-only ──
+// ── 1b. hub api: authority-only, mirror fully retired (C4) ──
 const hubApi = readFileSync(new URL('./hub/deal-management/api.js', import.meta.url), 'utf8');
 {
   t('listRealDeals cost_model_projects select does NOT pull in_bid',
     hubApi.includes('deal_deals_id, updated_at, site_id') &&
     !hubApi.includes('updated_at, in_bid'));
-  t('model summaries derive in_bid from the deal_sites starIds',
-    hubApi.includes('in_bid: starIds.has(String(m.id))'));
+  t('model summaries no longer carry the retired in_bid key',
+    !hubApi.includes('in_bid: starIds'));
   t('setModelInBid selects without the mirrored column',
     hubApi.includes(".select('id, name, site_id')"));
-  t('setModelInBid still writes the mirror (soak — drop lands in C4)',
-    hubApi.includes('{ in_bid: false }') && hubApi.includes('{ in_bid: true }'));
+  t('setModelInBid writes the authority only (no mirror sweep remains)',
+    hubApi.includes("db.update('deal_sites', target.site_id, { in_bid_model_id: target.id })") &&
+    !hubApi.includes('{ in_bid: false }') && !hubApi.includes('{ in_bid: true }'));
   t('assignModelToSite selects without the mirrored column',
     hubApi.includes(".select('id, site_id')"));
+  t('assignModelToSite writes site_id only (no mirror payload)',
+    hubApi.includes("db.update('cost_model_projects', modelId, { site_id: siteId || null });"));
 }
 
-// ── 1c. repo-wide: ZERO reads of the in_bid column ──
+// ── 1c. repo-wide: ZERO in_bid references (C4 — mirror retired) ──
 // Walk every .js under tools/ + hub/ + shared/, strip comments, and require
-// each remaining `in_bid` occurrence (excluding in_bid_model_id, the
-// authority) to be a sanctioned WRITE or derived-value context.
+// ZERO remaining `in_bid` occurrences — reads AND writes alike. Exempt:
+//   · in_bid_model_id — the deal_sites ★ authority (stays; lookahead)
+//   · set_site_in_bid — the audit action string (its leading underscore is
+//     a word char, so the lookbehind skips it naturally)
 {
   const ROOT = new URL('.', import.meta.url).pathname;
   const walk = (dir) => {
@@ -77,39 +83,20 @@ const hubApi = readFileSync(new URL('./hub/deal-management/api.js', import.meta.
     return out;
   };
   const files = ['tools', 'hub', 'shared'].flatMap(walk);
-  const ALLOWED = [
-    /\{ in_bid: (?:false|true) \}/,   // write-only mirror payloads
-    /in_bid: starIds\.has/,           // derived from deal_sites authority
-    /\.in_bid = /,                    // in-memory reflect (assignment)
-    /set_site_in_bid/,                // audit action string
-    /in_bid mirror clear failed/,     // deleteSite warn message string
-  ];
   const offenders = [];
   for (const f of files) {
     const src = readFileSync(join(ROOT, f), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')            // block comments
       .replace(/(^|[^:'"])\/\/[^\n]*/g, '$1');     // line comments (not ://)
-    const re = /in_bid(?!_model_id)/g;
+    const re = /(?<![\w])in_bid(?!_model_id)/g;
     let m;
     while ((m = re.exec(src)) !== null) {
-      const ctx = src.slice(Math.max(0, m.index - 30), m.index + 40);
-      if (!ALLOWED.some(rx => rx.test(ctx))) offenders.push(`${f}: …${ctx.trim()}…`);
+      const ctx = src.slice(Math.max(0, m.index - 30), m.index + 40).replace(/\s+/g, ' ');
+      offenders.push(`${f}: …${ctx.trim()}…`);
     }
   }
-  t('no source file READS the in_bid column (writes-only until C4 drop)',
+  t('ZERO in_bid references repo-wide (mirror retired, column drops in C4)',
     offenders.length === 0, offenders.slice(0, 5).join(' | '));
-  // Member-read guard: any `X.in_bid` not immediately assigned is a read.
-  const memberReads = [];
-  for (const f of files) {
-    const src = readFileSync(join(ROOT, f), 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/(^|[^:'"])\/\/[^\n]*/g, '$1');
-    const re = /\.in_bid\b(?!_model_id)(?!\s*=[^=])/g;
-    let m;
-    while ((m = re.exec(src)) !== null) memberReads.push(`${f}@${m.index}`);
-  }
-  t('no `X.in_bid` member read anywhere', memberReads.length === 0,
-    memberReads.slice(0, 5).join(' | '));
 }
 
 // ── 2. rail: Fleet joins the Network stage ──

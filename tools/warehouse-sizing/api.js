@@ -7,6 +7,7 @@
 
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import * as dealContext from '../../shared/deal-context.js?v=20260722-s1a';
+import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 
 // ============================================================
 // FACILITY CONFIGS
@@ -45,7 +46,9 @@ export async function saveConfig(config) {
   };
 
   if (config.id) {
-    return db.update('wsc_facility_configs', config.id, payload);
+    const updated = await db.update('wsc_facility_configs', config.id, payload);
+    recordAudit({ table: 'wsc_facility_configs', id: config.id, action: 'update', fields: { name: payload.name } }).catch(() => {});
+    return updated;
   }
   // UX-1 D2 (2026-07-03): new scenarios born while a deal context is active
   // are stamped with the deal — the spine link the landing's "Deal:" chip
@@ -61,7 +64,9 @@ export async function saveConfig(config) {
   if (config.parent_deal_id !== undefined) payload.parent_deal_id = config.parent_deal_id;
   if (config.site_id !== undefined) payload.site_id = config.site_id;
   if (config.parent_cost_model_id !== undefined) payload.parent_cost_model_id = config.parent_cost_model_id;
-  return db.insert('wsc_facility_configs', payload);
+  const inserted = await db.insert('wsc_facility_configs', payload);
+  recordAudit({ table: 'wsc_facility_configs', id: inserted?.id, action: 'insert', fields: { name: payload.name } }).catch(() => {});
+  return inserted;
 }
 
 /**
@@ -71,6 +76,7 @@ export async function saveConfig(config) {
  */
 export async function deleteConfig(id) {
   await db.remove('wsc_facility_configs', id);
+  recordAudit({ table: 'wsc_facility_configs', id, action: 'delete' }).catch(() => {});
 }
 
 /**
@@ -81,6 +87,7 @@ export async function deleteConfig(id) {
  */
 export async function linkToCm(scenarioId, cmId) {
   await db.update('wsc_facility_configs', scenarioId, { parent_cost_model_id: cmId });
+  recordAudit({ table: 'wsc_facility_configs', id: scenarioId, action: 'link', fields: { parent_cost_model_id: cmId } }).catch(() => {});
 }
 
 /**
@@ -90,6 +97,7 @@ export async function linkToCm(scenarioId, cmId) {
  */
 export async function unlinkFromCm(scenarioId) {
   await db.update('wsc_facility_configs', scenarioId, { parent_cost_model_id: null });
+  recordAudit({ table: 'wsc_facility_configs', id: scenarioId, action: 'unlink' }).catch(() => {});
 }
 
 /**

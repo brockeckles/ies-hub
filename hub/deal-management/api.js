@@ -99,9 +99,9 @@ export async function listRealDeals() {
     // is gated by RLS or unreachable — sites just fall back to "—".
     const [deals, models, marketRows, stagesRows, siteRows] = await Promise.all([
       db.fetchAll('deal_deals', 'id, deal_name, client_name, deal_owner, status, current_stage_id, created_at, updated_at, est_annual_revenue, target_margin_pct, contract_term_years, target_go_live, industry_vertical, site_count'),
-      // C1 (2026-07-22): in_bid dropped from this select — the ★ basis is
-      // deal_sites.in_bid_model_id only; the mirrored boolean is write-only
-      // until the column drops in C4.
+      // C4 (2026-07-22): the ★ basis is deal_sites.in_bid_model_id only —
+      // the legacy mirrored boolean is fully retired (never read or written;
+      // the column drops with this wave).
       db.fetchAll('cost_model_projects', 'id, name, scenario_label, client_name, market_id, facility_sqft, target_margin_pct, total_annual_cost, total_annual_revenue, startup_cost, pricing_model, heuristic_overrides, financial:project_data->financial, deal_deals_id, updated_at, site_id'),
       db.fetchAll('ref_markets', 'id, name').catch(() => []),
       db.fetchAll('stages', 'id, stage_number').catch(() => []),
@@ -135,9 +135,8 @@ export async function listRealDeals() {
       const attached = byDeal.get(d.id) || [];
       const modelById = new Map(attached.map(m => [String(m.id), m]));
       // S1: sites are REAL rows. Each site's scenario group = models with
-      // site_id === site.id; ★ authority = deal_sites.in_bid_model_id (the
-      // in_bid boolean is a write-only mirror through the C1 soak — never
-      // read anywhere; column drops in C4).
+      // site_id === site.id; ★ authority = deal_sites.in_bid_model_id
+      // (C4: the legacy mirrored boolean is retired — column drops this wave).
       const siteRowsForDeal = (sitesByDeal.get(d.id) || [])
         .sort((a, b) => (a.sort_order ?? 1e9) - (b.sort_order ?? 1e9) || String(a.name).localeCompare(String(b.name)));
       const sites = siteRowsForDeal.map(s => {
@@ -167,9 +166,6 @@ export async function listRealDeals() {
       // leftovers + future site-less saves). They keep working; they just
       // don't feed any site's roll-up.
       const unassigned = attached.filter(m => !m.site_id);
-      // ★ from the site authority, reflected onto the model summaries the
-      // UI renders (deal_sites.in_bid_model_id is the ONLY ★ read basis).
-      const starIds = new Set(sites.map(s => (s.inBidModelId != null ? String(s.inBidModelId) : null)).filter(Boolean));
       // R6 (2026-04-29): prefer deal-level columns from the modal entry, fall
       // back to attached-model averages so older deals without the columns
       // still render meaningful values.
@@ -266,8 +262,6 @@ export async function listRealDeals() {
           // checks don't need the MSA-row join fallback.
           total_annual_revenue: m.total_annual_revenue,
           updated_at: m.updated_at,
-          // C1: derived from the deal_sites ★ authority above, not the column.
-          in_bid: starIds.has(String(m.id)),
           site_id: m.site_id || null,
         })),
       };
@@ -504,10 +498,9 @@ export async function getLatestDealOutcome(dealId) {
  * S1 (2026-07-22, rulings #6/#7): mark a scenario ★-in-bid FOR ITS SITE.
  * The ★ authority is deal_sites.in_bid_model_id — one UPDATE, exclusivity
  * enforced by the FK rather than app-side sibling-clearing over a string
- * key (the pre-S1 setModelInBid). cost_model_projects.in_bid stays a
- * WRITE-ONLY mirror through the C1 soak (never read anywhere; column
- * drops in C4): clear siblings' flags, set the target's — without ever
- * selecting the column to decide.
+ * key (the pre-S1 setModelInBid). C4 (2026-07-22): the legacy mirrored
+ * boolean on cost_model_projects is fully retired — no writes remain and
+ * the column drops with this wave.
  *
  * @param {string} dealId
  * @param {number|string} modelId — must be attached to a site on this deal
@@ -523,15 +516,6 @@ export async function setModelInBid(dealId, modelId) {
   if (!target.site_id) throw new Error('setModelInBid: model is Unassigned — attach it to a site first');
   // Authority: one UPDATE on the site row.
   await db.update('deal_sites', target.site_id, { in_bid_model_id: target.id });
-  // Mirror (write-only through the C1 soak): sweep every sibling in the
-  // site false, set the target true. Unconditional — reading in_bid to
-  // skip no-op writes would reintroduce a read of the retiring column.
-  const siblings = rows.filter(r =>
-    String(r.site_id || '') === String(target.site_id) && String(r.id) !== String(modelId));
-  for (const sib of siblings) {
-    await db.update('cost_model_projects', sib.id, { in_bid: false });
-  }
-  await db.update('cost_model_projects', target.id, { in_bid: true });
   recordAudit({ table: 'deal_sites', id: target.site_id, action: 'set_site_in_bid', fields: { deal_deals_id: dealId, model_id: target.id } });
 }
 
@@ -595,8 +579,8 @@ export async function createSite(dealId, payload) {
 
 /**
  * S2 residue: delete a Site record. FKs are on-delete-set-null, so attached
- * models/designs survive as Unassigned. Clears the mirrored in_bid flag on
- * the site's ★ model first, so no orphaned ★ boolean remains.
+ * models/designs survive as Unassigned. The site row carries the ★ authority
+ * (in_bid_model_id), so deleting it deletes the ★ with it — nothing to clear.
  * @param {string} siteId
  */
 export async function deleteSite(siteId) {
@@ -605,10 +589,6 @@ export async function deleteSite(siteId) {
     .select('id, deal_id, in_bid_model_id').eq('id', siteId).maybeSingle();
   if (error) throw error;
   if (!data) return false;
-  if (data.in_bid_model_id != null) {
-    try { await db.update('cost_model_projects', data.in_bid_model_id, { in_bid: false }); }
-    catch (err) { console.warn('[deal-mgmt] deleteSite: in_bid mirror clear failed', err); }
-  }
   const { error: delErr } = await db.from('deal_sites').delete().eq('id', siteId);
   if (delErr) throw delErr;
   recordAudit({ table: 'deal_sites', id: siteId, action: 'delete_site', fields: { deal_id: data.deal_id } });
@@ -642,9 +622,7 @@ export async function assignModelToSite(modelId, siteId) {
   if (error) throw error;
   if (!data) throw new Error('assignModelToSite: model not found');
   const prevSite = data.site_id;
-  // C1: the in_bid mirror is write-only — a model leaving its site can never
-  // carry ★, so sweep the flag false on any move without reading the column.
-  await db.update('cost_model_projects', modelId, { site_id: siteId || null, ...(prevSite && String(prevSite) !== String(siteId || '') ? { in_bid: false } : {}) });
+  await db.update('cost_model_projects', modelId, { site_id: siteId || null });
   if (prevSite && String(prevSite) !== String(siteId || '')) {
     // If this model was the previous site's ★, clear it there.
     const { data: prev } = await db.from('deal_sites')

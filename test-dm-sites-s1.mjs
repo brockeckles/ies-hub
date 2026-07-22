@@ -81,8 +81,8 @@ const apiSrc = readFileSync(new URL('./hub/deal-management/api.js', import.meta.
   t('setModelInBid authority = deal_sites.in_bid_model_id',
     fn.includes("db.update('deal_sites', target.site_id, { in_bid_model_id: target.id })"));
   t('setModelInBid rejects Unassigned models', fn.includes('Unassigned'));
-  t('setModelInBid mirrors legacy in_bid (S1 soak ruling)',
-    fn.includes("{ in_bid: false }") && fn.includes("{ in_bid: true }"));
+  t('setModelInBid writes authority only (C4: in_bid mirror retired)',
+    !fn.includes("{ in_bid: false }") && !fn.includes("{ in_bid: true }"));
   t('site CRUD exported', ['listSitesByDeal', 'createSite', 'updateSite', 'assignModelToSite', 'assignDesignToSite']
     .every(n => apiSrc.includes(`export async function ${n}`)));
   t('createSite defaults status proposed; statuses match ruling vocab',

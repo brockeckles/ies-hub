@@ -9,7 +9,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
-import { listRealDeals } from '../deal-management/api.js?v=20260722-s3d';
+import { listRealDeals } from '../deal-management/api.js?v=20260722-s4b';
 
 /**
  * Fetch all dashboard data. Tries Supabase first, falls back to demo data.
@@ -18,7 +18,6 @@ import { listRealDeals } from '../deal-management/api.js?v=20260722-s3d';
 export async function fetchDashboardData() {
   let supabaseConnected = false;
   let kpis = DEMO_KPIS;
-  let sectors = DEMO_SECTORS;
   let alerts = DEMO_ALERTS;
   let rfpSignals = DEMO_RFP_SIGNALS;
   // Hoisted so the intelligence-feed + sparkline builders below the try
@@ -67,9 +66,7 @@ export async function fetchDashboardData() {
         // availability_score — prior reads matched nothing (demo fallback
         // under a 'connected' banner).
         const avgWage = laborRows.reduce((s, r) => s + parseFloat(r.avg_warehouse_wage ?? r.avg_wage ?? r.avgWage ?? 0), 0) / laborRows.length;
-        const avgTightness = laborRows.reduce((s, r) => s + parseFloat(r.availability_score ?? r.tightness_index ?? r.laborScore ?? 0), 0) / laborRows.length;
         if (avgWage > 0) kpis = { ...kpis, avgWage };
-        if (avgTightness > 0) kpis = { ...kpis, laborTightness: avgTightness };
       }
       if (freightRows.length) {
         const avgFreight = freightRows.reduce((s, r) => s + (r.rate_index || r.freightIndex || 0), 0) / freightRows.length;
@@ -130,11 +127,6 @@ export async function fetchDashboardData() {
           source: r.source || '',
           source_url: r.source_url || '',
         }));
-      }
-
-      // Build sector items from news
-      if (newsRows.length) {
-        sectors = buildSectorsFromNews(newsRows, sectors);
       }
 
       // Build RFP signals from live data. rfp_signals schema:
@@ -251,7 +243,6 @@ export async function fetchDashboardData() {
   return {
     supabaseConnected,
     kpis,
-    sectors,
     alerts,
     rfpSignals,
     intel,
@@ -487,94 +478,6 @@ function buildIntelligenceFeed(src) {
   return { all, alerts, competitor, accounts, tariff, rfp };
 }
 
-/**
- * Fetch chart-specific data (diesel, freight, labor) for rendering Chart.js
- * @returns {Promise<ChartData>}
- */
-export async function fetchChartData() {
-  const diesel = { labels: [], prices: [] };
-  const freight = { labels: [], spot: [], contract: [] };
-  const labor = { regions: [], wages: [] };
-  let steel = DEMO_STEEL_CHART;
-
-  try {
-    // Steel prices — 26 weeks
-    const steelRows = await db.fetchAll('steel_prices').catch(() => []);
-    if (steelRows.length) {
-      const sorted = [...steelRows].sort((a, b) => (a.report_date || '').localeCompare(b.report_date || ''));
-      steel = {
-        labels: sorted.map(r => {
-          const d = new Date(r.report_date || new Date().toISOString());
-          return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        }),
-        prices: sorted.map(r => parseFloat(r.price || 0)),
-      };
-    }
-
-    // Fetch diesel price data
-    const fuelRows = await db.fetchAll('fuel_prices').catch(() => []);
-    if (fuelRows.length) {
-      const recent = fuelRows.slice(-52); // Last 52 weeks
-      diesel.labels = recent.map(r => {
-        const d = new Date(r.report_date || r.date || new Date().toISOString());
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      });
-      diesel.prices = recent.map(r => parseFloat(r.price_per_gallon || r.price || 3.85));
-    } else {
-      return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART, steel };
-    }
-
-    // Fetch freight rate data
-    const freightRows = await db.fetchAll('freight_rates').catch(() => []);
-    if (freightRows.length) {
-      const spotRates = freightRows.filter(r => r.rate_type === 'spot' || r.index_name === 'DAT Spot Van');
-      const contractRates = freightRows.filter(r => r.rate_type === 'contract' || r.index_name === 'DAT Contract Van');
-
-      if (spotRates.length) {
-        freight.labels = spotRates.slice(-26).map(r => {
-          const d = new Date(r.report_date || r.date || new Date().toISOString());
-          return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        });
-        freight.spot = spotRates.slice(-26).map(r => parseFloat(r.rate || 2.15));
-        freight.contract = contractRates.slice(-26).map(r => parseFloat(r.rate || 2.00));
-      }
-    } else {
-      return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART, steel };
-    }
-
-    // Fetch labor wage data by region
-    const laborRows = await db.fetchAll('labor_markets').catch(() => []);
-    if (laborRows.length) {
-      const byRegion = {};
-      laborRows.forEach(r => {
-        const region = r.region || r.msa || 'Unknown';
-        const wage = parseFloat(r.avg_wage || r.avgWage || 18);
-        if (!byRegion[region]) byRegion[region] = [];
-        byRegion[region].push(wage);
-      });
-
-      // Average wages by region, take top 5
-      const regionWages = Object.entries(byRegion)
-        .map(([region, wages]) => ({
-          region,
-          wage: wages.reduce((a, b) => a + b, 0) / wages.length
-        }))
-        .sort((a, b) => b.wage - a.wage)
-        .slice(0, 5);
-
-      labor.regions = regionWages.map(r => r.region);
-      labor.wages = regionWages.map(r => r.wage);
-    } else {
-      return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART, steel };
-    }
-
-    return { diesel, freight, labor, steel };
-  } catch (err) {
-    console.warn('[CC] Chart data fetch failed, using demo:', err.message);
-    return { diesel: DEMO_DIESEL_CHART, freight: DEMO_FREIGHT_CHART, labor: DEMO_LABOR_CHART, steel };
-  }
-}
-
 /** Normalize enum-like vertical strings ("retail_ecommerce" → "Retail / E-Commerce"). */
 function formatVertical(v) {
   if (!v) return 'General';
@@ -599,41 +502,6 @@ async function safeAlertFetch() {
   return [];
 }
 
-function buildSectorsFromNews(newsRows, fallback) {
-  const categorized = { labor: [], freight: [], automation: [], network: [] };
-
-  for (const row of newsRows) {
-    const hl = (row.headline || row.title || row.summary || '').toLowerCase();
-    const item = {
-      headline: row.headline || row.title || row.summary || '',
-      severity: row.severity || 'info',
-      source: row.source || '',
-      source_url: row.source_url || '',
-    };
-    // Keyword-based categorization from headline text
-    if (/labor|wage|worker|workforce|hiring|staffing|employ|strike|union/.test(hl)) categorized.labor.push(item);
-    else if (/freight|truck|tl|ltl|parcel|shipping|logistics|carrier|transport|lane|dock|port/.test(hl)) categorized.freight.push(item);
-    else if (/autom|robot|cobot|amr|agv|tech|ai|machine|conveyor|sortation/.test(hl)) categorized.automation.push(item);
-    else if (/network|reshoring|supply|warehouse|facility|distribution|nearshoring|tariff/.test(hl)) categorized.network.push(item);
-    else categorized.network.push(item); // default bucket
-  }
-
-  return {
-    labor: categorized.labor.length >= 1
-      ? { items: categorized.labor.slice(0, 3), source: 'Live — Competitor Intelligence' }
-      : fallback.labor,
-    freight: categorized.freight.length >= 1
-      ? { items: categorized.freight.slice(0, 3), source: 'Live — Competitor Intelligence' }
-      : fallback.freight,
-    automation: categorized.automation.length >= 1
-      ? { items: categorized.automation.slice(0, 3), source: 'Live — Competitor Intelligence' }
-      : fallback.automation,
-    network: categorized.network.length >= 1
-      ? { items: categorized.network.slice(0, 3), source: 'Live — Competitor Intelligence' }
-      : fallback.network,
-  };
-}
-
 function formatRelative(isoDate) {
   try {
     const d = new Date(isoDate);
@@ -656,18 +524,12 @@ const DEMO_KPIS = {
   dieselPrice: 3.84,
   dieselTrend: 'up',
   dieselChange: '+$0.12 vs last week',
-  laborTightness: 62.4,
-  laborTrend: 'up',
-  laborChange: '+1.8 pts MoM',
   avgWage: 18.42,
   wageTrend: 'up',
   wageChange: '+$0.35 YoY',
   freightIndex: 94.2,
   freightTrend: 'down',
   freightChange: '-2.1 pts MoM',
-  marketSignal: 73,
-  signalTrend: 'neutral',
-  signalChange: 'Stable — moderate activity',
   steelPrice: 835,
   steelUnit: '$/ton',
   steelTrend: 'up',
@@ -678,41 +540,6 @@ const DEMO_KPIS = {
   rfpSignalCount: 5,
   rfpSignalTrend: 'up',
   rfpSignalChange: '5 in pipeline',
-};
-
-const DEMO_SECTORS = {
-  labor: {
-    items: [
-      { headline: 'Memphis warehouse wages up 4.2% YoY', severity: 'warning' },
-      { headline: 'Inland Empire facing seasonal labor squeeze', severity: 'critical' },
-      { headline: 'Columbus labor market remains favorable', severity: 'info' },
-    ],
-    source: 'Demo Data — BLS, Indeed',
-  },
-  freight: {
-    items: [
-      { headline: 'Spot TL rates softening in SE corridor', severity: 'info' },
-      { headline: 'West Coast port congestion easing', severity: 'info' },
-      { headline: 'Diesel surcharge adjustments expected Q2', severity: 'warning' },
-    ],
-    source: 'Demo Data — DAT, FreightWaves',
-  },
-  automation: {
-    items: [
-      { headline: 'GXO expanding Cobot deployments in 2026', severity: 'info' },
-      { headline: 'AMR adoption accelerating in e-comm fulfillment', severity: 'info' },
-      { headline: 'Locus Robotics announces new partnership', severity: 'info' },
-    ],
-    source: 'Demo Data — Industry News',
-  },
-  network: {
-    items: [
-      { headline: 'Savannah port volumes up 8% — capacity watch', severity: 'warning' },
-      { headline: 'Reshoring index highest since 2019', severity: 'info' },
-      { headline: 'New tariff package may shift nearshoring calculus', severity: 'warning' },
-    ],
-    source: 'Demo Data — JLL, CBRE',
-  },
 };
 
 const DEMO_ALERTS = [
@@ -765,11 +592,6 @@ const DEMO_FREIGHT_CHART = {
   contract: [2.10, 2.10, 2.10, 2.09, 2.08, 2.07, 2.06, 2.05, 2.04, 2.03, 2.02, 2.00],
 };
 
-const DEMO_LABOR_CHART = {
-  regions: ['Northeast', 'Southeast', 'Midwest', 'Southwest', 'West'],
-  wages: [21.45, 19.80, 18.90, 17.50, 22.10],
-};
-
 const DEMO_STEEL_CHART = {
   labels: ['Oct 10','Oct 17','Oct 24','Oct 31','Nov 7','Nov 14','Nov 21','Nov 28','Dec 5','Dec 12','Dec 19','Dec 26','Jan 2','Jan 9','Jan 16','Jan 23','Jan 30','Feb 6','Feb 13','Feb 20','Feb 27','Mar 6','Mar 13','Mar 20','Mar 27','Apr 3'],
   prices: [760, 755, 762, 770, 778, 785, 790, 795, 790, 785, 788, 792, 798, 805, 810, 815, 820, 822, 825, 828, 826, 824, 828, 830, 828, 835],
@@ -779,7 +601,6 @@ const DEMO_STEEL_CHART = {
  * @typedef {Object} DashboardData
  * @property {boolean} supabaseConnected
  * @property {Object} kpis
- * @property {Object} sectors
  * @property {Array} alerts
  * @property {Array} rfpSignals
  * @property {Object} pipeline

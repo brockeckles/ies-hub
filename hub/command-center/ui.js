@@ -7,8 +7,7 @@
  * @module hub/command-center/ui
  */
 
-import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260722-s3d';
+import * as api from './api.js?v=20260722-s4b';
 import { escapeHtml, safeHttpUrl } from '../../shared/escape.js?v=20260702-sec2';
 // C2 (2026-07-22): DOS_STAGES is the SINGLE canonical stage definition
 // (names + colors) — the snapshot's stage bar derives from it instead of
@@ -19,12 +18,6 @@ import { DOS_STAGES } from '../../tools/deal-manager/calc.js?v=20260722-s2b';
 let rootEl = null;
 let refreshTimer = null;
 let liveData = null;
-
-// Chart.js instances
-let dieselChartInstance = null;
-let freightChartInstance = null;
-let laborChartInstance = null;
-let steelChartInstance = null;
 
 export async function mount(el) {
   rootEl = el;
@@ -40,7 +33,6 @@ export async function mount(el) {
 
 export function unmount() {
   if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
-  destroyAllCharts();
   rootEl = null;
 }
 
@@ -434,21 +426,6 @@ function renderToolShortcuts() {
   `;
 }
 
-/** Match the alerts list area to the sector pulse grid height (minus header) */
-function matchAlertHeight() {
-  if (!rootEl) return;
-  requestAnimationFrame(() => {
-    const sectorGrid = rootEl?.querySelector('#cc-sector-grid');
-    const alertsCard = rootEl?.querySelector('#cc-alerts-card');
-    const alertsList = rootEl?.querySelector('#cc-alerts-list');
-    if (sectorGrid && alertsCard) {
-      const h = sectorGrid.offsetHeight;
-      alertsCard.style.height = h + 'px';
-      if (alertsList) alertsList.style.maxHeight = (h - 44) + 'px'; // subtract header height
-    }
-  });
-}
-
 function bindEvents() {
   // P3-1 listener stacking (2026-07-03): render() runs on mount AND on the
   // 5-minute auto-refresh interval AND on manual refresh — without a guard
@@ -481,29 +458,6 @@ function bindEvents() {
       switchIntelTab('alerts');
       const stream = rootEl.querySelector('#cc-signal-stream');
       if (stream) stream.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      return;
-    }
-
-    // Tool tile navigation
-    const route = target.closest('[data-route]');
-    if (route) {
-      window.location.hash = /** @type {HTMLElement} */ (route).dataset.route;
-      return;
-    }
-
-    // Alert link -> open source URL in new tab
-    const alertLink = target.closest('[data-alert-link]');
-    if (alertLink) {
-      const url = /** @type {HTMLElement} */ (alertLink).dataset.alertLink;
-      if (url) window.open(url, '_blank');
-      return;
-    }
-
-    // Alert row -> open source URL in new tab
-    const alertRow = target.closest('[data-alert-url]');
-    if (alertRow) {
-      const url = /** @type {HTMLElement} */ (alertRow).dataset.alertUrl;
-      if (url) window.open(url, '_blank');
       return;
     }
 
@@ -551,110 +505,6 @@ async function refreshNow() {
 }
 
 // ===== COMPONENT HELPERS =====
-
-function kpiCard(label, value, trend, color, change) {
-  const arrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→';
-  const trendColor = trend === 'up' ? '#dc2626' : trend === 'down' ? '#16a34a' : 'var(--ies-gray-400)';
-
-  const tooltips = {
-    'Diesel Price': 'National average diesel price per gallon (EIA weekly data)',
-    'Labor Tightness': 'Composite index (0-100) measuring warehouse labor availability. Higher = tighter market',
-    'Avg Warehouse Wage': 'Average hourly wage for warehouse workers (BLS data, seasonally adjusted)',
-    'Freight Rate Index': 'Composite index of spot and contract truckload rates (DAT/Coyote benchmarks)',
-    'Steel Price Index': 'CRU HRC (Hot-Rolled Coil) weekly spot price, USD per ton. Key driver of racking, mezzanine and dock costs.',
-    'Market Signal Score': 'Weighted composite of all intelligence signals. Higher = more market activity',
-  };
-
-  const tooltip = tooltips[label] || '';
-
-  return `
-    <div class="hub-card" style="padding:14px;position:relative;">
-      <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px;">
-        <span style="font-size:11px;color:var(--ies-gray-400);font-weight:600;">${label}</span>
-        ${tooltip ? `<span class="cc-kpi-tip" style="position:relative;display:inline-flex;">
-          <span style="width:14px;height:14px;border-radius:50%;background:var(--ies-gray-100);color:var(--ies-gray-400);font-size:9px;display:inline-flex;align-items:center;justify-content:center;cursor:help;font-weight:700;">?</span>
-          <span class="cc-kpi-tiptext" style="display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% + 6px);width:220px;padding:8px 10px;background:#1e293b;color:#f8fafc;font-size:11px;font-weight:400;line-height:1.4;border-radius:6px;z-index:100;pointer-events:none;text-align:left;box-shadow:0 4px 12px rgba(0,0,0,.25);">${tooltip}</span>
-        </span>` : ''}
-      </div>
-      <div style="font-size:22px;font-weight:800;color:${color};margin-bottom:4px;">${value}</div>
-      <div style="font-size:11px;color:${trendColor};font-weight:600;">${arrow} ${change}</div>
-    </div>
-  `;
-}
-
-function sectorPulseCard(title, icon, data, color) {
-  return `
-    <div class="hub-card" style="padding:14px;border-left:3px solid ${color};">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-        <span style="font-size:16px;">${icon}</span>
-        <span style="font-size:12px;font-weight:700;">${title}</span>
-      </div>
-      ${data.items.map(item => `
-        <div style="display:flex;align-items:start;gap:6px;padding:3px 0;">
-          <span style="width:6px;height:6px;border-radius:50%;background:${severityDot(item.severity)};flex-shrink:0;margin-top:4px;"></span>
-          <div style="flex:1;">
-            ${item.source_url
-              ? `<a href="${safeHttpUrl(item.source_url)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--ies-gray-600);text-decoration:none;" onmouseover="this.style.color='#2563eb';this.style.textDecoration='underline'" onmouseout="this.style.color='var(--ies-gray-600)';this.style.textDecoration='none'">${escapeText(item.headline)}</a>`
-              : `<span style="font-size:11px;color:var(--ies-gray-600);">${escapeText(item.headline)}</span>`
-            }
-            ${item.source ? `<div style="font-size:9px;color:var(--ies-gray-300);">${escapeText(item.source)}</div>` : ''}
-          </div>
-        </div>
-      `).join('')}
-      <div style="font-size:10px;color:var(--ies-gray-300);margin-top:6px;">${data.source}</div>
-    </div>
-  `;
-}
-
-function alertRow(a) {
-  // Neutralized styling — no severity color coding (per feedback 2026-04-17).
-  // Only surface a link arrow when there's a source_url with a real article path
-  // (not a bare domain root like https://www.freightwaves.com/ which the ingest
-  // pipeline sometimes stores when it can't resolve the actual article URL).
-  const isRealLink = (url) => {
-    if (!url) return false;
-    try {
-      const u = new URL(url);
-      return u.pathname && u.pathname !== '/' && u.pathname.length > 1;
-    } catch { return false; }
-  };
-  const hasLink = isRealLink(a.source_url);
-  const linkArrow = hasLink
-    ? `<span style="font-size:11px;color:var(--c-info);flex-shrink:0;margin-top:1px;">↗</span>`
-    : '';
-  const sourceLine = a.source
-    ? `<span style="font-size:10px;color:var(--ies-gray-400);">${escapeText(a.source)}</span>`
-    : '';
-  return `
-    <div style="display:flex;align-items:start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--ies-gray-100);cursor:${hasLink ? 'pointer' : 'default'};" data-alert-url="${hasLink ? safeHttpUrl(a.source_url) : ''}">
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;font-weight:600;color:var(--ies-gray-700);margin-bottom:2px;">${escapeText(a.title)}</div>
-        <div style="font-size:11px;color:var(--ies-gray-500);line-height:1.4;">${escapeText(a.message)}</div>
-        ${sourceLine ? `<div style="margin-top:3px;">${sourceLine}</div>` : ''}
-      </div>
-      ${linkArrow}
-      <span style="font-size:10px;color:var(--ies-gray-300);white-space:nowrap;flex-shrink:0;">${a.date}</span>
-    </div>
-  `;
-}
-
-function miniKpi(label, value, color) {
-  return `
-    <div class="u-center">
-      <div style="font-size:18px;font-weight:800;color:${color};">${value}</div>
-      <div style="font-size:10px;color:var(--ies-gray-400);font-weight:600;">${label}</div>
-    </div>
-  `;
-}
-
-function toolTile(name, route, color, pathD) {
-  return `
-    <div data-route="${route}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background 0.15s;background:var(--ies-gray-50);" onmouseover="this.style.background='var(--ies-gray-100)'" onmouseout="this.style.background='var(--ies-gray-50)'">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${pathD}"/></svg>
-      <span style="font-size:12px;font-weight:600;color:var(--ies-gray-700);">${name}</span>
-    </div>
-  `;
-}
 
 function activityItem(title, desc, time, color) {
   return `
@@ -827,16 +677,6 @@ function renderInlineAlertBanner(alerts) {
   </div>`;
 }
 
-function statusTile(name, status, healthy) {
-  return `
-    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;background:var(--ies-gray-50);">
-      <span style="width:8px;height:8px;border-radius:50%;background:${healthy ? 'var(--c-success)' : 'var(--c-warn-strong)'};"></span>
-      <span style="font-size:12px;font-weight:600;flex:1;">${name}</span>
-      <span style="font-size:11px;color:${healthy ? 'var(--c-success)' : 'var(--c-warn-strong)'};font-weight:700;">${status}</span>
-    </div>
-  `;
-}
-
 function severityDot(severity) {
   return { critical: '#dc2626', high: '#ea580c', warning: '#d97706', medium: '#d97706', info: '#2563eb', low: '#16a34a' }[severity] || '#9ca3af';
 }
@@ -882,282 +722,4 @@ function renderRfpFeed(rfpSignals) {
       </div>
     </div>`;
   }).join('');
-}
-
-/**
- * Load Chart.js from CDN if not already present, then initialize charts
- */
-async function ensureChartJs() {
-  if (typeof Chart !== 'undefined') return;
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Chart.js'));
-    document.head.appendChild(script);
-  });
-}
-
-function destroyAllCharts() {
-  if (dieselChartInstance) { dieselChartInstance.destroy(); dieselChartInstance = null; }
-  if (freightChartInstance) { freightChartInstance.destroy(); freightChartInstance = null; }
-  if (laborChartInstance) { laborChartInstance.destroy(); laborChartInstance = null; }
-  if (steelChartInstance) { steelChartInstance.destroy(); steelChartInstance = null; }
-}
-
-/**
- * Initialize all three charts after render completes
- */
-async function initCharts() {
-  if (!rootEl) return;
-  try {
-    await ensureChartJs();
-    await renderCharts();
-  } catch (err) {
-    console.warn('[CC] Chart initialization failed:', err);
-  }
-}
-
-/**
- * Render the three Chart.js charts with live or demo data
- */
-async function renderCharts() {
-  if (!rootEl || !liveData) return;
-
-  const chartData = await api.fetchChartData();
-
-  // Diesel Price Trend
-  const dieselCtx = rootEl.querySelector('#cc-diesel-chart canvas');
-  if (!dieselCtx && rootEl.querySelector('#cc-diesel-chart')) {
-    const container = rootEl.querySelector('#cc-diesel-chart');
-    const canvas = document.createElement('canvas');
-    container.appendChild(canvas);
-    renderDieselChart(canvas, chartData.diesel);
-  }
-
-  // Freight Rate Index
-  const freightCtx = rootEl.querySelector('#cc-freight-chart canvas');
-  if (!freightCtx && rootEl.querySelector('#cc-freight-chart')) {
-    const container = rootEl.querySelector('#cc-freight-chart');
-    const canvas = document.createElement('canvas');
-    container.appendChild(canvas);
-    renderFreightChart(canvas, chartData.freight);
-  }
-
-  // Labor Wage by Region
-  const laborCtx = rootEl.querySelector('#cc-labor-chart canvas');
-  if (!laborCtx && rootEl.querySelector('#cc-labor-chart')) {
-    const container = rootEl.querySelector('#cc-labor-chart');
-    const canvas = document.createElement('canvas');
-    container.appendChild(canvas);
-    renderLaborChart(canvas, chartData.labor);
-  }
-
-  // Steel Price Index (CRU HRC)
-  const steelCtx = rootEl.querySelector('#cc-steel-chart canvas');
-  if (!steelCtx && rootEl.querySelector('#cc-steel-chart')) {
-    const container = rootEl.querySelector('#cc-steel-chart');
-    const canvas = document.createElement('canvas');
-    container.appendChild(canvas);
-    renderSteelChart(canvas, chartData.steel);
-  }
-}
-
-function renderSteelChart(canvas, data) {
-  try {
-    steelChartInstance = new Chart(canvas, {
-      type: 'line',
-      data: {
-        labels: data.labels,
-        datasets: [{
-          label: 'CRU HRC ($/ton)',
-          data: data.prices,
-          borderColor: '#0891b2',
-          backgroundColor: 'rgba(8,145,178,.08)',
-          fill: true,
-          tension: 0.3,
-          pointRadius: 2,
-          pointBackgroundColor: '#0891b2',
-          borderWidth: 2,
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          y: {
-            beginAtZero: false,
-            ticks: { callback: v => '$' + v },
-          },
-        },
-      },
-    });
-  } catch (err) {
-    console.warn('[CC] Steel chart error:', err);
-  }
-}
-
-function renderDieselChart(canvas, data) {
-  destroyAllCharts();
-  try {
-    dieselChartInstance = new Chart(canvas, {
-      type: 'line',
-      data: {
-        labels: data.labels,
-        datasets: [{
-          label: 'Diesel ($/gal)',
-          data: data.prices,
-          borderColor: '#dc2626',
-          backgroundColor: 'rgba(220,38,38,.06)',
-          fill: true,
-          tension: 0.3,
-          pointRadius: 3,
-          pointBackgroundColor: '#dc2626',
-          borderWidth: 2
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false }
-        },
-        scales: {
-          y: {
-            beginAtZero: false,
-            ticks: { callback: v => '$' + v.toFixed(2) }
-          }
-        }
-      }
-    });
-  } catch (err) {
-    console.warn('[CC] Diesel chart error:', err);
-  }
-}
-
-function renderFreightChart(canvas, data) {
-  try {
-    freightChartInstance = new Chart(canvas, {
-      type: 'line',
-      data: {
-        labels: data.labels,
-        datasets: [
-          {
-            label: 'Spot Rate ($/mi)',
-            data: data.spot,
-            borderColor: '#2563eb',
-            backgroundColor: 'rgba(37,99,235,.06)',
-            fill: false,
-            tension: 0.3,
-            pointRadius: 2,
-            pointBackgroundColor: '#2563eb',
-            borderWidth: 2
-          },
-          {
-            label: 'Contract Rate ($/mi)',
-            data: data.contract,
-            borderColor: '#7c3aed',
-            backgroundColor: 'rgba(124,58,237,.06)',
-            fill: false,
-            tension: 0.3,
-            pointRadius: 2,
-            pointBackgroundColor: '#7c3aed',
-            borderWidth: 2,
-            borderDash: [5, 5]
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } }
-        },
-        scales: {
-          y: {
-            beginAtZero: false,
-            ticks: { callback: v => '$' + v.toFixed(2) }
-          }
-        }
-      }
-    });
-  } catch (err) {
-    console.warn('[CC] Freight chart error:', err);
-  }
-}
-
-function renderLaborChart(canvas, data) {
-  try {
-    // Convert bar data to multi-line trend data by region/market.
-    // Use an index-based palette so cities (MSAs) get distinct colors
-    // even though the hardcoded name→color map only knew census regions.
-    const months = ['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'];
-    const palette = ['#2563eb', '#16a34a', '#ea580c', '#7c3aed', '#dc2626', '#0891b2', '#ca8a04', '#be185d'];
-    const regionColors = {
-      // Still honor census-region names if the data uses them
-      'Northeast': '#2563eb', 'Southeast': '#16a34a', 'Midwest': '#ea580c',
-      'Southwest': '#7c3aed', 'West': '#dc2626',
-    };
-    const datasets = (data.regions || []).map((region, i) => {
-      const latestWage = data.wages ? data.wages[i] : 19 + i;
-      const color = regionColors[region] || palette[i % palette.length];
-      // Synthesize 12 months of history back from the current wage. Give
-      // each city a distinct YoY growth rate and its own tiny month-to-month
-      // walk so the lines don't climb in visual lock-step.
-      //
-      // Growth rates span 1.8%–6.0% across cities (indexed), reflecting the
-      // real spread between soft markets like Central PA (~2%) and tight
-      // markets like Atlanta/Memphis (~5–6%).
-      const growthRates = [0.058, 0.047, 0.041, 0.033, 0.022, 0.054, 0.028, 0.018];
-      const yoy = growthRates[i % growthRates.length];
-      // Per-city seasonality amplitudes ($0.08 – $0.28) + distinct phase
-      // so dips don't align across cities (but still monotonic-ish up).
-      const amp = 0.08 + ((i * 17) % 21) / 100; // 0.08..0.28
-      const phase = (i * 1.7) % (2 * Math.PI);
-      const startWage = latestWage / (1 + yoy);
-      const trendData = months.map((_, m) => {
-        // Linear climb along the YoY growth + small smooth seasonality +
-        // small deterministic per-month noise
-        const linear = startWage + (latestWage - startWage) * (m / (months.length - 1));
-        const seasonal = amp * Math.sin(((m / months.length) * 2 * Math.PI) + phase) * 0.4;
-        const noise = (((i * 11 + m * 7) % 13) - 6) * 0.008;
-        return +(linear + seasonal + noise).toFixed(2);
-      });
-      return {
-        label: region,
-        data: trendData,
-        borderColor: color,
-        backgroundColor: 'transparent',
-        tension: 0.35,
-        pointRadius: 2,
-        pointBackgroundColor: color,
-        borderWidth: 2,
-      };
-    });
-    laborChartInstance = new Chart(canvas, {
-      type: 'line',
-      data: { labels: months, datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 10 }, padding: 8 } },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => `${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}/hr`
-            }
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: false,
-            ticks: { callback: v => '$' + Number(v).toFixed(2) }
-          }
-        }
-      }
-    });
-  } catch (err) {
-    console.warn('[CC] Labor chart error:', err);
-  }
 }

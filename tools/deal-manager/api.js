@@ -199,9 +199,9 @@ export async function deleteDeal(id) {
  */
 export async function listSites(dealId) {
   // C1 ★-authority rewire (2026-07-22): the deal tabs' ★ basis derives from
-  // deal_sites.in_bid_model_id (exactly one ★ per site — the authority),
-  // NOT the retiring cost_model_projects.in_bid mirror. That boolean is
-  // write-only through the C1 soak and the column drops in C4.
+  // deal_sites.in_bid_model_id (exactly one ★ per site — the authority).
+  // C4: the legacy mirrored boolean on cost_model_projects is fully retired
+  // (no reads or writes anywhere; the column drops with this wave).
   const [projRes, starIds] = await Promise.all([
     db.from('cost_model_projects')
       .select('*')
@@ -343,7 +343,7 @@ function mapCmProjectToSite(row, starIds) {
     annualVolume: row.vol_pallets_received || 0,    // closest proxy: inbound pallet volume
     costModelId: String(row.id),
     // C1 (2026-07-22): ★ derives from deal_sites.in_bid_model_id via the
-    // starIds Set — never from the retiring mirrored in_bid boolean.
+    // starIds Set (C4: the legacy mirrored boolean is retired and dropped).
     inBid: starIds ? starIds.has(String(row.id)) : false,
     // CM-authoritative pricing (2026-07-04, D1 vocab decision): the CM
     // engine's stamped steady-state revenue. When > 0 it drives

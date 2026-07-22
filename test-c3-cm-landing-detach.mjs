@@ -13,10 +13,10 @@
 //       deal_deals_id = null OUTSIDE _modelUpdatePayload (which, per the C1
 //       rule locked in test-cm-persistence-contract, OMITS the column when
 //       unlinked so ordinary saves can never silently detach). Side effects
-//       mirror DM hygiene: site_id → null, write-only in_bid mirror swept
-//       false ({ in_bid: false } sanctioned shape, never read), and
-//       deal_sites.in_bid_model_id (the ★ authority) cleared wherever it
-//       points at the model. Behavioral checks run against an in-memory db.
+//       mirror DM hygiene: site_id → null and deal_sites.in_bid_model_id
+//       (the ★ authority) cleared wherever it points at the model. (C4:
+//       the legacy mirrored boolean is retired — no sweep remains and the
+//       column drops.) Behavioral checks run against an in-memory db.
 //       ui.js gates the flow on a saved model with a current deal link,
 //       confirms via showConfirm, and reverts the select on cancel/failure.
 //   (c) NO ALERTS — repo-scan (test-c3-most-no-alerts pattern): zero bare
@@ -140,8 +140,8 @@ t('api.js exports detachModelFromDeal', typeof api.detachModelFromDeal === 'func
   t('detach sets deal_deals_id: null explicitly', detBody.includes('deal_deals_id: null'));
   t('detach does NOT route through _modelUpdatePayload',
     !detBody.includes('_modelUpdatePayload'));
-  t('detach sweeps the write-only in_bid mirror in the sanctioned shape',
-    detBody.includes('{ in_bid: false }'));
+  t('detach carries NO retired-mirror payload (C4: column drops)',
+    !detBody.includes('in_bid: false'));
   t('detach clears the deal_sites ★ authority pointer',
     detBody.includes("eq('in_bid_model_id', modelId)") &&
     detBody.includes('in_bid_model_id: null'));
@@ -192,7 +192,7 @@ function makeMemDb(store) {
 
 {
   const store = {
-    cost_model_projects: [{ id: 77, name: 'M', deal_deals_id: 'deal-9', site_id: 'site-1', in_bid: true }],
+    cost_model_projects: [{ id: 77, name: 'M', deal_deals_id: 'deal-9', site_id: 'site-1' }],
     deal_sites: [
       { id: 'site-1', deal_id: 'deal-9', in_bid_model_id: 77 },
       { id: 'site-2', deal_id: 'deal-9', in_bid_model_id: 88 },
@@ -205,7 +205,7 @@ function makeMemDb(store) {
     const proj = store.cost_model_projects[0];
     t('behavior: deal_deals_id explicitly nulled', proj.deal_deals_id === null);
     t('behavior: site_id nulled (model leaves the deal\'s site)', proj.site_id === null);
-    t('behavior: in_bid mirror swept false (write-only)', proj.in_bid === false);
+    t('behavior: no retired-mirror key rides the payload (C4)', !('in_bid' in proj));
     t('behavior: updated_at restamped',
       /^\d{4}-\d{2}-\d{2}T/.test(proj.updated_at || ''));
     t('behavior: ★ authority cleared on the site that starred this model',

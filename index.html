@@ -578,7 +578,7 @@
         'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260722-s3b' },
         'designtools/most-standards': { title: 'MOST Labor Standards', path: './tools/most-standards/ui.js?v=20260722-s4a' },
         'designtools/network-opt': { title: 'Network Optimization', path: './tools/network-opt/ui.js?v=20260722-s4a' },
-        'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260722-s4a' },
+        'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260722-s4b' },
         'designtools/center-of-gravity': { title: 'Center of Gravity', path: './tools/center-of-gravity/ui.js?v=20260722-s4a' },
       };
 
@@ -591,9 +591,9 @@
 
       // Hub section routes (lazy loaded)
       const hubRoutes = {
-        'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260722-s4a' },
+        'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260722-s4b' },
         'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260722-s4a' },
-        'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260722-s3d' },
+        'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260722-s4b' },
         'admin': { title: 'Admin', path: './hub/admin/ui.js?v=20260710-r2' },
         'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260710-r2' },
       };
@@ -725,19 +725,9 @@
     function initHeaderActions() {
       document.getElementById('hub-btn-refresh')?.addEventListener('click', reloadCurrentRoute);
       document.getElementById('hub-btn-tour')?.addEventListener('click', () => {
-        const section = (window.location.hash.slice(1) || 'overview').split('/')[0];
-        // Map section → tour name; fall back to 'welcome'.
-        const tourMap = {
-          overview: 'overview', deals: 'deals', designtools: 'designtools',
-          admin: 'admin',
-          'designtools/cost-model': 'cost-model',
-          'designtools/warehouse-sizing': 'wsc',
-          'designtools/network-opt': 'netopt',
-          'designtools/most-standards': 'most',
-        };
-        const fullRoute = window.location.hash.slice(1) || 'overview';
-        const tourName = tourMap[fullRoute] || tourMap[section] || 'welcome';
-        if (window.__hubTour) window.__hubTour.start(tourName);
+        // C4 (2026-07-22): single 'welcome' tour since the C3 rewrite —
+        // the per-section tourMap of pre-revamp tour names is retired.
+        if (window.__hubTour) window.__hubTour.start('welcome');
       });
       document.getElementById('hub-btn-help')?.addEventListener('click', toggleHelpPopover);
 
