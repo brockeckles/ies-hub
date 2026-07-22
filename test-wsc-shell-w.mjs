@@ -30,15 +30,16 @@ function eq(actual, expected, label = '') {
 
 console.log('\n── 1. shell preference ─────────────────────────────────────');
 
-t('the station shell is the DEFAULT after the W7 flip (mutation-probe protection)', () => {
-  eq(SHELLS, ['classic', 'w'], 'SHELLS');
+t('shell-w is the ONLY shell (classic deleted 2026-07-22, Brock GO)', () => {
+  eq(SHELLS, ['w'], 'SHELLS');
   eq(getShellPref(), 'w', 'default');
 });
 
-t('set/get round-trip via the node-safe store; invalid values ignored', () => {
+t('set/get: classic no longer settable; stored classic prefs coerce to w', () => {
   eq(setShellPref('w'), 'w'); eq(getShellPref(), 'w');
   eq(setShellPref('bogus'), 'w', 'invalid ignored');
-  eq(setShellPref('classic'), 'classic'); eq(getShellPref(), 'classic');
+  eq(setShellPref('classic'), 'w', 'classic refused — returns current (w)');
+  eq(getShellPref(), 'w', 'still w');
 });
 
 console.log('\n── 2. station partition vs ui.js WSC_SECTIONS ──────────────');
@@ -149,10 +150,10 @@ t('empty design → em-dashes, recon/band hidden', () => {
 
 console.log('\n── 5. wiring pins (ui.js / ui-shell-events) ────────────────');
 
-t('renderShell branches on the pref; KPI cadence updates the rail', () => {
-  assert(/if \(getWShellPref\(\) === 'w'\) return renderShellW\(_buildWShellOpts\(\)\)/.test(uiSrc), 'renderShell branch');
-  // W3 reshaped this into a block (rail + inspector on the same cadence).
-  assert(/if \(getWShellPref\(\) === 'w'\) \{\s*updateWRail\(rootEl, _wswRailBag\(\)\);/.test(uiSrc), 'rail on KPI cadence');
+t('renderShell is unconditionally shell-w; KPI cadence updates the rail', () => {
+  assert(/return renderShellW\(_buildWShellOpts\(\)\) \+ wscExtraStyles\(\);/.test(uiSrc), 'shell-w unconditional');
+  assert(!uiSrc.includes('renderToolChrome('), 'classic chrome call stays deleted');
+  assert(/updateWRail\(rootEl, _wswRailBag\(\)\);/.test(uiSrc), 'rail on KPI cadence');
 });
 
 t('station capture rides the bound-once block, BEFORE tool-chrome delegation (capture phase)', () => {
@@ -162,7 +163,7 @@ t('station capture rides the bound-once block, BEFORE tool-chrome delegation (ca
   assert(guardPos !== -1 && capPos !== -1 && bindPos !== -1, 'all markers');
   assert(capPos > guardPos && capPos < bindPos, 'capture listener inside guard, before delegation');
   assert(/}, true\);/.test(evSrc.slice(capPos, capPos + 800)), 'capture phase flag');
-  assert(evSrc.includes("if (id === 'wsc-shell') return sctx.handleWscShellToggle?.()"), 'toggle action routed');
+  assert(!evSrc.includes('wsc-shell'), 'wsc-shell toggle stays deleted (2026-07-22)');
 });
 
 t('scroll consume is one-shot and pre-render-reset (state-reset ordering class)', () => {

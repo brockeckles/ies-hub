@@ -11,7 +11,9 @@
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260705-u1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
-import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260710-r2';
+// Post-soak cleanup (2026-07-22): renderToolChrome/refreshToolChrome/
+// refreshToolChromeActions dropped with the classic chrome.
+import { refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260710-r2';
 import * as calc from './calc.js?v=20260722-s2';
 import * as api from './api.js?v=20260703-dc2';
 import * as cmApi from '../cost-model/api.js?v=20260704-cmp1';
@@ -389,13 +391,10 @@ function renderWscPhaseStepper() {
 }
 
 function renderShell() {
-  // W2 (2026-07-15): station-spine shell behind the tier-service-pattern
-  // flag — shell-w emits the SAME data-tc-*/#wsc-config/#wsc-content
-  // contract, so bindShellEvents + renderConfigPanel + renderContentView
-  // host both shells unchanged. Classic stays the default until the flip.
-  if (getWShellPref() === 'w') return renderShellW(_buildWShellOpts()) + wscExtraStyles();
-  // CM Chrome v3 ripple — chrome HTML+CSS lives in shared/tool-chrome.js.
-  return renderToolChrome(_buildWscChromeOpts()) + wscExtraStyles();
+  // Post-soak cleanup (2026-07-22, Brock GO): classic chrome DELETED —
+  // shell-w is the only WSC chrome. It emits the same data-tc-*/#wsc-config/
+  // #wsc-content contract the renderers were built against (W2 hosting trick).
+  return renderShellW(_buildWShellOpts()) + wscExtraStyles();
 }
 
 /** W2 — opts bag for the station-spine shell. */
@@ -469,7 +468,6 @@ function _openWscReviewDoc(clientSafe) {
 /** W5 — adopt statuses via ui-basis (it owns the card policies); null under
  *  classic or on any compute hiccup — subs then fall back to 'adopted'. */
 function _wswAdoptStatuses() {
-  if (getWShellPref() !== 'w') return null;
   try {
     return computeAdoptStatuses({
       getProfile: () => profile,
@@ -489,7 +487,7 @@ function _wswAdoptStatuses() {
  *  only re-renders on section navigation). textContent only — no listener
  *  or node churn. */
 function _refreshWswSubs() {
-  if (getWShellPref() !== 'w' || !rootEl) return;
+  if (!rootEl) return;
   const subs = _wswSubs();
   for (const [k, v] of Object.entries(subs)) {
     const el = rootEl.querySelector('[data-wsw-sub="' + k + '"]');
@@ -501,7 +499,6 @@ function _refreshWswSubs() {
  *  (classic renders the full basis stack). Unknown/blank station memory
  *  falls back to the Data face — the chain's front door. */
 function _wswBasisFace() {
-  if (getWShellPref() !== 'w') return null;
   const st = W_STATIONS.find(s => s.key === _wswStation && s.face);
   return st?.face || 'data';
 }
@@ -514,21 +511,12 @@ function _setWswStation(key, scrollSel) {
   _wswScrollSel = scrollSel || '';
 }
 
-/** W2 — flip shells and rebuild the editor (mirrors the onSection path). */
-function handleWscShellToggle() {
-  setWShellPref(getWShellPref() === 'w' ? 'classic' : 'w');
-  if (!rootEl || viewMode !== 'editor') return;
-  rootEl.innerHTML = renderShell();
-  bindShellEvents(_makeShellEventsCtx());
-  renderConfigPanel();
-  renderContentView();
-  _refreshWscKpis();
-}
+// Post-soak cleanup (2026-07-22): handleWscShellToggle deleted with the
+// classic chrome — shell-w is the only layout.
 
-/** W2 — save-state chip refresh under the station shell (classic uses
- *  refreshToolChromeActions; shell-w has no .tc-* nodes). */
+/** W2 — save-state chip refresh under the station shell. */
 function _refreshWswChip() {
-  if (getWShellPref() !== 'w' || !rootEl) return;
+  if (!rootEl) return;
   const chip = rootEl.querySelector('[data-wsw-state]');
   if (!chip) return;
   const stateName = !facility.id ? 'draft' : (isDirty ? 'modified' : 'saved');
@@ -591,7 +579,7 @@ function _wswPreviewDelta() {
 
 /** W3 — render the inspector body for the selected rail cell. */
 function _refreshWswInspector() {
-  if (getWShellPref() !== 'w' || !rootEl) return;
+  if (!rootEl) return;
   const body = rootEl.querySelector('#wsw-izbody');
   if (!body) return;
   // Row highlight follows selection.
@@ -652,8 +640,7 @@ function _markDirty() {
   // re-renders the sidebar mid-keystroke and destroys input focus (the
   // CM-INPUT-FOCUS-LOSS class of bug). The actions rail has no inputs.
   if (wasClean && facility.id && rootEl) {
-    refreshToolChromeActions(rootEl, _buildWscChromeOpts());
-    _refreshWswChip();   // W2 — station shell has no .tc-* action rail
+    _refreshWswChip();   // shell-w save chip (classic actions rail deleted, M8b-analog)
   }
 }
 
@@ -667,12 +654,7 @@ function _buildWscChromeOpts() {
 
   const _quick = _wscQuickChrome();
   const actions = [
-    // W2 — shell flag toggle (tier-service pattern; classic default).
-    { id: 'wsc-shell',
-      label: getWShellPref() === 'w' ? 'Classic layout' : 'New layout',
-      title: getWShellPref() === 'w'
-        ? 'Switch back to the classic chrome'
-        : 'Preview the station-spine layout (Design Line + live rail) — your data is untouched' },
+    // Post-soak cleanup (2026-07-22): wsc-shell toggle deleted with classic.
     { id: 'wsc-tier',
       label: _quick ? 'Engineering' : 'Quick',
       title: _quick ? 'Switch to Engineering mode — full stepped Configure panel + 2D Plan/Elevation IE bench'
@@ -750,11 +732,9 @@ function _refreshWscKpis() {
   // in the live walk: strip 10K SF vs dashboard 124K).
   refreshKpiStrip(rootEl, calc.computeWscKpis({ facility, zones, volumes: _reqSeam().volumes }));
   // W2 — the station shell's rail refreshes on the same cadence.
-  if (getWShellPref() === 'w') {
-    updateWRail(rootEl, _wswRailBag());
-    _refreshWswInspector();   // W3 — chain values track design edits
-    _refreshWswSubs();        // W4 — spine one-liners track Apply/edit state
-  }
+  updateWRail(rootEl, _wswRailBag());
+  _refreshWswInspector();   // W3 — chain values track design edits
+  _refreshWswSubs();        // W4 — spine one-liners track Apply/edit state
 }
 
 /** WSC-specific styles — the Configure-panel inputs were rendering with
@@ -795,7 +775,6 @@ function _makeShellEventsCtx() {
     set viewMode(v) { viewMode = v; },
     // W2 — station shell hooks
     setWswStation: _setWswStation,
-    handleWscShellToggle,
     // W6 — Review / Client-safe mode pills
     openWscReviewDoc: _openWscReviewDoc,
     // W3 — inspector hooks
@@ -877,11 +856,7 @@ async function handleSaveWsc() {
     facility.id = saved.id || saved[0]?.id || facility.id;
     _clearDirty();
     showToast(`Saved "${facility.name || 'Untitled'}"`, 'success');
-    if (getWShellPref() === 'w') {
-      _refreshWswChip();   // W2 — no .tc-* chrome to refresh under the station shell
-    } else {
-      refreshToolChrome(rootEl, _buildWscChromeOpts());
-    }
+    _refreshWswChip();   // shell-w save chip (classic chrome deleted)
     _refreshWscKpis();
 
     // ── Phase 4 of WSC redesign (2026-05-04) — WSC → CM writeback ──

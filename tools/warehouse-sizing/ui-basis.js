@@ -494,9 +494,7 @@ function _renderMediaCard(profile, ctx) {
               <option value="fifo_strict"${_rotationPolicy === 'fifo_strict' ? ' selected' : ''}>Strict FIFO / lot control</option>
             </select>
           </label>
-          ${_faceMode ? '' : `<button class="hub-btn hub-btn-sm hub-btn-primary" id="wsc-media-apply"
-                  title="Persist this plan and set the design's storage mix from it. The mix stays editable in Configure.">
-            ${isApplied ? 'Re-apply to design' : 'Apply to design'}</button>`}
+          
         </div>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
@@ -554,18 +552,6 @@ function _bindMediaEvents(container, ctx) {
     _rotationPolicy = e.target.value;
     ctx.rerender();
   });
-  container.querySelector('#wsc-media-apply')?.addEventListener('click', () => {
-    const profile = ctx.getProfile();
-    const plan = selectMedia({
-      profile,
-      pinnedFactors: ctx.getPinnedFactors?.(),
-      policy: { rotation: _rotationPolicy },
-    });
-    if (!plan) { ctx.toast?.('No plan to apply — profile lacks a depth signal.', 'error'); return; }
-    ctx.applyMediaPlan(plan);
-    ctx.rerender();
-    ctx.toast?.(`Media plan applied — storage mix now ${plan.allocation.fullPallet}/${plan.allocation.cartonOnPallet}/${plan.allocation.cartonOnShelving} (derived).`, 'success');
-  });
 }
 
 // ============================================================
@@ -620,9 +606,7 @@ function _renderDynamicsCard(profile, ctx) {
               <option value="counterbalance"${_dynPolicy.mheStorageType === 'counterbalance' ? ' selected' : ''}>Counterbalance</option>
             </select>
           </label>
-          ${_faceMode ? '' : `<button class="hub-btn hub-btn-sm hub-btn-primary" id="wsc-dyn-apply"
-                  title="Persist this plan and write dock doors, staging SF, and the governing storage aisle into the design.">
-            ${isApplied ? 'Re-apply to design' : 'Apply to design'}</button>`}
+          
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">
@@ -678,13 +662,6 @@ function _bindDynamicsEvents(container, ctx) {
       ctx.rerender();
     });
   }
-  container.querySelector('#wsc-dyn-apply')?.addEventListener('click', () => {
-    const plan = _computeDynPreview(ctx);
-    if (!plan) { ctx.toast?.('No dynamics plan — missing a flow signal.', 'error'); return; }
-    ctx.applyDynamicsPlan(plan);
-    ctx.rerender();
-    ctx.toast?.(`Dynamics applied — ${plan.docks.inbound.doors}+${plan.docks.outbound.doors} doors, ${(plan.staging.totalSqft).toLocaleString()} sqft staging, ${plan.mhe.governingAisleFt} ft aisles (derived).`, 'success');
-  });
 }
 
 // ============================================================
@@ -732,9 +709,7 @@ function _renderLayoutCard(ctx) {
               <option value="NFPA"${_flueStd === 'NFPA' ? ' selected' : ''}>NFPA 13</option>
             </select>
           </label>
-          ${_faceMode ? '' : `<button class="hub-btn hub-btn-sm hub-btn-primary" id="wsc-layout-apply"
-                  title="Persist this plan; writes the recommended column grid and raises flue space to the standard's minimum (never shrinks it).">
-            ${isApplied ? 'Re-apply to design' : 'Apply to design'}</button>`}
+          
         </div>
       </div>
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:3px;">Column grid ↔ rack-bay fit</div>
@@ -767,12 +742,6 @@ function _bindLayoutEvents(container, ctx) {
   container.querySelector('#wsc-layout-flue')?.addEventListener('change', (e) => {
     _flueStd = e.target.value || null;
     ctx.rerender();
-  });
-  container.querySelector('#wsc-layout-apply')?.addEventListener('click', () => {
-    const plan = _computeLayoutPreview(ctx);
-    ctx.applyLayoutPlan(plan);
-    ctx.rerender();
-    ctx.toast?.(`Layout applied — ${plan.flueStandard} flues, ${plan.gridFit.recommended && plan.gridFit.recommended.spanFt !== plan.gridFit.spanXFt ? plan.gridFit.recommended.spanFt : plan.gridFit.spanXFt} ft grid, ${plan.compliance.failCount} check(s) failing.`, plan.compliance.failCount > 0 ? 'info' : 'success');
   });
 }
 
@@ -865,7 +834,8 @@ async function _renderFactorsCard(el, ctx) {
 /** W5 — Adopt bar under a station face (classic keeps its Apply button).
  *  status current → slim in-sync line; pending/stale → the orange bar. */
 function _renderAdoptBar(kind, fresh, applied) {
-  if (!_faceMode) return '';
+  // Post-M8b: classic deleted — the Adopt bar is the ONLY apply mechanism,
+  // so it renders regardless of face (unknown-face fallback included).
   const status = adoptStatus(kind, applied, fresh);
   if (status === 'none') return '';
   if (status === 'current') {

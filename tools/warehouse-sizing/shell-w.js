@@ -20,7 +20,9 @@ import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 
 // ─── Shell preference (tier-service pattern, CM shell-d lineage) ─────────
 const STORAGE_KEY = 'ies_wsc_shell';
-export const SHELLS = ['classic', 'w'];
+// Post-soak cleanup (2026-07-22, Brock GO): classic DELETED — 'w' is the
+// only shell; a stored 'classic' pref fails membership and coerces to default.
+export const SHELLS = ['w'];
 // W7 FLIP (2026-07-16): the station shell is the DEFAULT. Classic remains
 // one click away ('Classic layout' action) and is retained until the
 // post-soak cleanup — CM M8a/M8b lineage. Users who explicitly picked

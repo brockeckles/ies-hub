@@ -89,7 +89,7 @@ t('every basis-chain station face is a FACE_CARDS key', () => {
 
 console.log('\n── 2. face-gated rendering ─────────────────────────────────');
 
-t('classic (no face) renders the FULL stack — every card marker present', () => {
+t('no-face fallback renders the FULL stack — every card marker present', () => {
   resetBasisState();
   const c = fakeContainer();
   renderBasisView(c, makeCtx());
@@ -168,7 +168,7 @@ console.log('\n── 4. ui.js wiring pins ────────────�
 t('basis ctx carries face: _wswBasisFace(); classic short-circuits to null', () => {
   assert(/case 'basis': renderBasisView\(container, \{[^}]*face: _wswBasisFace\(\),/s.test(uiSrc), 'face in basis ctx');
   const fn = uiSrc.slice(uiSrc.indexOf('function _wswBasisFace()'));
-  assert(/if \(getWShellPref\(\) !== 'w'\) return null;/.test(fn.slice(0, 400)), 'classic → null');
+  assert(!/getWShellPref\(\) !== 'w'/.test(fn.slice(0, 400)), 'classic short-circuit stays deleted (2026-07-22)');
   assert(/\|\| 'data'/.test(fn.slice(0, 400)), 'blank station memory → data face');
 });
 
@@ -179,10 +179,9 @@ t('setProfile + adoptFactors refresh spine subs directly (w4b walk find)', () =>
   assert(/adoptFactors: \(live\) => \{ pinnedFactors = pinWscFactors\(live\); _markDirty\(\); _refreshWswSubs\(\); \}/.test(uiSrc), 'adoptFactors refreshes subs');
 });
 
-t('_refreshWswSubs rides the KPI cadence inside the shell-w branch', () => {
+t('_refreshWswSubs rides the KPI cadence (unconditional post-cleanup)', () => {
   const kpi = uiSrc.slice(uiSrc.indexOf('function _refreshWscKpis()'));
-  const branch = kpi.slice(kpi.indexOf("getShellPref() === 'w'") >= 0 ? kpi.indexOf("getShellPref() === 'w'") : kpi.indexOf("getWShellPref() === 'w'"));
-  assert(branch.slice(0, 300).includes('_refreshWswSubs()'), 'subs refresh on cadence');
+  assert(kpi.slice(0, 900).includes('_refreshWswSubs()'), 'subs refresh on cadence');
   // and the helper updates textContent only (no innerHTML churn)
   const sub = uiSrc.slice(uiSrc.indexOf('function _refreshWswSubs()'));
   assert(sub.slice(0, 500).includes('textContent'), 'surgical textContent update');

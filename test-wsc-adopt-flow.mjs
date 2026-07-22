@@ -119,14 +119,15 @@ t('storage face, stale: out-of-sync callout + re-adopt', () => {
   assert(c.innerHTML.includes('data-wsw-adopt="media"'), 'adopt button back');
 });
 
-t('classic keeps the three Apply buttons and gets NO adopt bars', () => {
+t('classic Apply buttons stay DELETED (post-soak cleanup 2026-07-22)', () => {
+  for (const id of ['wsc-media-apply', 'wsc-dyn-apply', 'wsc-layout-apply']) {
+    assert(!basisSrc.includes(id), `${id} resurrected`);
+  }
+  // No-face render (unknown-face fallback) still gets the Adopt bars — the
+  // bar is now the ONLY apply mechanism.
   const c = fakeContainer();
   renderBasisView(c, makeCtx({ profile: profileA, mediaPlan: mediaA }));
-  for (const id of ['wsc-media-apply', 'wsc-dyn-apply', 'wsc-layout-apply']) {
-    assert(c.innerHTML.includes(id), `classic has ${id}`);
-  }
-  assert(!c.innerHTML.includes('data-wsw-adopt='), 'no adopt buttons');
-  assert(!c.innerHTML.includes('data-wsw-adopt-state'), 'no adopt state line');
+  assert(c.innerHTML.includes('data-wsw-adopt-state'), 'adopt bars render without a face');
 });
 
 console.log('\n── 3. cascade + wiring pins ────────────────────────────────');
@@ -154,7 +155,6 @@ t('computeAdoptStatuses uses the SAME card policies (module state)', () => {
 t('ui.js: spine subs read adopt statuses; stale → STALE badge', () => {
   assert(uiSrc.includes('computeAdoptStatuses'), 'import + use');
   assert(/const tag = \(k\) => \(st && st\[k\] === 'stale'\) \? 'STALE' : 'adopted';/.test(uiSrc), 'stale tag');
-  assert(/function _wswAdoptStatuses\(\)[\s\S]{0,200}if \(getWShellPref\(\) !== 'w'\) return null;/.test(uiSrc), 'classic short-circuit');
 });
 
 t('adopt bar survives narrow canvas: wrap on the row, flex:none button', () => {
