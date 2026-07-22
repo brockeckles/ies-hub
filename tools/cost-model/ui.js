@@ -218,9 +218,9 @@ let _dBaselineCmp = null;
 let _railWiDebounce = null;           // rail quick what-if commit debounce
 
 function _useDShell() {
+  // M8b (2026-07-22, Brock GO): std-* spine deleted — no std guard needed.
   return viewMode === 'editor'
-    && shellD.getShellPref() === 'd'
-    && !_isStdKey(activeSection);
+    && shellD.getShellPref() === 'd';
 }
 
 /** Assemble the opts bag shell-d.js renders from (chrome opts + summaries). */
@@ -731,32 +731,17 @@ const SECTION_GROUPS = [
 ];
 
 // ============================================================
-// UX-2 / D3 (2026-07-04) — CM STANDARD MODE (Quick tier)
-// Six-step spine (~26 fields) rendered over the SAME model + binder the
-// Engineering sections use. Pure rendering filter: every untouched knob
-// keeps its heuristics-catalog default; the engines never know which tier
-// rendered the inputs. shared/tier.js owns the per-user preference
-// (default 'quick' — Brock decision #2, 2026-07-03).
+// M8b (2026-07-22, Brock GO) — the UX-2 Standard-mode std-* spine is
+// DELETED. Quick depth lives in the D shell's Essentials pill (shared/tier.js
+// still owns the preference). Only this stale-key migration survives:
+// persisted uiPrefs / lastVisited / deep links from pre-M8b sessions can
+// still carry std-* keys — coerce them to the Engineering section each
+// std step curated so old models open on a real canvas.
 // ============================================================
-const STD_SECTIONS = [
-  { key: 'std-basics',   label: 'Deal Basics', icon: 'settings',     group: 'std' },
-  { key: 'std-volume',   label: 'Volume',      icon: 'bar-chart',    group: 'std' },
-  { key: 'std-building', label: 'Building',    icon: 'home',         group: 'std' },
-  { key: 'std-labor',    label: 'Labor',       icon: 'users',        group: 'std' },
-  { key: 'std-money',    label: 'Money',       icon: 'trending-up',  group: 'std' },
-  { key: 'std-results',  label: 'Results',     icon: 'pie-chart',    group: 'std' },
-];
-const STD_GROUPS = [
-  { key: 'std', label: 'Standard', description: 'Six steps — everything else stays on catalog defaults' },
-];
-/** std step → the Engineering section its Advanced link opens (also the
- *  completeness proxy for the chrome dots). */
-const STD_TO_ENG = {
+const STD_MIGRATE = {
   'std-basics': 'setup', 'std-volume': 'volumes', 'std-building': 'facility',
   'std-labor': 'labor', 'std-money': 'financial', 'std-results': 'summary',
 };
-const ENG_TO_STD = Object.fromEntries(Object.entries(STD_TO_ENG).map(([s, e]) => [e, s]));
-const _isStdKey = (k) => String(k || '').startsWith('std-');
 
 // v0.3-chrome — sidebar drawer toggle (default closed)
 let _cmSidebarOpen = false;
@@ -1111,27 +1096,14 @@ function _resolveDealTargetModel() {
 }
 
 /** Render whichever view (landing vs editor) is active. Re-wires its events. */
-/** UX-2 — quick-tier editor opens land on the Standard spine. Must run
- *  BEFORE renderShell(): the chrome (tabs/pills/toggle label) is built from
- *  activeSection, so remapping later leaves Engineering chrome over Standard
- *  content (live-walk bug, 2026-07-04). Only remaps mapped sections — deep
- *  links to unmapped sections (whatif, scenarios, linked…) keep Engineering
- *  chrome deliberately. */
-function _applyTierOpenRemap() {
+/** M8b (2026-07-22) — was _applyTierOpenRemap. The std-* spine is gone;
+ *  the only remap left is stale-key MIGRATION: persisted std keys from
+ *  pre-M8b sessions coerce to their Engineering counterpart. Must still run
+ *  BEFORE renderShell(): the chrome is built from activeSection (2026-07-04
+ *  live-walk lesson). */
+function _migrateStaleStdKey() {
   if (viewMode !== 'editor') return;
-  // M6 — under the D shell the dual Standard nav is RETIRED: the quick
-  // tier maps to Essentials DEPTH (sub-nav curation), never to the std-*
-  // spine. std keys arriving from a classic session (stale lastVisited,
-  // deep links) remap to their Engineering counterpart so the D shell
-  // hosts them. Classic keeps the std spine untouched until M8.
-  if (shellD.getShellPref() === 'd') {
-    if (_isStdKey(activeSection)) activeSection = STD_TO_ENG[activeSection] || 'setup';
-    return;
-  }
-  if (!_isStdKey(activeSection)
-      && tierSvc.getTier('cm') === 'quick' && ENG_TO_STD[activeSection]) {
-    activeSection = ENG_TO_STD[activeSection];
-  }
+  if (STD_MIGRATE[activeSection]) activeSection = STD_MIGRATE[activeSection];
 }
 
 function renderCurrentView() {
@@ -1140,7 +1112,7 @@ function renderCurrentView() {
     rootEl.innerHTML = renderLanding();
     wireLandingEvents();
   } else {
-    _applyTierOpenRemap();
+    _migrateStaleStdKey();
     // M3 — Concept D shell (opt-in). Same section renderers, same
     // data-tc-* delegation contract, different chrome around them.
     rootEl.innerHTML = _useDShell()
@@ -1601,7 +1573,6 @@ function wireEditorEvents() {
       renderCurrentView();
     },
     onAction: (id) => {
-      if (id === 'cm-tier')   return handleTierToggle();
       if (id === 'cm-new')    return handleNew();
       if (id === 'cm-save')   return handleSave();
       if (id === 'cm-load')   return handleLoad();
@@ -1708,9 +1679,8 @@ function wireEditorEvents() {
     // while data-tc-section (same click) navigates. Strips are D-shell-only.
     const isEcoStrip = !!cell.closest('[data-eco-strip], [data-price-strip]');
     if (!isKpi && !isGen && !isDRail && !isEcoStrip) {
-      // P&L cells must be inside the Summary section content (std-results
-      // renders the same Summary markup — UX-2).
-      if (activeSection !== 'summary' && activeSection !== 'std-results') return;
+      // P&L cells must be inside the Summary section content.
+      if (activeSection !== 'summary') return;
       if (!cell.closest('#cm-section-content')) return;
     }
     if (_activeProvCell && _activeProvCell.rowKey === rowKey && _activeProvCell.year === year) {
@@ -3446,13 +3416,10 @@ function renderShell() {
 
 /** Build the opts object the shared primitive needs from CM state. */
 function _buildCmChromeOpts() {
-  // UX-2: chrome follows the ACTIVE SECTION's tier so tabs always match the
-  // rendered content (a quick-tier user drilling into an unmapped Engineering
-  // section still gets Engineering chrome). tier preference decides what the
-  // editor OPENS on; navigateSection keeps the two in sync from then on.
-  const _stdMode = _isStdKey(activeSection);
-  const groups = _stdMode ? STD_GROUPS : SECTION_GROUPS;
-  const _secList = _stdMode ? STD_SECTIONS : SECTIONS;
+  // M8b (2026-07-22): std-* spine deleted — chrome always lists the
+  // Engineering sections; quick depth is the D shell's Essentials pill.
+  const groups = SECTION_GROUPS;
+  const _secList = SECTIONS;
   const activeSec = _secList.find(s => s.key === activeSection) || _secList[0];
   const activeGroupKey = activeSec.group;
 
@@ -3465,13 +3432,8 @@ function _buildCmChromeOpts() {
     : (draft ? 'Brand-new model — Save to capture an audit timestamp' : 'Save to capture the latest changes');
 
   const actions = [
-    // M6 — under the D shell the Quick/Engineering button is REPLACED by
-    // the sub-nav depth pill (same tier preference behind both); showing
-    // both would be two controls fighting over one setting.
-    ...(shellD.getShellPref() === 'd' ? [] : [{ id: 'cm-tier',
-      label: _stdMode ? 'Engineering' : 'Quick',
-      title: _stdMode ? 'Switch to Engineering mode — all sections & knobs'
-                      : 'Switch to Quick mode — 6-step Standard build (everything else stays on catalog defaults)' }]),
+    // M8b — the classic Quick/Engineering (cm-tier) button is gone with the
+    // std spine; the depth preference lives in the D shell's Essentials pill.
     { id: 'cm-new',    label: 'New',    title: 'New model' },
     { id: 'cm-save',   label: 'Save',   title: 'Save', primary: true },
     { id: 'cm-load',   label: 'Load',   title: 'Load' },
@@ -3532,9 +3494,7 @@ function _buildCmChromeOpts() {
     sections: _secList,
     activePhase: activeGroupKey,
     activeSection,
-    // std steps proxy their completeness through the Engineering section
-    // they curate (std-basics ⇒ setup, etc.).
-    sectionCompleteness: (k) => _sectionCompleteness(STD_TO_ENG[k] || k),
+    sectionCompleteness: (k) => _sectionCompleteness(k),
     saveState: { state: stateName, title: stateTitle, when: formatSavedWhen() },
     actions,
     crumb: _modelTitleHtml,
@@ -3641,27 +3601,10 @@ function _cmExtraStyles() {
 // SECTION NAVIGATION
 // ============================================================
 
-/** UX-2 — flip Quick ↔ Engineering. Remaps the active section to its
- *  counterpart so the user stays in place (setup ⇄ std-basics, …). */
-function handleTierToggle() {
-  const toQuick = !_isStdKey(activeSection);
-  tierSvc.setTier('cm', toQuick ? 'quick' : 'engineering');
-  activeSection = toQuick
-    ? (ENG_TO_STD[activeSection] || 'std-basics')
-    : (STD_TO_ENG[activeSection] || 'setup');
-  renderCurrentView();
-}
-
+// M8b (2026-07-22) — the classic tier-toggle handler + the std/engineering
+// boundary branch went with the std-* spine; tier depth is set via the D
+// shell's Essentials pill only.
 function navigateSection(key) {
-  // UX-2 — crossing the std/engineering boundary swaps the whole chrome
-  // (different tab set), so take the full-render path and persist the tier
-  // preference: leaving the 6-step spine IS choosing Engineering.
-  if (_isStdKey(key) !== _isStdKey(activeSection)) {
-    tierSvc.setTier('cm', _isStdKey(key) ? 'quick' : 'engineering');
-    activeSection = key;
-    renderCurrentView();
-    return;
-  }
   activeSection = key;
 
   // M3 — remember where the user was inside each station so spine clicks
@@ -3820,13 +3763,8 @@ function renderSection() {
     scenarios: renderScenarios,
     whatif: renderWhatIfStudio,
     linked: renderLinkedDesigns,
-    // UX-2 — Standard mode (Quick tier) 6-step spine
-    'std-basics': renderStdBasics,
-    'std-volume': renderStdVolume,
-    'std-building': renderStdBuilding,
-    'std-labor': renderStdLabor,
-    'std-money': renderStdMoney,
-    'std-results': renderSummary, // answer-first: Results IS the Summary
+    // M8b (2026-07-22) — std-* entries deleted with the Standard spine;
+    // stale std keys migrate in _migrateStaleStdKey before render.
   };
 
   // 2026-07-03 — defensive: unknown section keys (e.g. stale handoff hints)
@@ -3856,307 +3794,6 @@ function renderSection() {
     // in lockstep with whatever the user is currently editing.
     refreshHeaderKpis();
   }
-}
-
-// ============================================================
-// UX-2 / D3 — STANDARD MODE RENDERERS (Quick tier, 2026-07-04)
-// Every input below re-uses the exact data-field / data-array / data-action
-// attributes the Engineering sections render, so the generic binder in
-// bindSectionEvents gives them identical behavior for free. NO new state,
-// NO engine params — a model produces the same numbers in either tier.
-// ============================================================
-
-/** Card wrapper with the per-step Advanced escape hatch (doc §6 D3:
- *  "everything else behind Advanced per step"). */
-function _stdCard({ title, desc, advTarget, advLabel, body }) {
-  return `
-  <div class="hub-card" style="margin-bottom:20px;padding:20px;">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px;">
-      <div>
-        <h3 style="font-size:15px;font-weight:700;color:var(--ies-navy);margin:0;">${title}</h3>
-        ${desc ? `<div style="font-size:12px;color:var(--ies-gray-600);margin-top:2px;">${desc}</div>` : ''}
-      </div>
-      ${advTarget ? `<button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="std-advanced" data-std-target="${advTarget}" title="Open the full Engineering section — flips this model view to Engineering mode">${advLabel || 'Advanced'} ⚙</button>` : ''}
-    </div>
-    ${body}
-  </div>`;
-}
-
-/** Prev/next footer so the spine reads as a walk, not a pile of cards. */
-function _stdStepNav(prevKey, nextKey, nextLabel) {
-  return `
-  <div style="display:flex;justify-content:space-between;margin:4px 0 24px;">
-    ${prevKey ? `<button class="hub-btn hub-btn-secondary" data-action="std-goto" data-std-target="${prevKey}">← Back</button>` : '<span></span>'}
-    ${nextKey ? `<button class="hub-btn hub-btn-primary" data-action="std-goto" data-std-target="${nextKey}">${nextLabel || 'Next'} →</button>` : ''}
-  </div>`;
-}
-
-function _stdHeader(stepNo, title, desc) {
-  return `
-  <div class="cm-section-header">
-    <div class="cm-section-title">${title} <span style="font-size:11px;font-weight:700;color:var(--ies-gray-400);letter-spacing:0.05em;">· STANDARD ${stepNo}/6</span></div>
-    <div class="cm-section-desc">${desc}</div>
-  </div>`;
-}
-
-function renderStdBasics() {
-  const pd = model.projectDetails || (model.projectDetails = {});
-  const markets = (refData.markets && refData.markets.length > 0) ? refData.markets : DEMO_MARKETS_FALLBACK;
-  const dc = dealContext.getActive ? dealContext.getActive() : null;
-  const dealChip = dc && dc.id
-    ? `<div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(0,71,171,0.08);color:var(--ies-blue);font-weight:600;margin-bottom:12px;">Working in deal: ${escapeHtml(dc.name || dc.id)}</div>`
-    : '';
-  const body = `
-    ${dealChip}
-    <div class="cm-form-row">
-      <div class="hub-field">
-        <label class="hub-field__label">Project Name</label>
-        <input class="hub-input" value="${escapeAttr(pd.name || '')}" placeholder="e.g., Acme Ecommerce Fulfillment" data-field="projectDetails.name" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Client</label>
-        <input class="hub-input" value="${escapeAttr(pd.clientName || '')}" placeholder="Client name" data-field="projectDetails.clientName" />
-      </div>
-    </div>
-    <div class="cm-form-row-3">
-      <div class="hub-field">
-        <label class="hub-field__label">Market</label>
-        <select class="hub-input" data-field="projectDetails.market">
-          <option value="">Select market...</option>
-          ${markets.map(m => {
-            const id = m.market_id || m.id;
-            return `<option value="${id}"${id === pd.market ? ' selected' : ''}>${escapeHtml(marketLabel(m))}</option>`;
-          }).join('')}
-        </select>
-        <div class="hub-field__hint">Drives wage, rent & utility defaults.</div>
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Industry Vertical</label>
-        <select class="hub-input" data-field="projectDetails.vertical">
-          <option value="">Select vertical...</option>
-          ${[['ecommerce','Ecommerce'],['retail','Retail'],['food_beverage','Food & Beverage'],['industrial','Industrial'],['pharmaceutical','Pharmaceutical'],['automotive','Automotive'],['consumer_goods','Consumer Goods'],['other','Other']].map(([v,l]) =>
-            `<option value="${v}"${String(pd.vertical || '').toLowerCase() === v ? ' selected' : ''}>${l}</option>`).join('')}
-        </select>
-        <div class="hub-field__hint">Drives planning-ratio defaults.</div>
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Storage Environment</label>
-        <select class="hub-input" data-field="projectDetails.storageEnvironment">
-          <option value="">Select storage...</option>
-          ${[['ambient','Ambient'],['refrigerated','Refrigerated'],['freezer','Freezer'],['temperature_controlled','Temperature Controlled']].map(([v,l]) =>
-            `<option value="${v}"${String(pd.storageEnvironment || '').toLowerCase() === v ? ' selected' : ''}>${l}</option>`).join('')}
-        </select>
-      </div>
-    </div>
-    <div class="cm-form-row">
-      <div class="hub-field">
-        <label class="hub-field__label">Contract Term (Years)</label>
-        <input class="hub-input" type="number" value="${pd.contractTerm || 5}" min="1" max="20" step="1" data-field="projectDetails.contractTerm" data-type="number" data-field-commit="change" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Link to Deal</label>
-        <select class="hub-input" data-field="projectDetails.dealId">
-          <option value="">— No linked deal —</option>
-          ${savedDeals.map(dl => {
-            const label = dl.deal_name + (dl.client_name ? ` (${dl.client_name})` : '');
-            return `<option value="${dl.id}"${dl.id === pd.dealId ? ' selected' : ''}>${escapeHtml(label)}</option>`;
-          }).join('')}
-        </select>
-      </div>
-    </div>
-    <div class="u-cap u-muted u-mt-1">Standard mode shows the ~26 inputs that move the answer. Every other knob keeps its corporate-catalog default — see <button data-action="std-advanced" data-std-target="assumptions" style="font-size:11px;border:none;background:none;color:var(--ies-blue);cursor:pointer;padding:0;text-decoration:underline;">Assumptions</button> for the full effective set.</div>`;
-  return _stdHeader(1, 'Deal Basics', 'Who, where, and for how long.')
-    + _stdCard({ title: 'Deal Basics', desc: 'Market + vertical pick the right defaults for everything downstream.', advTarget: 'setup', advLabel: 'Full Setup', body })
-    + _stdStepNav(null, 'std-volume', 'Volume');
-}
-
-function renderStdVolume() {
-  if (!Array.isArray(model.channels) || model.channels.length === 0) {
-    try { api.backfillChannelsFromLegacy(model); } catch (_) {}
-  }
-  const ch = (model.channels && model.channels[0]) || null;
-  if (!ch) {
-    return _stdHeader(2, 'Volume', 'How much product moves through the building.')
-      + _stdCard({ title: 'Volume', advTarget: 'volumes', advLabel: 'Full Volumes',
-          body: '<div style="font-size:13px;color:var(--ies-gray-500);">No volume channel yet — open the full Volumes section to add one.</div>' })
-      + _stdStepNav('std-basics', 'std-building', 'Building');
-  }
-  _activeChannelKey = ch.key; // seasonality preset handler resolves via this
-  const primary = ch.primary || {};
-  const conv = ch.conversions || {};
-  const season = (ch.seasonality && ch.seasonality.preset) || 'flat';
-  const body = `
-    <div class="cm-form-row-3">
-      <div class="hub-field">
-        <label class="hub-field__label">Annual Volume</label>
-        <input class="hub-input" type="number" value="${primary.value || 0}" min="0" step="1000" data-field="channels.0.primary.value" data-type="number" data-field-commit="change" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Unit of Measure</label>
-        <select class="hub-input" data-field="channels.0.primary.uom">
-          ${['units','cases','pallets','orders','lines'].map(u => `<option value="${u}"${primary.uom === u ? ' selected' : ''}>${u}</option>`).join('')}
-        </select>
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Seasonality</label>
-        <select class="hub-input" data-cm-action="seasonality-preset-change">
-          ${Object.entries(SEASONALITY_PRESET_LABELS).map(([v, l]) => `<option value="${v}"${season === v ? ' selected' : ''}>${l}</option>`).join('')}
-        </select>
-      </div>
-    </div>
-    <div class="cm-form-row-3">
-      <div class="hub-field">
-        <label class="hub-field__label">Lines per Order</label>
-        <input class="hub-input" type="number" value="${conv.linesPerOrder || 2}" min="0" step="0.1" data-field="channels.0.conversions.linesPerOrder" data-type="number" data-field-commit="change" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Units per Line</label>
-        <input class="hub-input" type="number" value="${conv.unitsPerLine || 5}" min="0" step="0.1" data-field="channels.0.conversions.unitsPerLine" data-type="number" data-field-commit="change" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Operating Days / Year</label>
-        <input class="hub-input" type="number" value="${(model.facility && model.facility.opDaysPerYear) || 260}" min="200" max="365" step="1" data-field="facility.opDaysPerYear" data-type="number" data-field-commit="change" />
-      </div>
-    </div>
-    <div class="u-cap u-muted">Orders, cases, pallets and daily rates derive from these via the conversion chain. Multi-channel mixes, returns and surge factors live in the full section.</div>`;
-  return _stdHeader(2, 'Volume', 'How much product moves through the building.')
-    + _stdCard({ title: 'Volume', desc: 'One primary channel; conversions derive the rest.', advTarget: 'volumes', advLabel: 'Full Volumes', body })
-    + _stdStepNav('std-basics', 'std-building', 'Building');
-}
-
-function renderStdBuilding() {
-  const f = model.facility || (model.facility = {});
-  const ov = f.overrides || {};
-  const hasRentOv = ov.ratePerSfYr !== undefined && ov.ratePerSfYr !== null && ov.ratePerSfYr !== '';
-  const body = `
-    <div class="cm-form-row-3">
-      <div class="hub-field">
-        <label class="hub-field__label">Total Square Feet</label>
-        <input class="hub-input" type="number" value="${f.totalSqft || ''}" placeholder="e.g., 150000" step="1000" data-field="facility.totalSqft" data-type="number" data-field-commit="change" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Clear Height (ft)</label>
-        <input class="hub-input" type="number" value="${f.clearHeight || ''}" placeholder="e.g., 32" step="1" data-field="facility.clearHeight" data-type="number" data-field-commit="change" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Dock Doors</label>
-        <input class="hub-input" type="number" value="${f.dockDoors || ''}" placeholder="e.g., 24" step="1" data-field="facility.dockDoors" data-type="number" data-field-commit="change" />
-      </div>
-    </div>
-    <div class="cm-form-row">
-      <div class="hub-field">
-        <label class="hub-field__label">Rent ($/SF/yr)</label>
-        <input class="hub-input" type="number" step="0.10" min="0" value="${hasRentOv ? ov.ratePerSfYr : ''}" placeholder="market default" data-field="facility.overrides.ratePerSfYr" data-type="number" data-field-commit="change" />
-        <div class="hub-field__hint">Blank = the selected market's rate. Type a value to override.</div>
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Automation Level</label>
-        <select class="hub-input" data-field="facility.automationLevel">
-          ${[['manual','Manual'],['semi','Semi-automated'],['automated','Automated']].map(([v,l]) =>
-            `<option value="${v}"${(f.automationLevel || 'manual') === v ? ' selected' : ''}>${l}</option>`).join('')}
-        </select>
-      </div>
-    </div>
-    <div class="u-cap u-muted">Utilities, maintenance, TI allowances and security tiers stay on market/catalog defaults — the full Facility section exposes them all.</div>`;
-  return _stdHeader(3, 'Building', 'The box the operation runs in.')
-    + _stdCard({ title: 'Building', desc: 'Size + rent drive facility cost; the market supplies the rates.', advTarget: 'facility', advLabel: 'Full Facility', body })
-    + _stdStepNav('std-volume', 'std-labor', 'Labor');
-}
-
-function renderStdLabor() {
-  const s = model.shifts || (model.shifts = {});
-  const lines = model.laborLines || [];
-  const rows = lines.map((l, i) => `
-    <tr>
-      <td><input class="hub-input" value="${escapeAttr(l.activity_name || '')}" style="font-size:12px;" data-array="laborLines" data-idx="${i}" data-field="activity_name" /></td>
-      <td><input class="hub-input" type="number" value="${l.base_uph || 0}" style="width:80px;font-size:12px;" data-array="laborLines" data-idx="${i}" data-field="base_uph" data-type="number" /></td>
-      <td><input class="hub-input" type="number" value="${l.volume || 0}" style="width:120px;font-size:12px;" data-array="laborLines" data-idx="${i}" data-field="volume" data-type="number" /></td>
-      <td><input class="hub-input" type="number" value="${l.hourly_rate || 0}" step="0.5" style="width:80px;font-size:12px;" data-array="laborLines" data-idx="${i}" data-field="hourly_rate" data-type="number" /></td>
-    </tr>`).join('');
-  const body = `
-    <div class="cm-form-row">
-      <div class="hub-field">
-        <label class="hub-field__label">Direct Utilization %</label>
-        <input class="hub-input" type="number" min="50" max="100" step="0.5" value="${s.directUtilization ?? 85}" data-field="shifts.directUtilization" data-type="number" data-field-commit="change" />
-        <div class="hub-field__hint">Share of paid time on task.</div>
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Bonus / Incentive %</label>
-        <input class="hub-input" type="number" min="0" max="50" step="0.25" value="${s.bonusPct ?? 5}" data-field="shifts.bonusPct" data-type="number" data-field-commit="change" />
-      </div>
-    </div>
-    ${lines.length ? `
-    <table class="hub-datatable hub-datatable--dense u-mt-1">
-      <thead><tr><th>Activity</th><th>UPH</th><th>Annual Volume</th><th>$/hr</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <div style="font-size:11px;color:var(--ies-gray-500);margin-top:6px;">Hours, FTEs and cost recompute as you type. OT, absence, shift premiums and temp mix ride the market profile / catalog defaults.</div>`
-    : `<div style="font-size:13px;color:var(--ies-gray-500);padding:12px 0;">No direct-labor activities yet. Open the full Labor section to add activities or pull them from the Operational Flow.</div>`}
-    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-      <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-indirect">${(model.indirectLaborLines || []).length > 0 ? '↻ Regenerate Indirect Labor' : icon('bolt') + ' Auto-Generate Indirect Labor'}</button>
-      <span style="font-size:11px;color:var(--ies-gray-500);align-self:center;">Leads, clerks & supervision sized from headcount ratios in the planning catalog.</span>
-    </div>`;
-  return _stdHeader(4, 'Labor', 'The activities and the people running them.')
-    + _stdCard({ title: 'Labor', desc: 'Direct activities at their UPHs; indirect auto-generates from ratios.', advTarget: 'labor', advLabel: 'Full Labor', body })
-    + _stdStepNav('std-building', 'std-money', 'Money');
-}
-
-function renderStdMoney() {
-  const f = model.financial || (model.financial = {});
-  const pd = model.projectDetails || {};
-  const ga = Number(f.gaMargin ?? (Number(f.targetMargin || 12) * 0.375).toFixed(2));
-  const mgmt = Number(f.mgmtFeeMargin ?? (Number(f.targetMargin || 12) * 0.625).toFixed(2));
-  const body = `
-    <div class="cm-form-row-3">
-      <div class="hub-field">
-        <label class="hub-field__label">G&amp;A Margin %</label>
-        <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${ga}" data-field="financial.gaMargin" data-type="number" data-field-commit="change" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Mgmt Fee Margin %</label>
-        <input class="hub-input" type="number" step="0.25" min="0" max="30" value="${mgmt}" data-field="financial.mgmtFeeMargin" data-type="number" data-field-commit="change" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Target Margin</label>
-        <input class="hub-input" value="${(ga + mgmt).toFixed(2)}%" readonly style="background:var(--ies-gray-50);color:var(--ies-gray-600);font-weight:700;" title="G&A + Mgmt Fee — the gross-up applied to every cost category" />
-      </div>
-    </div>
-    <div class="cm-form-row-3">
-      <div class="hub-field">
-        <label class="hub-field__label">Volume Growth %/yr</label>
-        <input class="hub-input" type="number" value="${f.volumeGrowth || 3}" step="0.5" data-field="financial.volumeGrowth" data-type="number" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Labor Escalation %/yr</label>
-        <input class="hub-input" type="number" value="${f.laborEscalation || 4}" step="0.5" data-field="financial.laborEscalation" data-type="number" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Cost Escalation %/yr</label>
-        <input class="hub-input" type="number" value="${f.annualEscalation || 3}" step="0.5" data-field="financial.annualEscalation" data-type="number" />
-      </div>
-    </div>
-    <div class="cm-form-row">
-      <div class="hub-field">
-        <label class="hub-field__label">Discount Rate %</label>
-        <input class="hub-input" type="number" value="${f.discountRate || 10}" step="0.5" data-field="financial.discountRate" data-type="number" />
-      </div>
-      <div class="hub-field">
-        <label class="hub-field__label">Tax Rate %</label>
-        <input class="hub-input" type="number" value="${pd.taxRate || 25}" step="0.5" min="0" max="50" data-field="projectDetails.taxRate" data-type="number" data-field-commit="change" />
-      </div>
-    </div>
-    <div style="border-top:1px solid var(--ies-gray-200);margin-top:8px;padding-top:12px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--ies-gray-500);margin-bottom:8px;">One-click cost lines from the catalog</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-equipment">${(model.equipmentLines || []).length > 0 ? '↻ Regenerate Equipment' : icon('bolt') + ' Equipment'}</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-overhead">${(model.overheadLines || []).length > 0 ? '↻ Regenerate Overhead' : icon('bolt') + ' Overhead'}</button>
-        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="auto-gen-startup">${(model.startupLines || []).length > 0 ? '↻ Regenerate Start-Up' : icon('bolt') + ' Start-Up'}</button>
-      </div>
-      <div style="font-size:11px;color:var(--ies-gray-500);margin-top:6px;">Seeded from sqft, headcount and vertical. Every generated line is editable in its Engineering section.</div>
-    </div>`;
-  return _stdHeader(5, 'Money', 'Margin, escalations, and the one-click cost lines.')
-    + _stdCard({ title: 'Money', desc: 'Commercial terms; the engines price everything from cost + margin.', advTarget: 'financial', advLabel: 'Full Financial', body })
-    + _stdStepNav('std-labor', 'std-results', 'See Results');
 }
 
 // ============================================================
@@ -12336,15 +11973,6 @@ function _launchToTool(target) {
 
 async function handleAction(action, idx, btn) {
   switch (action) {
-    case 'std-advanced': {
-      // UX-2 — per-step Advanced escape hatch → the full Engineering section.
-      navigateSection(btn?.dataset?.stdTarget || 'setup');
-      return;
-    }
-    case 'std-goto': {
-      navigateSection(btn?.dataset?.stdTarget || 'std-basics');
-      return;
-    }
     case 'vol-channel-tab':
       _activeChannelKey = btn?.dataset?.key || _activeChannelKey;
       _volEditingOverrideKey = null;

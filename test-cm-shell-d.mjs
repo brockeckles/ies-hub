@@ -71,7 +71,7 @@ t('stations follow the causal order Deal→Volume→Operation→Economics→Pric
   assert(stationForSection('setup').key === 'deal', 'setup lives in Deal');
   assert(stationForSection('pricing').key === 'price', 'pricing lives in Price');
   assert(stationForSection('summary').key === 'economics', 'summary lives in Economics');
-  assert(stationForSection('std-basics') === null, 'std keys have no station (Quick tier keeps classic chrome)');
+  assert(stationForSection('std-basics') === null, 'std keys have no station (spine deleted M8b; stale keys migrate in ui.js)');
 });
 
 // ---- 3. Chrome contract ----
@@ -181,9 +181,9 @@ t('updateDRail blanks all values when not ready', () => {
 });
 
 // ---- 5. ui.js integration pins ----
-t('ui.js: classic default — D shell only via _useDShell() (pref + engineering tier)', () => {
+t('ui.js: _useDShell gates on the pref alone (M8b: std guard deleted)', () => {
   assert(uiSrc.includes("shellD.getShellPref() === 'd'"), 'pref consulted');
-  assert(uiSrc.includes('&& !_isStdKey(activeSection);'), 'Quick tier keeps classic chrome');
+  assert(!uiSrc.includes('_isStdKey'), 'std guard must stay deleted (M8b)');
   assert(uiSrc.includes('? (shellD.renderShellD(_buildDShellOpts()) + _cmExtraStyles())'), 'renderCurrentView branches to D shell + keeps provenance/form styles');
   assert(uiSrc.includes(': renderShell();'), 'classic path intact');
 });
@@ -481,16 +481,16 @@ t('renderDSpine: essentials depth retargets station clicks to the first essentia
   assert(/data-tc-section="pricing"[^>]*title="Price"/.test(html), 'price station targets its first ESSENTIAL');
 });
 
-t('ui.js: dual Standard nav retired under the D shell (M6)', () => {
-  assert(/if \(shellD\.getShellPref\(\) === 'd'\) \{\n    if \(_isStdKey\(activeSection\)\) activeSection = STD_TO_ENG\[activeSection\] \|\| 'setup';\n    return;\n  \}/.test(uiSrc),
-    'open-remap: std→eng under D pref, never eng→std');
-  assert(/\.\.\.\(shellD\.getShellPref\(\) === 'd' \? \[\] : \[\{ id: 'cm-tier',/.test(uiSrc),
-    'Quick/Engineering action suppressed under the D shell (depth pill owns the preference)');
+t('ui.js: std-* spine DELETED (M8b); stale keys migrate; depth pill owns tier', () => {
+  assert(uiSrc.includes('const STD_MIGRATE'), 'stale-key migration map present');
+  assert(/_migrateStaleStdKey\(\);/.test(uiSrc), 'migration runs before shell render');
+  assert(!uiSrc.includes('STD_SECTIONS') && !/function renderStd/.test(uiSrc), 'std spine stays dead');
+  assert(!uiSrc.includes("id: 'cm-tier'"), 'cm-tier action gone with the spine');
   assert(uiSrc.includes("e.target.closest('[data-cmd-depth]')"), 'depth-pill delegation bound');
   const depthBlock = uiSrc.slice(uiSrc.indexOf("closest('[data-cmd-depth]')"), uiSrc.indexOf("closest('[data-cmd-depth]')") + 420);
   assert(depthBlock.includes("tierSvc.setTier('cm'"), 'depth pill writes the SAME tier preference');
   assert(uiSrc.includes("depth: tierSvc.getTier('cm') === 'quick' ? 'essentials' : 'engineering'"),
-    'depth derives from the tier service (one preference, two chromes)');
+    'depth derives from the tier service (one preference, one chrome)');
 });
 
 // ---- 2026-07-14 (Brock): assumptions pill must SURVIVE economics navigation ----
