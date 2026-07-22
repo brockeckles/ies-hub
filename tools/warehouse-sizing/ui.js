@@ -12,27 +12,27 @@ import { bus } from '../../shared/event-bus.js?v=20260418-sK';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260705-u1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260710-r2';
-import * as calc from './calc.js?v=20260703-ux0';
+import * as calc from './calc.js?v=20260722-s1';
 import * as api from './api.js?v=20260703-dc2';
 import * as cmApi from '../cost-model/api.js?v=20260704-cmp1';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
-import { render3DView, disposeScene3d } from './ui-3d.js?v=20260705-u3b';
+import { render3DView, disposeScene3d } from './ui-3d.js?v=20260722-s1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
-import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260716-w7c';
-import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260710-r2';
-import { renderDashboard } from './ui-dashboard.js?v=20260715-w1a';
-import { renderBasisView, resetBasisState, computeAdoptStatuses } from './ui-basis.js?v=20260716-w7a';
+import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260722-s1';
+import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260722-s1';
+import { renderDashboard } from './ui-dashboard.js?v=20260722-s1';
+import { renderBasisView, resetBasisState, computeAdoptStatuses } from './ui-basis.js?v=20260722-s1';
 import { buildDesignBasisModel, renderDesignBasisHtml } from './basis-doc.js?v=20260716-w7a';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { deriveRequirement } from './requirement-seam.js?v=20260715-w1a';
 import { buildRailInspector, renderInspectorHtml } from './rail-inspector.js?v=20260715-w3a';
 import { renderShellW, updateWRail, getShellPref as getWShellPref, setShellPref as setWShellPref, stationForSection as wStationForSection, W_STATIONS } from './shell-w.js?v=20260716-w7b';
-import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260710-r2';
-import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260702-p1b';
+import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260722-s1';
+import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260722-s1';
 import { wscExtraStyles } from './ui-styles.js?v=20260710-r2';
-import { bindShellEvents } from './ui-shell-events.js?v=20260716-w7a';
+import { bindShellEvents } from './ui-shell-events.js?v=20260722-s1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================
@@ -1277,7 +1277,7 @@ let _planMeta = null;
  * Extraction 2026-05-14 (autonomous session). Body moved verbatim into
  * calc.js so it can be unit-tested directly and so ui.js drops below 1K LOC.
  *
- * @returns {import('./calc.js?v=20260703-ux0').SizingInputs}
+ * @returns {import('./calc.js?v=20260722-s1').SizingInputs}
  */
 function toSizingInputs() {
   // W1 requirement seam (2026-07-15) — applied basis plans fill UNASSERTED

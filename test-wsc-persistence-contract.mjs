@@ -28,7 +28,7 @@ const api = await import('./tools/warehouse-sizing/api.js?test=w0');
 const { db } = await import('./shared/supabase.js?v=20260703-hw1');
 const dealContext = await import('./shared/deal-context.js?v=20260703-dc1');
 const { createDefaultFacility, createDefaultZones, createDefaultVolumes } =
-  await import('./tools/warehouse-sizing/ui-cm-bridge.js?v=20260702-p1b');
+  await import('./tools/warehouse-sizing/ui-cm-bridge.js?v=20260722-s1');
 
 const uiSrc = readFileSync('./tools/warehouse-sizing/ui.js', 'utf8');
 const apiSrc = readFileSync('./tools/warehouse-sizing/api.js', 'utf8');

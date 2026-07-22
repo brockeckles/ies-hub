@@ -19,7 +19,7 @@
  * @module tools/warehouse-sizing/ui-plan
  */
 
-import * as calc from './calc.js?v=20260703-ux0';
+import * as calc from './calc.js?v=20260722-s1';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 
 // Phase A.A6 (2026-05-26) — Foot-snap grid overlay state. Module-level
@@ -1701,5 +1701,5 @@ export function hitCorner(r, mx, my) {
 /**
  * Convert the UI's (pctx.facility, pctx.zones, pctx.volumes) state into SizingInputs
  * for the v2-equivalent calc.sizeFacility engine.
- * @returns {import('./calc.js?v=20260703-ux0').SizingInputs}
+ * @returns {import('./calc.js?v=20260722-s1').SizingInputs}
  */

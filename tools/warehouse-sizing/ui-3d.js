@@ -13,7 +13,7 @@
  * @module tools/warehouse-sizing/ui-3d
  */
 
-import * as calc from './calc.js?v=20260703-ux0';
+import * as calc from './calc.js?v=20260722-s1';
 import { buildScenePlan, positionsPerFaceSegment } from './scene-plan.js?v=20260705-n7a';
 
 // P3-1: single-live window.mouseup for the no-OrbitControls drag fallback

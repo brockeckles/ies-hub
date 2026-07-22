@@ -25,7 +25,7 @@
  */
 
 import { wscFactorValue } from './factors-calc.js?v=20260704-n2a';
-import { computeUnitLoad } from './calc.js?v=20260703-ux0';
+import { computeUnitLoad } from './calc.js?v=20260722-s1';
 
 export const RACK_UPRIGHT_WIDTH_IN = 3;   // typical structural upright column width
 
