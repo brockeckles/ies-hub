@@ -14,9 +14,9 @@ import { readFileSync } from 'node:fs';
 globalThis.window = globalThis.window || { location: { hostname: '', pathname: '/', search: '' } };
 
 const { deriveRequirement } = await import('./tools/warehouse-sizing/requirement-seam.js?v=20260715-w1a');
-const calc = await import('./tools/warehouse-sizing/calc.js?v=20260722-s1');
+const calc = await import('./tools/warehouse-sizing/calc.js?v=20260722-s2');
 const { createDefaultFacility, createDefaultZones, createDefaultVolumes } =
-  await import('./tools/warehouse-sizing/ui-cm-bridge.js?v=20260722-s1');
+  await import('./tools/warehouse-sizing/ui-cm-bridge.js?v=20260722-s2');
 
 let passed = 0, failed = 0;
 const failures = [];

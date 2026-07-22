@@ -23,7 +23,7 @@
  * @module tools/warehouse-sizing/ui-config
  */
 
-import * as calc from './calc.js?v=20260722-s1';
+import * as calc from './calc.js?v=20260722-s2';
 import * as cmApi from '../cost-model/api.js?v=20260704-cmp1';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';

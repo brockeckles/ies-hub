@@ -23,8 +23,8 @@ import {
 import { wscFactorsDrift } from './factors-calc.js?v=20260704-n2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { selectMedia } from './media-calc.js?v=20260704-n3a';
-import { computeDynamics } from './dynamics-calc.js?v=20260722-s1';
-import { synthesizeLayout } from './layout-calc.js?v=20260722-s1';
+import { computeDynamics } from './dynamics-calc.js?v=20260722-s2';
+import { synthesizeLayout } from './layout-calc.js?v=20260722-s2';
 import { buildDesignBasisModel, renderDesignBasisHtml } from './basis-doc.js?v=20260716-w7a';
 import { adoptStatus, adoptSummary, ADOPT_DOWNSTREAM, ADOPT_BUTTON_LABEL } from './adopt-calc.js?v=20260716-w5a';
 

@@ -20,7 +20,7 @@
  * @module tools/warehouse-sizing/ui-elevation
  */
 
-import * as calc from './calc.js?v=20260722-s1';
+import * as calc from './calc.js?v=20260722-s2';
 
 export function renderElevation(ectx) {
   // Phase A: route elevation params through mode-aware ectx.facility shape.

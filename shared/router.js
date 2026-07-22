@@ -6,10 +6,10 @@
  *   #welcome, #overview, #deals, #designtools/cost-model, #designtools/fleet-modeler
  *
  * Usage:
- *   import { router } from './router.js?v=20260722-s1';
+ *   import { router } from './router.js?v=20260722-s2';
  *
  *   router.register('designtools/cost-model', {
- *     load: () => import('../tools/cost-model/ui.js?v=20260722-s1'),
+ *     load: () => import('../tools/cost-model/ui.js?v=20260722-s2'),
  *     title: 'Cost Model Builder',
  *   });
  *

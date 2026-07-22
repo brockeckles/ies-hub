@@ -22,7 +22,7 @@
  */
 
 import { wscFactorValue } from './factors-calc.js?v=20260704-n2a';
-import { computeDockRequirement } from './calc.js?v=20260722-s1';
+import { computeDockRequirement } from './calc.js?v=20260722-s2';
 
 const GMA_PALLET_FOOTPRINT_SQFT = (48 * 40) / 144; // 13.33
 
