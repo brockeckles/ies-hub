@@ -27,7 +27,10 @@ import * as shiftPlannerUi from './shift-planner-ui.js?v=20260705-u3d';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260705-u1a';
-import { renderToolChrome, refreshToolChrome, refreshToolChromeActions, refreshKpiStrip, bindToolChromeEvents, applyToolCrumb } from '../../shared/tool-chrome.js?v=20260710-r2';
+// M8b (2026-07-22) — renderToolChrome/refreshToolChrome/refreshToolChromeActions
+// dropped with the classic chrome; the D shell renders its own frame and only
+// the shared KPI strip, crumb, and delegation binder remain in use.
+import { refreshKpiStrip, bindToolChromeEvents, applyToolCrumb } from '../../shared/tool-chrome.js?v=20260710-r2';
 import { consumeFocusHint as consumeCmDrillbackHint } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
@@ -218,9 +221,10 @@ let _dBaselineCmp = null;
 let _railWiDebounce = null;           // rail quick what-if commit debounce
 
 function _useDShell() {
-  // M8b (2026-07-22, Brock GO): std-* spine deleted — no std guard needed.
-  return viewMode === 'editor'
-    && shellD.getShellPref() === 'd';
+  // M8b (2026-07-22, Brock GO): classic + std spine deleted — the D shell
+  // is the only editor chrome. Kept as a function: call sites still gate
+  // "am I in the editor" (getShellPref now always returns 'd').
+  return viewMode === 'editor';
 }
 
 /** Assemble the opts bag shell-d.js renders from (chrome opts + summaries). */
@@ -445,7 +449,6 @@ function _markCmDirty() {
   if (rootEl && viewMode === 'editor') {
     try {
       if (_useDShell()) { shellD.refreshShellD(rootEl, _buildDShellOpts()); }
-      else { refreshToolChromeActions(rootEl, _buildCmChromeOpts()); }
     } catch (_) {}
   }
 }
@@ -1115,9 +1118,9 @@ function renderCurrentView() {
     _migrateStaleStdKey();
     // M3 — Concept D shell (opt-in). Same section renderers, same
     // data-tc-* delegation contract, different chrome around them.
-    rootEl.innerHTML = _useDShell()
-      ? (shellD.renderShellD(_buildDShellOpts()) + _cmExtraStyles())
-      : renderShell();
+    // M8b — the D shell is the only editor chrome (classic renderShell()
+    // deleted with the flag).
+    rootEl.innerHTML = shellD.renderShellD(_buildDShellOpts()) + _cmExtraStyles();
     wireEditorEvents();
   }
 }
@@ -1258,14 +1261,13 @@ async function loadModelByCmId(id) {
     // project resets live in the pre-render reset block above — they must
     // run before renderCurrentView.)
     _dScenarioFamily = [];
-    if (shellD.getShellPref() === 'd') {
-      api.listScenarioFamilyForProject(id).then(rows => {
-        _dScenarioFamily = Array.isArray(rows) ? rows : [];
-        if (rootEl && viewMode === 'editor') {
-          try { _refreshTopChrome(); } catch (_) {}
-        }
-      }).catch(() => {});
-    }
+    // M8b — the D shell is the only chrome; always fetch the family.
+    api.listScenarioFamilyForProject(id).then(rows => {
+      _dScenarioFamily = Array.isArray(rows) ? rows : [];
+      if (rootEl && viewMode === 'editor') {
+        try { _refreshTopChrome(); } catch (_) {}
+      }
+    }).catch(() => {});
   } catch (err) {
     console.error('[CM] Load failed:', err);
     showToast('Load failed: ' + err.message, 'error');
@@ -1577,19 +1579,6 @@ function wireEditorEvents() {
       if (id === 'cm-save')   return handleSave();
       if (id === 'cm-load')   return handleLoad();
       if (id === 'cm-export') return handleExportExcel();
-      if (id === 'cm-shell') {
-        const next = shellD.getShellPref() === 'd' ? 'classic' : 'd';
-        shellD.setShellPref(next);
-        // Lazy-fetch the scenario family the first time the D shell opens.
-        if (next === 'd' && model?.id && !_dScenarioFamily.length) {
-          api.listScenarioFamilyForProject(model.id).then(rows => {
-            _dScenarioFamily = Array.isArray(rows) ? rows : [];
-            try { _refreshTopChrome(); } catch (_) {}
-          }).catch(() => {});
-        }
-        renderCurrentView();
-        return;
-      }
     },
   });
 
@@ -3406,15 +3395,11 @@ function _wireRailWhatIf(izBody) {
   });
 }
 
-function renderShell() {
-  // CM Chrome v3 ripple, step 2 — chrome HTML+CSS lives in
-  // shared/tool-chrome.js. CM passes opts in and consumes the
-  // returned shell HTML, then appends its own provenance panel +
-  // section-content-specific CSS.
-  return renderToolChrome(_buildCmChromeOpts()) + _cmExtraStyles();
-}
+// M8b (2026-07-22, Brock GO) — classic renderShell() deleted; the D shell is
+// the only editor chrome. _buildCmChromeOpts survives: _buildDShellOpts
+// passes it as opts.chrome into every shell-d renderer.
 
-/** Build the opts object the shared primitive needs from CM state. */
+/** Build the opts object the shell renderers need from CM state. */
 function _buildCmChromeOpts() {
   // M8b (2026-07-22): std-* spine deleted — chrome always lists the
   // Engineering sections; quick depth is the D shell's Essentials pill.
@@ -3438,12 +3423,7 @@ function _buildCmChromeOpts() {
     { id: 'cm-save',   label: 'Save',   title: 'Save', primary: true },
     { id: 'cm-load',   label: 'Load',   title: 'Load' },
     { id: 'cm-export', label: 'Export', title: 'Export to .xlsx' },
-    // M3 — Concept D shell opt-in (tier-service-pattern preference).
-    { id: 'cm-shell',
-      label: shellD.getShellPref() === 'd' ? 'Classic layout' : 'New layout',
-      title: shellD.getShellPref() === 'd'
-        ? 'Switch to the classic Cost Model layout (kept during the transition)'
-        : 'Back to the standard Cost Model layout — 5-station spine + live P&L rail' },
+    // M8b — the cm-shell Classic/New layout toggle is gone with classic.
   ];
 
   // R1 (2026-07-06): model identity — name + scenario/status chips — now
@@ -3638,9 +3618,8 @@ function navigateSection(key) {
  * nav buttons.
  */
 function _refreshTopChrome() {
-  if (!rootEl) return;
-  if (_useDShell()) { shellD.refreshShellD(rootEl, _buildDShellOpts()); return; }
-  refreshToolChrome(rootEl, _buildCmChromeOpts());
+  if (!rootEl || !_useDShell()) return;
+  shellD.refreshShellD(rootEl, _buildDShellOpts());
 }
 
 // ============================================================

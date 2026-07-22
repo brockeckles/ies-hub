@@ -34,11 +34,10 @@ import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 // ─── Shell preference (tier-service pattern) ──────────────────────────────
 
 const STORAGE_KEY = 'ies_cm_shell';
-export const SHELLS = ['classic', 'd'];
-// M8a (2026-07-13, Brock decision): Concept D is THE Cost Model. Users
-// with no stored preference get the D shell; an explicit 'classic' pref
-// (the escape-hatch button) is always honored. Classic + the std spine
-// stay in the codebase until the post-soak M8b cleanup.
+// M8b (2026-07-22, Brock GO): classic is DELETED. 'd' is the only shell;
+// a stored 'classic' pref from a pre-M8b session fails the membership
+// check in getShellPref and silently coerces to the default.
+export const SHELLS = ['d'];
 const DEFAULT_SHELL = 'd';
 
 /** In-memory fallback so the module works under node (pure suite). */

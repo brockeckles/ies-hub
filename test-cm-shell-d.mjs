@@ -39,14 +39,14 @@ function t(name, fn) {
 function assert(cond, msg = 'assertion failed') { if (!cond) throw new Error(msg); }
 
 // ---- 1. Preference service ----
-t('M8a: shell pref defaults to D; explicit classic honored; invalid ignored', () => {
-  assert(getShellPref() === 'd', 'default must be d (M8a flip — Brock decision 2026-07-13)');
-  assert(setShellPref('classic') === 'classic', 'escape hatch: explicit classic sticks');
-  assert(getShellPref() === 'classic', 'persisted classic');
-  assert(setShellPref('bogus') === 'classic', 'invalid ignored, current returned');
-  assert(getShellPref() === 'classic', 'still classic after invalid set');
-  setShellPref('d');
-  assert(getShellPref() === 'd', 'back to d');
+t('M8b: D is the ONLY shell; stored classic prefs coerce to d', () => {
+  assert(getShellPref() === 'd', 'default must be d');
+  assert(shellD.SHELLS.length === 1 && shellD.SHELLS[0] === 'd', 'classic deleted from SHELLS');
+  assert(setShellPref('classic') === 'd', 'classic no longer settable — returns current (d)');
+  assert(getShellPref() === 'd', 'still d after classic attempt');
+  assert(setShellPref('bogus') === 'd', 'invalid ignored');
+  // A pre-M8b localStorage value of "classic" fails the membership check
+  // and falls to DEFAULT_SHELL — pinned via the setter refusing it above.
 });
 
 // ---- 2. Station map vs ui.js SECTIONS ----
@@ -198,11 +198,15 @@ t('sub-nav pills follow the STATION section order, not SECTIONS order', () => {
   assert(iFlow < iFac && iFac < iLab, `station order must win: flow(${iFlow}) < facility(${iFac}) < labor(${iLab})`);
 });
 
-t('ui.js: _useDShell gates on the pref alone (M8b: std guard deleted)', () => {
-  assert(uiSrc.includes("shellD.getShellPref() === 'd'"), 'pref consulted');
-  assert(!uiSrc.includes('_isStdKey'), 'std guard must stay deleted (M8b)');
-  assert(uiSrc.includes('? (shellD.renderShellD(_buildDShellOpts()) + _cmExtraStyles())'), 'renderCurrentView branches to D shell + keeps provenance/form styles');
-  assert(uiSrc.includes(': renderShell();'), 'classic path intact');
+t('ui.js: D shell is the ONLY editor chrome (M8b: classic + std deleted)', () => {
+  assert(uiSrc.includes("return viewMode === 'editor';"), '_useDShell = editor gate only');
+  assert(!uiSrc.includes('_isStdKey'), 'std guard must stay deleted');
+  assert(uiSrc.includes('rootEl.innerHTML = shellD.renderShellD(_buildDShellOpts()) + _cmExtraStyles();'),
+    'renderCurrentView renders the D shell unconditionally + keeps provenance/form styles');
+  assert(!uiSrc.includes('function renderShell()'), 'classic renderShell stays deleted');
+  assert(!uiSrc.includes("id: 'cm-shell'") && !uiSrc.includes("id === 'cm-shell'"), 'cm-shell toggle stays deleted');
+  assert(!uiSrc.includes('renderToolChrome(') && !uiSrc.includes('refreshToolChrome(rootEl'),
+    'classic chrome renderer calls stay deleted');
 });
 
 t('ui.js: rail refresh rides refreshHeaderKpis; provenance admits rail cells', () => {
