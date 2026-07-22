@@ -2288,8 +2288,20 @@ export function formStateToInputs({ facility = {}, zones = {}, volumes = {} } = 
     return Math.round(wFt * hFt);
   };
   const officeSqftOverride       = _resizedSqft('office');
-  const shipStagingSqftOverride  = _resizedSqft('shipStaging');
-  const recvStagingSqftOverride  = _resizedSqft('recvStaging');
+  // Staging-divergence fix (2026-07-22, parked since W1): Configure's
+  // Recv/Ship Staging SF fields — which applyDynamicsPlan also writes with
+  // the dwell-driven plan figures — were never mapped into the engine, so
+  // sizeFacility silently fell back to its 0.15 × 18 SF/plt heuristic and
+  // the sized output (Dashboard / 2D strips / CM writeback / §11 provided)
+  // diverged from the plan card, Configure, 3D scene, and §11 required.
+  // Precedence: drawn 2D resize (most recent explicit gesture) > typed /
+  // applied-plan zones value > engine heuristic. Zones default to 0, so
+  // every scenario without an asserted or applied staging figure is
+  // byte-identical (heuristic path unchanged).
+  const shipStagingSqftOverride  = _resizedSqft('shipStaging')
+    || Math.round(Math.max(0, +zones.shipStagingSqft || 0));
+  const recvStagingSqftOverride  = _resizedSqft('recvStaging')
+    || Math.round(Math.max(0, +zones.receiveStagingSqft || 0));
   const forwardPickSqftOverride  = _resizedSqft('forwardPick');
   const aisleMap = { 12: 'wide', 10: 'narrow', 6: 'vna' };
   const aisleType = aisleMap[Math.round(facility.aisleWidth || 0)] || 'narrow';
