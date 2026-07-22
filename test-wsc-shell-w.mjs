@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 globalThis.window = globalThis.window || { location: { hostname: '', pathname: '/', search: '' } };
 
-const shellW = await import('./tools/warehouse-sizing/shell-w.js?v=20260716-w7b');
+const shellW = await import('./tools/warehouse-sizing/shell-w.js?v=20260722-s5');
 const { SHELLS, getShellPref, setShellPref, W_STATIONS, stationForSection, renderShellW, updateWRail } = shellW;
 
 const uiSrc = readFileSync('./tools/warehouse-sizing/ui.js', 'utf8');

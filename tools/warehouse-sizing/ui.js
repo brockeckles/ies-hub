@@ -25,16 +25,16 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260722-s2';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260722-s2';
 import { renderDashboard } from './ui-dashboard.js?v=20260722-s2';
-import { renderBasisView, resetBasisState, computeAdoptStatuses } from './ui-basis.js?v=20260722-s2';
+import { renderBasisView, resetBasisState, computeAdoptStatuses } from './ui-basis.js?v=20260722-s5';
 import { buildDesignBasisModel, renderDesignBasisHtml } from './basis-doc.js?v=20260716-w7a';
 import { pinWscFactors } from './factors-calc.js?v=20260704-n2a';
 import { deriveRequirement } from './requirement-seam.js?v=20260715-w1a';
 import { buildRailInspector, renderInspectorHtml } from './rail-inspector.js?v=20260715-w3a';
-import { renderShellW, updateWRail, getShellPref as getWShellPref, setShellPref as setWShellPref, stationForSection as wStationForSection, W_STATIONS } from './shell-w.js?v=20260716-w7b';
+import { renderShellW, updateWRail, getShellPref as getWShellPref, setShellPref as setWShellPref, stationForSection as wStationForSection, W_STATIONS } from './shell-w.js?v=20260722-s5';
 import { renderElevation, drawElevation, shuffledBayLevelOrder } from './ui-elevation.js?v=20260722-s2';
 import { pushToCm, handleCmPush, createDefaultFacility, createDefaultZones, createDefaultVolumes } from './ui-cm-bridge.js?v=20260722-s2';
 import { wscExtraStyles } from './ui-styles.js?v=20260710-r2';
-import { bindShellEvents } from './ui-shell-events.js?v=20260722-s2';
+import { bindShellEvents } from './ui-shell-events.js?v=20260722-s5';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================
