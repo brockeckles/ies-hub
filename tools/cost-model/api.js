@@ -1432,7 +1432,7 @@ export async function detachModelFromDeal(modelId) {
   } catch (err) {
     console.warn('[CM] detachModelFromDeal: deal_sites star clear failed:', err);
   }
-  recordAudit({ table: 'cost_model_projects', id: modelId, action: 'detach_from_deal', fields: { deal_deals_id: null, site_id: null } }).catch(() => {});
+  recordAudit({ table: 'cost_model_projects', id: modelId, action: 'update', fields: { op: 'detach_from_deal', deal_deals_id: null, site_id: null } }).catch(() => {});
   return row;
 }
 

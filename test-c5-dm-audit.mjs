@@ -25,39 +25,54 @@ function fnBody(name) {
   return src.slice(i, j > 0 ? j : src.length);
 }
 
-// [fnName, entity table, action]
+// C5 walk-fix (2026-07-22): audit_log.action carries a DB CHECK constraint
+// (insert|update|delete|link|unlink). Descriptive verbs sent as `action`
+// violated it and were SILENTLY dropped (fire-and-forget) since S1 — caught
+// live when a ★ toggle recorded nothing. Actions are now enum verbs; the
+// descriptive name rides in fields.op.
+// [fnName, entity table, enum action, op (null = none)]
 const PINS = [
-  // C5 additions
-  ['createDeal',          'deal_deals',          'create_deal'],
-  ['deleteDeal',          'deal_deals',          'delete_deal'],
-  ['saveStrategy',        'deal_strategy',       'update'],
-  ['createArtifact',      'deal_artifacts',      'create_artifact'],
-  ['deleteArtifact',      'deal_artifacts',      'delete_artifact'],
-  ['recordDealOutcome',   'deal_outcomes',       'record_outcome'],
-  ['updateSite',          'deal_sites',          'update_site'],
-  ['assignModelToSite',   'cost_model_projects', 'assign_model_to_site'],
-  ['setDosElementStatus', 'deal_dos_status',     'update'],
-  ['advanceDealStage',    'deal_deals',          'advance_stage'],
-  // pre-C5 (kept as-is — action names are historical)
-  ['setModelInBid',       'deal_sites',          'set_site_in_bid'],
-  ['createSite',          'deal_sites',          'create_site'],
-  ['deleteSite',          'deal_sites',          'delete_site'],
-  ['saveBidMeta',         'deal_bid_meta',       'update'],
+  ['createDeal',          'deal_deals',          'insert', 'create_deal'],
+  ['deleteDeal',          'deal_deals',          'delete', 'delete_deal'],
+  ['saveStrategy',        'deal_strategy',       'update', null],
+  ['createArtifact',      'deal_artifacts',      'insert', 'create_artifact'],
+  ['deleteArtifact',      'deal_artifacts',      'delete', 'delete_artifact'],
+  ['recordDealOutcome',   'deal_outcomes',       'insert', 'record_outcome'],
+  ['updateSite',          'deal_sites',          'update', 'update_site'],
+  ['assignModelToSite',   'cost_model_projects', 'update', 'assign_model_to_site'],
+  ['setDosElementStatus', 'deal_dos_status',     'update', null],
+  ['advanceDealStage',    'deal_deals',          'update', 'advance_stage'],
+  ['setModelInBid',       'deal_sites',          'update', 'set_site_in_bid'],
+  ['createSite',          'deal_sites',          'insert', 'create_site'],
+  ['deleteSite',          'deal_sites',          'delete', 'delete_site'],
+  ['saveBidMeta',         'deal_bid_meta',       'update', null],
 ];
 
-for (const [fn, table, action] of PINS) {
+const ENUM_ACTIONS = new Set(['insert', 'update', 'delete', 'link', 'unlink']);
+
+for (const [fn, table, action, op] of PINS) {
   const body = fnBody(fn);
   t(`${fn}: fn exists`, body.length > 0);
-  t(`${fn}: audits '${table}' / '${action}'`,
+  t(`${fn}: audits '${table}' / '${action}'${op ? ` (op ${op})` : ''}`,
     body.includes(`table: '${table}'`) && body.includes(`action: '${action}'`)
+    && (!op || body.includes(`op: '${op}'`))
     && /recordAudit\(\{/.test(body));
+}
+
+// REGRESSION GUARD: every recordAudit action literal in the file must be an
+// enum verb — anything else is silently rejected by audit_log_action_check.
+{
+  const bad = [...src.matchAll(/action:\s*'([^']+)'/g)]
+    .map((m) => m[1]).filter((a) => !ENUM_ACTIONS.has(a));
+  t(`all recordAudit actions are enum verbs (bad: ${bad.join(',') || 'none'})`, bad.length === 0);
 }
 
 // assignDesignToSite audits the tool's own table (variable), not a literal.
 {
   const body = fnBody('assignDesignToSite');
-  t('assignDesignToSite: audits resolved design table / assign_design_to_site',
-    /recordAudit\(\{ table, /.test(body) && body.includes("action: 'assign_design_to_site'"));
+  t('assignDesignToSite: audits resolved design table / update (op assign_design_to_site)',
+    /recordAudit\(\{ table, /.test(body) && body.includes("action: 'update'")
+    && body.includes("op: 'assign_design_to_site'"));
 }
 
 // Convention pins: audit calls are fire-and-forget (never awaited — the

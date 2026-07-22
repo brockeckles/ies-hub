@@ -9,7 +9,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
-import { listRealDeals } from '../deal-management/api.js?v=20260722-s4c';
+import { listRealDeals } from '../deal-management/api.js?v=20260722-s4d';
 
 /**
  * Fetch all dashboard data. Tries Supabase first, falls back to demo data.

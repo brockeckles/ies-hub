@@ -309,7 +309,7 @@ export async function createDeal(payload) {
       } catch { /* if stages fetch fails, just skip stage assignment */ }
     }
     const inserted = await db.insert('deal_deals', row);
-    recordAudit({ table: 'deal_deals', id: inserted?.id, action: 'create_deal', fields: { name: row.deal_name } });
+    recordAudit({ table: 'deal_deals', id: inserted?.id, action: 'insert', fields: { op: 'create_deal', name: row.deal_name } });
     return inserted;
   } catch (err) {
     console.error('[deal-mgmt] createDeal failed', err);
@@ -329,7 +329,7 @@ export async function deleteDeal(id) {
   try {
     const { error } = await db.from('deal_deals').delete().eq('id', id);
     if (error) throw error;
-    recordAudit({ table: 'deal_deals', id, action: 'delete_deal' });
+    recordAudit({ table: 'deal_deals', id, action: 'delete', fields: { op: 'delete_deal' } });
     return true;
   } catch (err) {
     console.error('[deal-mgmt] deleteDeal failed', err);
@@ -430,7 +430,7 @@ export async function createArtifact(dealId, payload) {
   const { data, error } = await db.from('deal_artifacts')
     .insert(row).select().single();
   if (error) { console.warn('[deal-mgmt] createArtifact failed', error); throw error; }
-  recordAudit({ table: 'deal_artifacts', id: data?.id, action: 'create_artifact', fields: { deal_id: dealId, name: row.name } });
+  recordAudit({ table: 'deal_artifacts', id: data?.id, action: 'insert', fields: { op: 'create_artifact', deal_id: dealId, name: row.name } });
   return data;
 }
 
@@ -442,7 +442,7 @@ export async function deleteArtifact(id) {
   if (!id) return false;
   const { error } = await db.from('deal_artifacts').delete().eq('id', id);
   if (error) { console.warn('[deal-mgmt] deleteArtifact failed', error); throw error; }
-  recordAudit({ table: 'deal_artifacts', id, action: 'delete_artifact' });
+  recordAudit({ table: 'deal_artifacts', id, action: 'delete', fields: { op: 'delete_artifact' } });
   return true;
 }
 
@@ -474,7 +474,7 @@ export async function recordDealOutcome(dealId, p) {
     bid_y1_margin_pct: Number.isFinite(Number(p.bid_y1_margin_pct)) ? Number(p.bid_y1_margin_pct) : null,
     notes: p.notes || null,
   });
-  recordAudit({ table: 'deal_outcomes', id: row?.id, action: 'record_outcome', fields: { deal_id: dealId, outcome: p.outcome } });
+  recordAudit({ table: 'deal_outcomes', id: row?.id, action: 'insert', fields: { op: 'record_outcome', deal_id: dealId, outcome: p.outcome } });
   // Reflect the terminal state on the deal row itself so pipeline views agree.
   try { await db.update('deal_deals', dealId, { status: p.outcome }); } catch (err) {
     console.warn('[deal-mgmt] recordDealOutcome: status update failed', err);
@@ -523,7 +523,7 @@ export async function setModelInBid(dealId, modelId) {
   if (!target.site_id) throw new Error('setModelInBid: model is Unassigned — attach it to a site first');
   // Authority: one UPDATE on the site row.
   await db.update('deal_sites', target.site_id, { in_bid_model_id: target.id });
-  recordAudit({ table: 'deal_sites', id: target.site_id, action: 'set_site_in_bid', fields: { deal_deals_id: dealId, model_id: target.id } });
+  recordAudit({ table: 'deal_sites', id: target.site_id, action: 'update', fields: { op: 'set_site_in_bid', deal_deals_id: dealId, model_id: target.id } });
 }
 
 // ============================================================
@@ -580,7 +580,7 @@ export async function createSite(dealId, payload) {
     status: payload.status || 'proposed',
     sqft_estimate: Number(payload.sqft_estimate) > 0 ? Math.round(Number(payload.sqft_estimate)) : null,
   });
-  recordAudit({ table: 'deal_sites', id: row?.id, action: 'create_site', fields: { deal_id: dealId } });
+  recordAudit({ table: 'deal_sites', id: row?.id, action: 'insert', fields: { op: 'create_site', deal_id: dealId } });
   return row;
 }
 
@@ -598,7 +598,7 @@ export async function deleteSite(siteId) {
   if (!data) return false;
   const { error: delErr } = await db.from('deal_sites').delete().eq('id', siteId);
   if (delErr) throw delErr;
-  recordAudit({ table: 'deal_sites', id: siteId, action: 'delete_site', fields: { deal_id: data.deal_id } });
+  recordAudit({ table: 'deal_sites', id: siteId, action: 'delete', fields: { op: 'delete_site', deal_id: data.deal_id } });
   return true;
 }
 
@@ -614,7 +614,7 @@ export async function updateSite(siteId, patch) {
     if (patch[k] !== undefined) allowed[k] = patch[k];
   }
   const updated = await db.update('deal_sites', siteId, allowed);
-  recordAudit({ table: 'deal_sites', id: siteId, action: 'update_site', fields: { keys: Object.keys(allowed) } });
+  recordAudit({ table: 'deal_sites', id: siteId, action: 'update', fields: { op: 'update_site', keys: Object.keys(allowed) } });
   return updated;
 }
 
@@ -640,7 +640,7 @@ export async function assignModelToSite(modelId, siteId) {
       await db.update('deal_sites', prevSite, { in_bid_model_id: null });
     }
   }
-  recordAudit({ table: 'cost_model_projects', id: modelId, action: 'assign_model_to_site', fields: { site_id: siteId || null } });
+  recordAudit({ table: 'cost_model_projects', id: modelId, action: 'update', fields: { op: 'assign_model_to_site', site_id: siteId || null } });
   return true;
 }
 
@@ -656,7 +656,7 @@ export async function assignDesignToSite(tool, scenarioId, siteId) {
     : tool === 'cog' ? 'cog_scenarios' : null;
   if (!table || !scenarioId) throw new Error('assignDesignToSite: bad args');
   const updated = await db.update(table, scenarioId, { site_id: siteId || null });
-  recordAudit({ table, id: scenarioId, action: 'assign_design_to_site', fields: { site_id: siteId || null } });
+  recordAudit({ table, id: scenarioId, action: 'update', fields: { op: 'assign_design_to_site', site_id: siteId || null } });
   return updated;
 }
 
@@ -761,7 +761,7 @@ export async function advanceDealStage(dealId, stageNumber) {
   const { data, error } = await db.from('deal_deals')
     .update({ current_stage_id: match.id }).eq('id', dealId).select().single();
   if (error) { console.warn('[deal-mgmt] advanceDealStage failed', error); throw error; }
-  recordAudit({ table: 'deal_deals', id: dealId, action: 'advance_stage', fields: { stage: Number(stageNumber) } });
+  recordAudit({ table: 'deal_deals', id: dealId, action: 'update', fields: { op: 'advance_stage', stage: Number(stageNumber) } });
   return data;
 }
 
