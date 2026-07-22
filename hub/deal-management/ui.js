@@ -7,7 +7,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260722-s2c';
+import * as api from './api.js?v=20260722-s3b';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260722-s1a';
@@ -15,7 +15,7 @@ import { icon } from '../../shared/icons.js?v=20260710-r2';
 // UX-1 D1p2 (2026-07-03): the MSA merge — deal tabs reuse the Multi-Site
 // Analyzer's pure calc + site mapping instead of duplicating the math.
 import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260722-s2b';
-import * as msaApi from '../../tools/deal-manager/api.js?v=20260722-s2b';
+import * as msaApi from '../../tools/deal-manager/api.js?v=20260722-s3b';
 // S1 (2026-07-22): shared pure Σ★ roll-up (same module api.js computes with).
 import * as dmCalc from './calc.js?v=20260722-s1a';
 
@@ -700,7 +700,7 @@ function openAddArtifactModal() {
       <label style="display:block;font-size:12px;font-weight:700;color:var(--ies-gray-500);margin-bottom:4px;">Name</label>
       <input type="text" id="art-name" placeholder="e.g. Wayfair Midwest base case" style="width:100%;padding:6px 10px;border:1px solid var(--ies-gray-300);border-radius:6px;font-size:13px;margin-bottom:10px;"/>
       <label style="display:block;font-size:12px;font-weight:700;color:var(--ies-gray-500);margin-bottom:4px;">Reference (e.g. cm:7)</label>
-      <input type="text" id="art-ref" placeholder="cm:7 · wsc:11 · fleet:3" style="width:100%;padding:6px 10px;border:1px solid var(--ies-gray-300);border-radius:6px;font-size:13px;margin-bottom:14px;font-family:monospace;"/>
+      <input type="text" id="art-ref" placeholder="cm:7 · wsc:11 · cog:4 · fleet:3" style="width:100%;padding:6px 10px;border:1px solid var(--ies-gray-300);border-radius:6px;font-size:13px;margin-bottom:14px;font-family:monospace;"/>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button class="hub-btn hub-btn-sm hub-btn-secondary" id="art-cancel">Cancel</button>
         <button class="hub-btn hub-btn-sm hub-btn-primary" id="art-save">Link</button>
@@ -1143,7 +1143,7 @@ function renderDetail() {
           <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="deal-outcome" data-outcome="withdrawn" title="Close as Withdrawn / No decision">…</button>` : ''}`;
         })()}
         ${renderCostModelButton(d)}
-        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="add-artifact" title="Link a cost model, design scenario, deck, or external file">+ Link Artifact</button>
+        <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="add-artifact" title="Link a cost model, design scenario, or external file">+ Link Artifact</button>
       </div>
 
       <!-- Quick Stats — 5-tile strip overrides hub-kpi-strip\'s 4-column default -->
@@ -1614,13 +1614,18 @@ function createCostModelForDeal(dealId, siteId) {
   window.location.hash = 'designtools/cost-model';
 }
 
+// C1 (2026-07-22): + center_of_gravity (ref format 'cog:<id>'); the dead
+// 'deck' kind removed — tools/deck-generator never shipped and its Open
+// button routed to the page it was already on. Existing deal_artifacts rows
+// with kind='deck' (or any unknown kind) stay renderable via the total
+// `ARTIFACT_KINDS[a.kind] || {...}` fallback in renderDealArtifacts.
 const ARTIFACT_KINDS = {
   cost_model:        { label: 'Cost Model',        color: '#ff3a00', route: 'designtools/cost-model' },
   warehouse_sizing:  { label: 'Warehouse Sizing',  color: '#0047AB', route: 'designtools/warehouse-sizing' },
   fleet_modeler:     { label: 'Fleet Modeler',     color: '#20c997', route: 'designtools/fleet-modeler' },
   network_opt:       { label: 'Network Opt',       color: '#20c997', route: 'designtools/network-opt' },
   most_standards:    { label: 'MOST Standards',    color: '#0047AB', route: 'designtools/most-standards' },
-  deck:              { label: 'Generated Deck',    color: '#7c3aed', route: 'deals' },
+  center_of_gravity: { label: 'Center of Gravity', color: '#0ea5e9', route: 'designtools/center-of-gravity' },
 };
 
 function renderDealArtifacts() {
@@ -1745,14 +1750,21 @@ function renderWorkflowRail(d) {
         : models.length === 1
           ? `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="open-cost-model-id" data-model-id="${escapeAttr(models[0].id)}">Open →</button>`
           : `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="choose-cost-model" data-deal-id="${escapeAttr(d.id)}">View ${models.length} →</button>` },
-    // S2 (2026-07-22, Brock ruling): Network = COG + NetOpt. NetOpt stamps
-    // parent_deal_id on save but the rail never read it. Smart button routes
-    // to whichever tool has scenarios (COG wins ties/empties).
-    { key: 'network', name: 'Network', sub: 'COG · Network Opt',   count: ds.cog.length + (ds.netopt || []).length,
+    // S2 (2026-07-22, Brock ruling): Network = COG + NetOpt. C1 (Brock
+    // ruling s3, supersedes the s2 Fleet-off-rail ruling): Fleet joins the
+    // Network stage too. Smart button keeps the existing routing (COG wins
+    // ties/empties; NetOpt when it alone has scenarios) with one addition:
+    // when ONLY Fleet has scenarios, "Open →" routes to Fleet instead of
+    // lying about an empty COG.
+    { key: 'network', name: 'Network', sub: 'COG · Network Opt · Fleet',
+      count: ds.cog.length + (ds.netopt || []).length + (ds.fleet || []).length,
       btn: (() => {
-        const n = ds.cog.length + (ds.netopt || []).length;
+        const n = ds.cog.length + (ds.netopt || []).length + (ds.fleet || []).length;
         const route = ds.cog.length === 0 && (ds.netopt || []).length > 0
-          ? 'designtools/network-opt' : 'designtools/center-of-gravity';
+          ? 'designtools/network-opt'
+          : ds.cog.length === 0 && (ds.netopt || []).length === 0 && (ds.fleet || []).length > 0
+            ? 'designtools/fleet-modeler'
+            : 'designtools/center-of-gravity';
         return `<button class="hub-btn hub-btn-sm ${n ? 'hub-btn-secondary' : 'hub-btn-primary'}" data-action="launch-tool" data-tool-route="${route}">${smartLabel(n, 'network')}</button>`;
       })() },
     { key: 'package', name: 'Package', sub: 'Artifacts · Strategy', count: artifacts.length,

@@ -15,14 +15,14 @@ import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 // refreshToolChromeActions dropped with the classic chrome.
 import { refreshKpiStrip, bindToolChromeEvents, flashPrimaryAction } from '../../shared/tool-chrome.js?v=20260710-r2';
 import * as calc from './calc.js?v=20260722-s2';
-import * as api from './api.js?v=20260722-s1a';
-import * as cmApi from '../cost-model/api.js?v=20260722-s1a';
+import * as api from './api.js?v=20260722-s3b';
+import * as cmApi from '../cost-model/api.js?v=20260722-s3b';
 import { renderCmDrillbackChip, bindCmDrillback } from '../../shared/cm-drillback.js?v=20260430-am-p5fix12';
 import { showConfirm } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { render3DView, disposeScene3d } from './ui-3d.js?v=20260722-h1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
-import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260722-s1a';
+import { renderConfigHtml, renderQuickConfigHtml, bindConfigEvents } from './ui-config.js?v=20260722-s3b';
 import { renderPlan, drawPlan, hitCorner } from './ui-plan.js?v=20260722-s2';
 import { renderDashboard } from './ui-dashboard.js?v=20260722-s2';
 import { renderBasisView, resetBasisState, computeAdoptStatuses } from './ui-basis.js?v=20260722-s5';

@@ -198,12 +198,44 @@ export async function deleteDeal(id) {
  * @returns {Promise<import('./types.js?v=20260418-sL').Site[]>}
  */
 export async function listSites(dealId) {
-  const { data, error } = await db.from('cost_model_projects')
-    .select('*')
-    .eq('deal_deals_id', dealId)
-    .order('name');
-  if (error) throw error;
-  return (data || []).map(mapCmProjectToSite);
+  // C1 ★-authority rewire (2026-07-22): the deal tabs' ★ basis derives from
+  // deal_sites.in_bid_model_id (exactly one ★ per site — the authority),
+  // NOT the retiring cost_model_projects.in_bid mirror. That boolean is
+  // write-only through the C1 soak and the column drops in C4.
+  const [projRes, starIds] = await Promise.all([
+    db.from('cost_model_projects')
+      .select('*')
+      .eq('deal_deals_id', dealId)
+      .order('name'),
+    fetchDealStarIds(dealId),
+  ]);
+  if (projRes.error) throw projRes.error;
+  return (projRes.data || []).map(row => mapCmProjectToSite(row, starIds));
+}
+
+/**
+ * C1 (2026-07-22): ★ ids for a deal from the AUTHORITY table. Returns a
+ * Set<string> of cost_model_projects ids currently starred by any of the
+ * deal's deal_sites rows (in_bid_model_id). Fails soft (empty Set) so the
+ * deal tabs still render scenario rows if deal_sites is unreachable — they
+ * just show no ★.
+ * @param {string} dealId
+ * @returns {Promise<Set<string>>}
+ */
+async function fetchDealStarIds(dealId) {
+  try {
+    const { data, error } = await db.from('deal_sites')
+      .select('id, in_bid_model_id')
+      .eq('deal_id', dealId);
+    if (error) throw error;
+    return new Set((data || [])
+      .map(s => s.in_bid_model_id)
+      .filter(v => v != null)
+      .map(String));
+  } catch (err) {
+    console.warn('[deal-manager] fetchDealStarIds failed', err);
+    return new Set();
+  }
 }
 
 /**
@@ -291,9 +323,13 @@ export async function listUnlinkedProjects() {
 /**
  * Map a cost_model_projects row to our Site type.
  * @param {object} row
+ * @param {Set<string>} [starIds] — ★'d model ids from deal_sites.in_bid_model_id
+ *   (the authority; see fetchDealStarIds). Omitted on create/update mapping
+ *   paths, where the row can never be the ★ (a fresh insert is unstarred and
+ *   DM site edits don't touch ★).
  * @returns {import('./types.js?v=20260418-sL').Site}
  */
-function mapCmProjectToSite(row) {
+function mapCmProjectToSite(row, starIds) {
   return {
     id: String(row.id),
     name: row.name || 'Unnamed Site',
@@ -306,7 +342,9 @@ function mapCmProjectToSite(row) {
     pricingModel: row.pricing_model || 'cost-plus',
     annualVolume: row.vol_pallets_received || 0,    // closest proxy: inbound pallet volume
     costModelId: String(row.id),
-    inBid: !!row.in_bid,                            // UX-1 D1p2: ★-in-bid marker
+    // C1 (2026-07-22): ★ derives from deal_sites.in_bid_model_id via the
+    // starIds Set — never from the retiring mirrored in_bid boolean.
+    inBid: starIds ? starIds.has(String(row.id)) : false,
     // CM-authoritative pricing (2026-07-04, D1 vocab decision): the CM
     // engine's stamped steady-state revenue. When > 0 it drives
     // computeSiteFinancials directly and the markup heuristic is skipped.

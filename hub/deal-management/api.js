@@ -99,7 +99,10 @@ export async function listRealDeals() {
     // is gated by RLS or unreachable — sites just fall back to "—".
     const [deals, models, marketRows, stagesRows, siteRows] = await Promise.all([
       db.fetchAll('deal_deals', 'id, deal_name, client_name, deal_owner, status, current_stage_id, created_at, updated_at, est_annual_revenue, target_margin_pct, contract_term_years, target_go_live, industry_vertical, site_count'),
-      db.fetchAll('cost_model_projects', 'id, name, scenario_label, client_name, market_id, facility_sqft, target_margin_pct, total_annual_cost, total_annual_revenue, startup_cost, pricing_model, heuristic_overrides, financial:project_data->financial, deal_deals_id, updated_at, in_bid, site_id'),
+      // C1 (2026-07-22): in_bid dropped from this select — the ★ basis is
+      // deal_sites.in_bid_model_id only; the mirrored boolean is write-only
+      // until the column drops in C4.
+      db.fetchAll('cost_model_projects', 'id, name, scenario_label, client_name, market_id, facility_sqft, target_margin_pct, total_annual_cost, total_annual_revenue, startup_cost, pricing_model, heuristic_overrides, financial:project_data->financial, deal_deals_id, updated_at, site_id'),
       db.fetchAll('ref_markets', 'id, name').catch(() => []),
       db.fetchAll('stages', 'id, stage_number').catch(() => []),
       // S1 (2026-07-22, rulings #6/#7): first-class Site records. Sites are
@@ -133,7 +136,8 @@ export async function listRealDeals() {
       const modelById = new Map(attached.map(m => [String(m.id), m]));
       // S1: sites are REAL rows. Each site's scenario group = models with
       // site_id === site.id; ★ authority = deal_sites.in_bid_model_id (the
-      // in_bid boolean stays mirrored during S1 but is no longer read here).
+      // in_bid boolean is a write-only mirror through the C1 soak — never
+      // read anywhere; column drops in C4).
       const siteRowsForDeal = (sitesByDeal.get(d.id) || [])
         .sort((a, b) => (a.sort_order ?? 1e9) - (b.sort_order ?? 1e9) || String(a.name).localeCompare(String(b.name)));
       const sites = siteRowsForDeal.map(s => {
@@ -163,10 +167,9 @@ export async function listRealDeals() {
       // leftovers + future site-less saves). They keep working; they just
       // don't feed any site's roll-up.
       const unassigned = attached.filter(m => !m.site_id);
-      // Reflect ★ from the site authority onto the model summaries the UI
-      // renders (chips read m.in_bid).
+      // ★ from the site authority, reflected onto the model summaries the
+      // UI renders (deal_sites.in_bid_model_id is the ONLY ★ read basis).
       const starIds = new Set(sites.map(s => (s.inBidModelId != null ? String(s.inBidModelId) : null)).filter(Boolean));
-      for (const m of attached) m.in_bid = starIds.has(String(m.id));
       // R6 (2026-04-29): prefer deal-level columns from the modal entry, fall
       // back to attached-model averages so older deals without the columns
       // still render meaningful values.
@@ -255,7 +258,8 @@ export async function listRealDeals() {
           target_margin_pct: m.target_margin_pct,
           total_annual_cost: m.total_annual_cost,
           updated_at: m.updated_at,
-          in_bid: !!m.in_bid,
+          // C1: derived from the deal_sites ★ authority above, not the column.
+          in_bid: starIds.has(String(m.id)),
           site_id: m.site_id || null,
         })),
       };
@@ -492,16 +496,17 @@ export async function getLatestDealOutcome(dealId) {
  * S1 (2026-07-22, rulings #6/#7): mark a scenario ★-in-bid FOR ITS SITE.
  * The ★ authority is deal_sites.in_bid_model_id — one UPDATE, exclusivity
  * enforced by the FK rather than app-side sibling-clearing over a string
- * key (the pre-S1 setModelInBid). cost_model_projects.in_bid stays
- * MIRRORED through S1 (spec ruling: retire with the S2 arc) so any
- * downstream reader keeps working: clear siblings' flags, set the target's.
+ * key (the pre-S1 setModelInBid). cost_model_projects.in_bid stays a
+ * WRITE-ONLY mirror through the C1 soak (never read anywhere; column
+ * drops in C4): clear siblings' flags, set the target's — without ever
+ * selecting the column to decide.
  *
  * @param {string} dealId
  * @param {number|string} modelId — must be attached to a site on this deal
  */
 export async function setModelInBid(dealId, modelId) {
   const { data, error } = await db.from('cost_model_projects')
-    .select('id, name, site_id, in_bid')
+    .select('id, name, site_id')
     .eq('deal_deals_id', dealId);
   if (error) throw error;
   const rows = data || [];
@@ -510,13 +515,15 @@ export async function setModelInBid(dealId, modelId) {
   if (!target.site_id) throw new Error('setModelInBid: model is Unassigned — attach it to a site first');
   // Authority: one UPDATE on the site row.
   await db.update('deal_sites', target.site_id, { in_bid_model_id: target.id });
-  // Mirror (S1 soak): keep the legacy boolean consistent within the site.
+  // Mirror (write-only through the C1 soak): sweep every sibling in the
+  // site false, set the target true. Unconditional — reading in_bid to
+  // skip no-op writes would reintroduce a read of the retiring column.
   const siblings = rows.filter(r =>
-    String(r.site_id || '') === String(target.site_id) && String(r.id) !== String(modelId) && r.in_bid);
+    String(r.site_id || '') === String(target.site_id) && String(r.id) !== String(modelId));
   for (const sib of siblings) {
     await db.update('cost_model_projects', sib.id, { in_bid: false });
   }
-  if (!target.in_bid) await db.update('cost_model_projects', target.id, { in_bid: true });
+  await db.update('cost_model_projects', target.id, { in_bid: true });
   recordAudit({ table: 'deal_sites', id: target.site_id, action: 'set_site_in_bid', fields: { deal_deals_id: dealId, model_id: target.id } });
 }
 
@@ -623,11 +630,13 @@ export async function updateSite(siteId, patch) {
 export async function assignModelToSite(modelId, siteId) {
   if (modelId == null) throw new Error('assignModelToSite: modelId required');
   const { data, error } = await db.from('cost_model_projects')
-    .select('id, site_id, in_bid').eq('id', modelId).maybeSingle();
+    .select('id, site_id').eq('id', modelId).maybeSingle();
   if (error) throw error;
   if (!data) throw new Error('assignModelToSite: model not found');
   const prevSite = data.site_id;
-  await db.update('cost_model_projects', modelId, { site_id: siteId || null, ...(data.in_bid && prevSite && String(prevSite) !== String(siteId || '') ? { in_bid: false } : {}) });
+  // C1: the in_bid mirror is write-only — a model leaving its site can never
+  // carry ★, so sweep the flag false on any move without reading the column.
+  await db.update('cost_model_projects', modelId, { site_id: siteId || null, ...(prevSite && String(prevSite) !== String(siteId || '') ? { in_bid: false } : {}) });
   if (prevSite && String(prevSite) !== String(siteId || '')) {
     // If this model was the previous site's ★, clear it there.
     const { data: prev } = await db.from('deal_sites')
@@ -658,10 +667,10 @@ export async function assignDesignToSite(tool, scenarioId, siteId) {
  * parent_deal_id (stamped by the D2 deal-context on save). Powers the
  * workflow rail's Size / Labor / Network counts + smart buttons.
  * @param {string} dealId
- * @returns {Promise<{wsc: any[], most: any[], cog: any[]}>}
+ * @returns {Promise<{wsc: any[], most: any[], cog: any[], netopt: any[], fleet: any[]}>}
  */
 export async function listDesignScenariosByDeal(dealId) {
-  if (!dealId) return { wsc: [], most: [], cog: [] };
+  if (!dealId) return { wsc: [], most: [], cog: [], netopt: [], fleet: [] };
   const grab = async (table) => {
     try {
       const { data, error } = await db.from(table)
@@ -676,12 +685,12 @@ export async function listDesignScenariosByDeal(dealId) {
     }
   };
   // S2 (2026-07-22, Brock ruling): NetOpt configs fold into the rail's
-  // Network stage. netopt_configs has no site_id column (deal-level only),
-  // so it gets its own select.
+  // Network stage. Kept as its own select for the pinned literal; C1 added
+  // netopt_configs.site_id, so the shape now matches grab().
   const grabNetopt = async () => {
     try {
       const { data, error } = await db.from('netopt_configs')
-        .select('id, name, updated_at')
+        .select('id, name, updated_at, site_id')
         .eq('parent_deal_id', dealId)
         .order('updated_at', { ascending: false });
       if (error) throw error;
@@ -691,13 +700,18 @@ export async function listDesignScenariosByDeal(dealId) {
       return [];
     }
   };
-  const [wsc, most, cog, netopt] = await Promise.all([
+  // C1 (2026-07-22, Brock ruling s3 — supersedes the s2 Fleet-off-rail
+  // ruling): Fleet joins the Network stage. fleet_scenarios.site_id landed
+  // with this wave, so the shared grab() shape applies (note: id is uuid,
+  // unlike CM's bigints — callers must not Number() it).
+  const [wsc, most, cog, netopt, fleet] = await Promise.all([
     grab('wsc_facility_configs'),
     grab('most_analyses'),
     grab('cog_scenarios'),
     grabNetopt(),
+    grab('fleet_scenarios'),
   ]);
-  return { wsc, most, cog, netopt };
+  return { wsc, most, cog, netopt, fleet };
 }
 
 export async function loadDosStatusByDeal(dealId) {

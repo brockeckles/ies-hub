@@ -306,16 +306,30 @@ await ta('createModel omits deal_deals_id when the model has no deal', async () 
   } finally { restoreDb(); }
 });
 
-await ta('updateModel stamps updated_at and always writes deal_deals_id (null when unlinked)', async () => {
+// C1 (2026-07-22): update no longer nulls deal_deals_id. A stale in-memory
+// model must not detach a deal that DM linked after the model was loaded —
+// the column is omitted when the model carries no dealId (same rule as
+// site_id); detach lives in Deal Management (reassignModelToDeal) only.
+await ta('updateModel stamps updated_at and OMITS deal_deals_id when unlinked (never nulls)', async () => {
   const mem = installMemDb({ cost_model_projects: [{ id: 77, name: 'old' }] });
   try {
     await api.updateModel(77, { ...rtModel, projectDetails: { ...rtModel.projectDetails, dealId: null } });
     const upd = mem.ops.find(o => o.op === 'update' && o.table === 'cost_model_projects');
     assert(upd, 'update op recorded');
     assert(/^\d{4}-\d{2}-\d{2}T/.test(upd.payload.updated_at), 'updated_at is ISO stamp');
-    eq(upd.payload.deal_deals_id, null, 'deal_deals_id explicitly nulled on update');
+    assert(!('deal_deals_id' in upd.payload), 'deal_deals_id omitted, not nulled — detach is DM-only');
     eq(upd.payload.project_data.projectDetails.name, 'RT Model', 'project_data rides along');
     eq(upd.filters, [['id', 77]], 'targets the row by id');
+  } finally { restoreDb(); }
+});
+
+await ta('updateModel still writes deal_deals_id when the model carries one', async () => {
+  const mem = installMemDb({ cost_model_projects: [{ id: 78, name: 'old' }] });
+  try {
+    await api.updateModel(78, rtModel); // rtModel carries dealId: 'deal-42'
+    const upd = mem.ops.find(o => o.op === 'update' && o.table === 'cost_model_projects');
+    assert(upd, 'update op recorded');
+    eq(upd.payload.deal_deals_id, 'deal-42', 'linked model keeps stamping the deal on update');
   } finally { restoreDb(); }
 });
 

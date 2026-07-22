@@ -293,7 +293,9 @@ async function renderMostLanding() {
     getId: (r) => r.id,
     getName: (r) => r.name || 'Untitled analysis',
     getUpdated: (r) => r.updated_at || r.created_at,
-    getParent: (r) => ({ cmId: r.parent_cost_model_id }),
+    // dealId drives the shared landing's Deal: badge, deal-name lookup, and
+    // active-deal float-to-top (wave C1) — same shape as WSC/COG/NetOpt/Fleet.
+    getParent: (r) => ({ cmId: r.parent_cost_model_id, dealId: r.parent_deal_id }),
     getSubtitle: (r) => {
       const nLines = ((r.analysis_data && r.analysis_data.lines) || []).length;
       const bits = [];

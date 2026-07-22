@@ -14,7 +14,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import ofpStyles from './operational-flow-styles.js?v=20260714-a2';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
 import * as calc from './calc.js?v=20260722-e1';
-import * as api from './api.js?v=20260722-s1a';
+import * as api from './api.js?v=20260722-s3b';
 import * as scenarios from './calc.scenarios.js?v=20260722-e1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260705-u3d';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260705-u3d';
@@ -966,6 +966,10 @@ export async function mount(el) {
         } else {
           const _ctx = dealContext.getActive();
           if (_ctx && model?.projectDetails && !model.projectDetails.dealId) model.projectDetails.dealId = _ctx.id;
+          // C1/S1 (2026-07-22): fresh fallback draft also inherits the site
+          // binding (same shape as the pending-new relay). Seeds new models
+          // only — the _wscTarget UPDATE branch above never rebinds.
+          if (_ctx && _ctx.siteId && model?.projectDetails && !model.projectDetails.siteId) model.projectDetails.siteId = _ctx.siteId;
         }
       } else {
         // Stale — discard
@@ -1003,6 +1007,10 @@ export async function mount(el) {
         } else {
           const _ctx = dealContext.getActive();
           if (_ctx && model?.projectDetails && !model.projectDetails.dealId) model.projectDetails.dealId = _ctx.id;
+          // C1/S1 (2026-07-22): fresh fallback draft also inherits the site
+          // binding (same shape as the pending-new relay). Seeds new models
+          // only — the _mostTarget UPDATE branch above never rebinds.
+          if (_ctx && _ctx.siteId && model?.projectDetails && !model.projectDetails.siteId) model.projectDetails.siteId = _ctx.siteId;
         }
       } else {
         sessionStorage.removeItem('most_pending_push');
@@ -1341,7 +1349,13 @@ function _createNewModelFromTemplate(templateKey) {
   // cm_pending_new_for_deal 60s relay as the durable path.
   {
     const _ctx = dealContext.getActive();
-    if (_ctx && model?.projectDetails) model.projectDetails.dealId = _ctx.id;
+    if (_ctx && model?.projectDetails) {
+      model.projectDetails.dealId = _ctx.id;
+      // C1/S1 (2026-07-22): site binding — mirror the cm_pending_new_for_deal
+      // relay's shape so a template model born on a Site page saves attached,
+      // not Unassigned. New models only; updates never rebind.
+      if (_ctx.siteId) model.projectDetails.siteId = _ctx.siteId;
+    }
   }
   resetDirty();
   userHasInteracted = setUserHasInteracted(false);
@@ -11997,7 +12011,7 @@ function _launchToTool(target) {
       // state. Invisible to the cache-bust guard because the './tools/...'
       // path resolves module-relative in the scanner but page-relative at
       // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260722-s2a',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260722-s3b',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {

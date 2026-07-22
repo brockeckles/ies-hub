@@ -53,6 +53,14 @@ export async function saveConfig(config) {
   const _ctx = dealContext.getActive();
   if (_ctx) payload.parent_deal_id = _ctx.id;
   if (_ctx && _ctx.siteId) payload.site_id = _ctx.siteId; // S1: site binding
+  // Duplicate path (2026-07-22, mirrors COG saveScenario): explicit linkage on
+  // the config object wins over the active-context stamp — a copy keeps its
+  // SOURCE row's deal/site/CM linkage instead of stealing the active deal's.
+  // Regular editor saves never pass these fields, so the ctx stamp above still
+  // applies to them. Insert-only: updates never rebind.
+  if (config.parent_deal_id !== undefined) payload.parent_deal_id = config.parent_deal_id;
+  if (config.site_id !== undefined) payload.site_id = config.site_id;
+  if (config.parent_cost_model_id !== undefined) payload.parent_cost_model_id = config.parent_cost_model_id;
   return db.insert('wsc_facility_configs', payload);
 }
 
@@ -92,8 +100,28 @@ export async function unlinkFromCm(scenarioId) {
 export async function duplicateConfig(id) {
   const original = await getConfig(id);
   if (!original) throw new Error('Config not found');
-  const { id: _, created_at, updated_at, ...data } = original;
-  return saveConfig({ ...data.config_data, name: (data.config_data?.name || 'Config') + ' (Copy)' });
+  // H0 follow-up (2026-07-22, mirrors COG duplicateScenario): strip ALL row
+  // identity/ownership fields — id, created_at, updated_at, owner_id, team_id,
+  // visibility — from the config_data snapshot too, not just the row.
+  // Re-saved rows write facility.id back into config_data, so a naive spread
+  // would carry config.id into saveConfig and route the copy down the UPDATE
+  // branch, overwriting the source row. The copy keeps the SOURCE row's
+  // deal/site/CM linkage — saveConfig's explicit-linkage override (above)
+  // skips the active-context re-stamp, so a duplicate of a deal-linked config
+  // no longer drops its CM link or steals the currently-active deal.
+  const cd = original.config_data || {};
+  const {
+    id: _cdId, created_at: _cdCreated, updated_at: _cdUpdated,
+    owner_id: _cdOwner, team_id: _cdTeam, visibility: _cdVis,
+    ...copyData
+  } = cd;
+  return saveConfig({
+    ...copyData,
+    name: (cd.name || 'Config') + ' (Copy)',
+    parent_deal_id: original.parent_deal_id ?? null,
+    site_id: original.site_id ?? null,
+    parent_cost_model_id: original.parent_cost_model_id ?? null,
+  });
 }
 
 // ============================================================

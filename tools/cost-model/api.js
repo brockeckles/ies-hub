@@ -192,7 +192,13 @@ function _modelUpdatePayload(data) {
     updated_at: new Date().toISOString(),
     ..._headlineColumns(data),
   };
-  payload.deal_deals_id = pd.dealId || data.dealId || null;
+  // C1 (2026-07-22): conditional deal stamp on UPDATE — same rule as site_id
+  // below. A stale in-memory model (loaded before DM linked the row) must not
+  // silently NULL deal_deals_id; when the model carries no dealId the column
+  // is omitted entirely. Detach lives in Deal Management only
+  // (reassignModelToDeal). Insert path keeps its own conditional stamp.
+  const dealId = pd.dealId || data.dealId;
+  if (dealId) payload.deal_deals_id = dealId;
   // S1 (2026-07-22): conditional site stamp (see _headline insert note) —
   // never null site_id from CM; detach lives in Deal Management only.
   const siteId = pd.siteId || data.siteId;

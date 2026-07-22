@@ -7,6 +7,7 @@
 
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
+import * as dealContext from '../../shared/deal-context.js?v=20260722-s1a';
 
 // ============================================================
 // NETWORK CONFIGS (saved network scenarios)
@@ -49,15 +50,21 @@ export async function saveConfig(config) {
       rateCard: config.rateCard,
       serviceConfig: config.serviceConfig,
     },
-    // 2026-04-30 (G12): top-level columns so reload's
-    // savedRow.parent_cost_model_id picks up the linkage.
-    parent_cost_model_id: config.parent_cost_model_id ?? null,
-    parent_deal_id: config.parent_deal_id ?? null,
   };
 
   if (config.id) {
+    // Updates NEVER rebind: parent_cost_model_id / parent_deal_id / site_id
+    // are stamped on INSERT only (deal-spine convention). linkToCm /
+    // unlinkFromCm below are the explicit rebind path for the CM linkage.
     return db.update('netopt_configs', config.id, payload);
   }
+  // C1 deal-spine stamp (insert only): explicit config value wins, then the
+  // hub-wide active deal context, then null. 2026-04-30 (G12): top-level
+  // columns so reload's savedRow.parent_cost_model_id picks up the linkage.
+  const _ctx = dealContext.getActive();
+  payload.parent_cost_model_id = config.parent_cost_model_id ?? null;
+  payload.parent_deal_id = config.parent_deal_id ?? _ctx?.id ?? null;
+  payload.site_id = config.site_id ?? _ctx?.siteId ?? null; // S1: site binding
   // 2026-04-25 (PM fix): RLS INSERT policy on netopt_configs is
   //   WITH CHECK (owner_id = auth.uid())
   // so we MUST set owner_id at insert time. Without this, every save

@@ -14,7 +14,7 @@ import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../
 import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import * as calc from './calc.js?v=20260702-p1m1';
 import { splitCsvLine } from '../../shared/export.js?v=20260702-p1m1';
-import * as api from './api.js?v=20260705-r1';
+import * as api from './api.js?v=20260722-s3b';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 
@@ -70,7 +70,7 @@ let mapInstance = null;
  * Carrier rate deck loaded from ref_fleet_carrier_rates.
  * Stays as the raw row array; calc.indexCarrierDeck materialises a
  * vehicleType→rate map at run time.
- * @type {Array<import('./api.js?v=20260705-r1').CarrierRate>}
+ * @type {Array<import('./api.js?v=20260722-s3b').CarrierRate>}
  */
 let carrierRateDeck = [];
 
@@ -202,7 +202,7 @@ async function renderLanding() {
     getId: (r) => r.id,
     getName: (r) => r.name || 'Untitled fleet',
     getUpdated: (r) => r.updated_at || r.created_at,
-    getParent: (r) => ({ cmId: r.parent_cost_model_id, dealId: r.parent_deal_id || r.deal_id }),
+    getParent: (r) => ({ cmId: r.parent_cost_model_id, dealId: r.parent_deal_id }),
     getSubtitle: (r) => {
       const d = _unpackScenarioRow(r);
       const nLanes = (d.lanes || []).length;
