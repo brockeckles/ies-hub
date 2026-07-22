@@ -240,7 +240,10 @@ export async function listRealDeals() {
         targetClose: d.target_go_live || null,
         contractTermYears: Number(d.contract_term_years) || 5,
         industryVertical: d.industry_vertical || null,
-        siteCount: Number(d.site_count) || (sites.length || 0),
+        // S2 demo build-out (2026-07-22): real Site records outrank the
+        // manual site_count qualification estimate (pre-S1 precedence was
+        // reversed — a stale column froze the display at its intake value).
+        siteCount: sites.length || Number(d.site_count) || 0,
         isReal: true,
         models: attached.map(m => ({
           id: m.id,
