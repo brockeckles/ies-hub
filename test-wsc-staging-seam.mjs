@@ -134,5 +134,31 @@ const baseVolumes = { daysOnHand: 30, totalPallets: 9000, avgDailyInbound: 400, 
     && /zones\.shipStagingSqft\s*=\s*plan\.staging\.outbound\.sqft/.test(uiSrc));
 }
 
+// ── 7. Office SF — same wart class, same precedence (2026-07-22) ──
+{
+  const inputs = formStateToInputs({
+    facility: baseFacility,
+    zones: { ...baseZones, officeSqft: 25000 },
+    volumes: baseVolumes,
+  });
+  t('zones.officeSqft → officeSqftOverride',
+    inputs.officeSqftOverride === 25000, `got ${inputs.officeSqftOverride}`);
+  const drawn = formStateToInputs({
+    facility: baseFacility,
+    zones: { ...baseZones, officeSqft: 25000, layoutOverrides: { office: { w: 200, h: 100 } } },
+    volumes: baseVolumes,
+  });
+  t('drawn resize beats typed Office SF',
+    drawn.officeSqftOverride === 20000, `got ${drawn.officeSqftOverride}`);
+  const none = formStateToInputs({
+    facility: baseFacility, zones: baseZones, volumes: baseVolumes,
+  });
+  t('no office assert → zero override (officePct heuristic preserved)',
+    none.officeSqftOverride === 0, `got ${none.officeSqftOverride}`);
+  const sized = sizeFacility(inputs);
+  t('sized officeSqft = asserted 25,000', sized.officeSqft === 25000,
+    `got ${sized.officeSqft}`);
+}
+
 console.log(`\ntest-wsc-staging-seam: ${pass} passed, ${fail} failed.`);
 process.exit(fail > 0 ? 1 : 0);

@@ -2287,7 +2287,15 @@ export function formStateToInputs({ facility = {}, zones = {}, volumes = {} } = 
     const hFt = Math.max(0, +o.h || 0);
     return Math.round(wFt * hFt);
   };
-  const officeSqftOverride       = _resizedSqft('office');
+  // Office-SF wire-through (2026-07-22, same wart class as staging below):
+  // Configure's "Office SF" field (zones.officeSqft) was engine-ignored —
+  // sizeFacility derived office from warehouseOpSqft × officePct unless a
+  // drawn 2D resize overrode it. Every saved prod scenario carries a typed
+  // office figure (5K–25K SF) that never reached the sized totals. Same
+  // precedence: drawn resize > typed value > % heuristic; zones default 0
+  // keeps unasserted scenarios byte-identical.
+  const officeSqftOverride       = _resizedSqft('office')
+    || Math.round(Math.max(0, +zones.officeSqft || 0));
   // Staging-divergence fix (2026-07-22, parked since W1): Configure's
   // Recv/Ship Staging SF fields — which applyDynamicsPlan also writes with
   // the dwell-driven plan figures — were never mapped into the engine, so
