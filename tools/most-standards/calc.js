@@ -642,6 +642,8 @@ export function calcAnnualizedCost(dailyCost, operatingDays) {
  * @param {number} opts.shiftHours — hours per shift
  * @param {number} [opts.defaultBurdenPct=30]
  * @param {Map<string|number, import('./types.js?v=20260418-sM').MostTemplate>} [opts.templateMap] — optional: template_id → template for metadata lookup
+ * @param {Object} [opts.ratesByCategory] — { manual, mhe, hybrid } $/hr map (used when lines lack effective_rate)
+ * @param {number} [opts.defaultRate] — fallback when no category rate exists
  * @returns {import('./types.js?v=20260418-sM').MostToCmPayload['laborLines']}
  */
 export function convertToCmLaborLines(lines, opts) {
@@ -654,6 +656,19 @@ export function convertToCmLaborLines(lines, opts) {
     const annualVolume = (line.daily_volume || 0) * opDays;
     const annualHours = (line.hours_per_day || 0) * opDays;
 
+    // Hotfix (2026-07-22): `line.hourly_rate || 0` pushed $0 rates to CM for
+    // every category-rate-priced line — createEmptyAnalysisLine seeds the
+    // per-line override hourly_rate to 0 and _fillLineFromTemplate never sets
+    // it, so only explicit per-line overrides survived the push while the
+    // screen and XLSX export (which resolve category rates) showed real cost.
+    // Prefer the effective_rate computeAnalysisLines already resolved; else
+    // resolve exactly like computeAnalysisLines / workflowStepsToCmLines do
+    // (per-line override → category rate → fallback). `??` not `||`:
+    // effective_rate 0 is a real resolved "no rate anywhere" answer, and
+    // re-resolving those same inputs yields 0 again.
+    const effRate = line.effective_rate ?? resolveCategoryRate(
+      opts.ratesByCategory, line.labor_category || 'manual', opts.defaultRate, line.hourly_rate);
+
     // Lookup template for metadata if templateMap provided
     const template = templateMap.get(line.template_id);
     const payload = {
@@ -663,7 +678,7 @@ export function convertToCmLaborLines(lines, opts) {
       annual_hours: annualHours,
       base_uph: line.adjusted_uph || line.base_uph || 0,
       volume: annualVolume,
-      hourly_rate: line.hourly_rate || 0,
+      hourly_rate: effRate,
       burden_pct: burdenPct,
       most_template_id: line.template_id || '',
       most_template_name: line.activity_name || '',

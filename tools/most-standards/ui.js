@@ -20,8 +20,8 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202607
 // button is a convenience trigger rather than a discrete compute step, so a
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
-import * as calc from './calc.js?v=20260704-ux2d';
-import * as api from './api.js?v=20260722-s1a';
+import * as calc from './calc.js?v=20260722-s3a';
+import * as api from './api.js?v=20260722-s3a';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================
@@ -168,6 +168,12 @@ function analysisRowToScenario(row) {
     dailyCost: summary.dailyCost,
     annualCost: summary.annualCost,
     data: {
+      // Duplicate-on-save fix (2026-07-22): carry the DB row id (and name)
+      // into the hydrated analysis state so saveCurrentScenario can UPDATE
+      // in place. Copy flows (copyScenario, landing onCopy) build their
+      // payloads field-by-field and never forward id — they stay inserts.
+      id: row.id,
+      name: row.name || 'Untitled',
       pfd_pct: row.pfd_pct,
       productivity_pct: productivity,
       shift_hours: row.shift_hours,
@@ -2520,11 +2526,19 @@ async function saveCurrentScenario() {
     return;
   }
 
-  const name = await showPrompt('Scenario name:', `Scenario ${savedScenarios.length + 1}`);
+  // Duplicate-on-save fix (2026-07-22): when the analysis was hydrated from
+  // a saved row (analysis.id set), default the prompt to its current name —
+  // the save below updates that row in place, so a generic "Scenario N"
+  // default would silently rename it.
+  const defaultName = (analysis.id && analysis.name) ? analysis.name : `Scenario ${savedScenarios.length + 1}`;
+  const name = await showPrompt('Scenario name:', defaultName);
   if (!name) return;
 
   try {
     const saved = await api.saveAnalysis({
+      // Forward the hydrated row id so api.saveAnalysis updates in place
+      // instead of inserting a duplicate (and re-stamping deal context).
+      id: analysis.id ?? null,
       name,
       pfd_pct: analysis.pfd_pct || 14,
       productivity_pct: analysis.productivity_pct == null ? 90 : analysis.productivity_pct,
@@ -2537,6 +2551,11 @@ async function saveCurrentScenario() {
       learning_curve_pct: analysis.learning_curve_pct == null ? 100 : analysis.learning_curve_pct,
       lines: analysis.lines || [],
     });
+    // Re-stamp state with the persisted row id + name so the NEXT save is an
+    // update too (first save of a fresh analysis used to insert on every
+    // subsequent save as well).
+    if (saved && saved.id != null) analysis.id = saved.id;
+    analysis.name = name;
     // Refresh the list from Supabase so we get the canonical row (incl. id, timestamps)
     const rows = await api.listAnalyses();
     savedScenarios = rows.map(analysisRowToScenario);

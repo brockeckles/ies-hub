@@ -15,7 +15,7 @@ import { printFontCss, FONT_UI, FONT_DISPLAY } from '../../shared/print-fonts.js
 import { downloadCSV } from '../../shared/export.js?v=20260702-p1m1';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import * as calc from './calc.js?v=20260704-ux2c';
-import * as api from './api.js?v=20260722-s1a';
+import * as api from './api.js?v=20260722-s3a';
 import * as cmApi from '../cost-model/api.js?v=20260722-s1a';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';

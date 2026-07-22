@@ -57,6 +57,13 @@ export async function saveScenario(scenario) {
   const _ctx = dealContext.getActive();
   if (_ctx) payload.parent_deal_id = _ctx.id;
   if (_ctx && _ctx.siteId) payload.site_id = _ctx.siteId; // S1: site binding
+  // Duplicate path (2026-07-22): explicit linkage on the scenario object wins
+  // over the active-context stamp — a copy keeps its SOURCE row's deal/site/CM
+  // linkage. Regular editor saves never pass these fields, so the ctx stamp
+  // above still applies to them. Insert-only: updates never rebind.
+  if (scenario.parent_deal_id !== undefined) payload.parent_deal_id = scenario.parent_deal_id;
+  if (scenario.site_id !== undefined) payload.site_id = scenario.site_id;
+  if (scenario.parent_cost_model_id !== undefined) payload.parent_cost_model_id = scenario.parent_cost_model_id;
   const inserted = await db.insert('cog_scenarios', payload);
   recordAudit({ table: 'cog_scenarios', id: inserted?.id, action: 'insert', fields: { name: payload.name } });
   return inserted;
@@ -97,8 +104,25 @@ export async function unlinkFromCm(scenarioId) {
 export async function duplicateScenario(id) {
   const scenario = await getScenario(id);
   if (!scenario) throw new Error('Scenario not found');
-  const { id: _, created_at, ...rest } = scenario;
-  return db.insert('cog_scenarios', { ...rest, name: (rest.name || 'COG') + ' (Copy)' });
+  // RLS fix (2026-07-22): strip ALL row identity/ownership fields — id,
+  // created_at, updated_at, owner_id, team_id, visibility. Carrying the
+  // source owner_id defeats db.insert's owner stamping and trips the
+  // cog_scenarios INSERT policy (WITH CHECK owner_id = auth.uid()) when
+  // copying a teammate's shared scenario. Route through saveScenario
+  // (same pattern as WSC duplicateConfig) so the copy is inserted as a
+  // fresh owner-stamped row and the insert is audited. The copy keeps
+  // the SOURCE row's deal/site/CM linkage — saveScenario's explicit-
+  // linkage override skips the active-context re-stamp.
+  const sd = scenario.scenario_data || {};
+  return saveScenario({
+    name: (scenario.name || 'COG') + ' (Copy)',
+    points: sd.points,
+    config: sd.config,
+    result: sd.result || null,
+    parent_deal_id: scenario.parent_deal_id ?? null,
+    site_id: scenario.site_id ?? null,
+    parent_cost_model_id: scenario.parent_cost_model_id ?? null,
+  });
 }
 
 // ============================================================

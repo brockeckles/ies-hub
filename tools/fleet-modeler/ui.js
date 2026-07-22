@@ -421,11 +421,10 @@ function _fleetSectionCompleteness(key) {
 /** Compute KPI strip values for Fleet's chrome. */
 function _computeFleetKpis() {
   const items = [];
-  let veh = '—', drv = '—', cost = '—', util = '—';
+  let veh = '—', cost = '—', cpm = '—', atri = '—';
   if (result) {
     if (typeof result.totalVehicles === 'number') veh = String(result.totalVehicles);
     else if (Array.isArray(result.fleet)) veh = String(result.fleet.reduce((s, f) => s + (f.count || 0), 0));
-    if (typeof result.totalDrivers === 'number') drv = String(result.totalDrivers);
     if (typeof result.totalAnnualCost === 'number') {
       const tc = result.totalAnnualCost;
       cost = tc >= 1e6 ? '$' + (tc / 1e6).toFixed(2) + 'M' :
@@ -437,16 +436,15 @@ function _computeFleetKpis() {
              tc >= 1e3 ? '$' + (tc / 1e3).toFixed(0) + 'K' :
              '$' + tc.toFixed(0);
     }
-    if (typeof result.utilization === 'number') {
-      util = (result.utilization * (result.utilization > 1 ? 1 : 100)).toFixed(0) + '%';
-    } else if (typeof result.avgUtilizationPct === 'number') {
-      util = result.avgUtilizationPct.toFixed(0) + '%';
+    if (typeof result.avgCostPerMile === 'number') cpm = calc.formatCpm(result.avgCostPerMile);
+    if (result.atriBenchmark && typeof result.atriBenchmark.verdict === 'string') {
+      atri = result.atriBenchmark.verdict;
     }
   }
   items.push({ label: 'Vehicles', value: veh, hint: 'Total fleet vehicle count from the most recent run.' });
-  items.push({ label: 'Drivers', value: drv, hint: 'Required drivers (accounting for team-driving mode).' });
   items.push({ label: 'Total Cost', value: cost, hint: 'Annual fleet cost (vehicles + drivers + ops).' });
-  items.push({ label: 'Utilization', value: util, hint: 'Average fleet utilization across the run.' });
+  items.push({ label: 'Cost/Mile', value: cpm, hint: 'Average fleet cost per mile from the most recent run.' });
+  items.push({ label: 'ATRI', value: atri, hint: 'Verdict vs. ATRI 2024 truckload benchmark ($1.946/mi).' });
   return items;
 }
 
@@ -1072,35 +1070,7 @@ function renderComparisonSubTab(el) {
     const section = node.getAttribute('data-fm-section');
     if (section && section !== 'comparison') node.style.display = 'none';
   });
-  // FLE-SCOPE-10: Push to NetOpt button on the Comparison sub-tab.
-  if (!el.querySelector('#fm-push-netopt')) {
-    const headerRail = el.querySelector('[data-fm-section="comparison"] [style*="font-size:14px"]');
-    const card = el.querySelector('[data-fm-section="comparison"]');
-    if (card) {
-      const btn = document.createElement('button');
-      btn.id = 'fm-push-netopt';
-      btn.className = 'hub-btn hub-btn-sm hub-btn-secondary';
-      btn.style.cssText = 'margin:0 0 12px 0;font-size:11px;padding:5px 10px;';
-      btn.title = 'Send the lane → annual-miles seed to Network Optimizer for downstream network design.';
-      btn.textContent = '→ Send to NetOpt';
-      btn.addEventListener('click', () => {
-        try {
-          const seed = lanes.map(l => ({
-            name: `${l.origin || 'O'} → ${l.destination || 'D'}`,
-            origin: l.origin,
-            destination: l.destination,
-            weeklyShipments: l.weeklyShipments,
-            avgWeightLbs: l.avgWeightLbs,
-            distanceMiles: l.distanceMiles,
-          }));
-          showToast(`Sent ${seed.length} lanes to Network Optimizer`, 'success');
-        } catch (err) {
-          showToast(`Push failed: ${err.message || 'unknown'}`, 'error');
-        }
-      });
-      card.insertBefore(btn, card.firstChild);
-    }
-  }
+  // Send-to-NetOpt removed pending C1 spine wiring; see hub cohesion audit 2026-07-22.
 }
 
 function renderSensitivitySubTab(el) {
@@ -1143,7 +1113,6 @@ function renderResults(el) {
         <h3 class="text-section u-m0">Results</h3>
         <div class="u-flex">
           <button class="hub-btn hub-btn-sm hub-btn-secondary" id="fm-results-export">⬇ Export XLSX</button>
-          <button class="hub-btn hub-btn-sm hub-btn-primary" id="fm-results-push-cm" title="Stash fleet costs on the active cost-model scenario">→ Push to Cost Model</button>
         </div>
       </div>
       <!-- KPI Bar -->
@@ -1230,12 +1199,22 @@ function renderResults(el) {
               </tr>
             </thead>
             <tbody>
-              ${renderAtriBenchmarkRow('Total CPM', r.atriBenchmark.modelCostPerMile, r.atriBenchmark.atriCostPerMile)}
-              ${renderAtriBenchmarkRow('Fuel/Mi', r.atriBenchmark.modelCostPerMile * 0.26, 0.583)}
-              ${renderAtriBenchmarkRow('Drivers/Mi', r.atriBenchmark.modelCostPerMile * 0.37, 0.827)}
-              ${renderAtriBenchmarkRow('Vehicle/Mi', r.atriBenchmark.modelCostPerMile * 0.13, 0.296)}
-              ${renderAtriBenchmarkRow('Insurance/Mi', r.atriBenchmark.modelCostPerMile * 0.06, 0.117)}
-              ${renderAtriBenchmarkRow('Maintenance/Mi', r.atriBenchmark.modelCostPerMile * 0.08, 0.198)}
+              ${(() => {
+                // Genuine per-category CPM from the engine's privateBreakdown
+                // (annual category totals ÷ total annual miles) — not a scaled
+                // copy of ATRI's own mix, so variance columns are meaningful.
+                const pb = r.comparison.privateBreakdown ?? {};
+                const miles = r.totalAnnualMiles > 0 ? r.totalAnnualMiles : 1;
+                const perMile = (v) => (v ?? 0) / miles;
+                return [
+                  renderAtriBenchmarkRow('Total CPM', r.atriBenchmark.modelCostPerMile, r.atriBenchmark.atriCostPerMile),
+                  renderAtriBenchmarkRow('Fuel/Mi', perMile(pb.fuel), 0.583),
+                  renderAtriBenchmarkRow('Drivers/Mi', perMile(pb.driver), 0.827),
+                  renderAtriBenchmarkRow('Vehicle/Mi', perMile(pb.vehicle), 0.296),
+                  renderAtriBenchmarkRow('Insurance/Mi', perMile(pb.insurance), 0.117),
+                  renderAtriBenchmarkRow('Maintenance/Mi', perMile(pb.maintenance), 0.198),
+                ].join('');
+              })()}
             </tbody>
           </table>
         </div>
@@ -1289,29 +1268,11 @@ function renderResults(el) {
     </div>
   `;
 
-  // Bind export buttons + push-to-CM + sensitivity range inputs
+  // Bind export buttons + sensitivity range inputs
   setTimeout(() => {
     el.querySelector('#fm-results-export')?.addEventListener('click', exportFleetXLSX);
 
-    // FLE-G1 — push fleet results to active Cost Model scenario.
-    el.querySelector('#fm-results-push-cm')?.addEventListener('click', async () => {
-      if (!result) return;
-      try {
-        const payload = {
-          source: 'fleet-modeler',
-          scenarioId: activeScenarioId,
-          totalAnnualCost: result.totalAnnualCost,
-          totalAnnualMiles: result.totalAnnualMiles,
-          avgCostPerMile: result.avgCostPerMile,
-          comparison: result.comparison,
-          breakEven: result.breakEven,
-        };
-        // Stash on the bus — cost-model listens on 'fleet:push'.
-        showToast('Fleet costs pushed to Cost Model bus', 'success');
-      } catch (err) {
-        showToast(`Push failed: ${err.message || 'unknown'}`, 'error');
-      }
-    });
+    // Push-to-CM removed pending C1 spine wiring; see hub cohesion audit 2026-07-22.
 
     // FLE-F1 — sensitivity matrix range inputs trigger a re-render of the
     // Results tab (cheap; the matrix recomputes inside the helper).

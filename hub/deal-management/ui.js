@@ -1018,21 +1018,28 @@ function renderMyHours(el) {
   const totalActual = rows.reduce((s, r) => s + r.actual, 0);
   const pct = totalForecast > 0 ? (totalActual / totalForecast) * 100 : 0;
 
+  // Repo-standard amber "est" pill (matches the financials est badge) — flags
+  // that these hours are synthesized, not logged. See banner below.
+  const estPill = '<span title="Illustrative estimate — synthesized from revenue and stage, not logged hours." style="font-size:10px;font-weight:700;color:var(--c-warn-deep);background:var(--c-warn-bg);border-radius:8px;padding:1px 6px;vertical-align:middle;margin-left:6px;">est</span>';
+
   el.innerHTML = `
+    <div style="padding:10px 14px;margin-bottom:14px;background:var(--c-warn-bg);border-left:4px solid var(--c-warn-deep);border-radius:6px;font-size:13px;font-weight:600;color:var(--c-warn-deep);">
+      Illustrative estimates — hours below are synthesized from deal revenue and stage, not logged time. Real figures will replace these once hours tracking lands.
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
       <div class="hub-card" style="padding:14px;">
         <div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Forecast Hours</div>
-        <div style="font-size:26px;font-weight:800;color:var(--c-info);margin-top:6px;">${totalForecast.toLocaleString()}</div>
+        <div style="font-size:26px;font-weight:800;color:var(--c-info);margin-top:6px;">${totalForecast.toLocaleString()}${estPill}</div>
         <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">planned across ${rows.length} deal${rows.length === 1 ? '' : 's'}</div>
       </div>
       <div class="hub-card" style="padding:14px;">
         <div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Actual Hours</div>
-        <div style="font-size:26px;font-weight:800;color:var(--c-success);margin-top:6px;">${totalActual.toLocaleString()}</div>
+        <div style="font-size:26px;font-weight:800;color:var(--c-success);margin-top:6px;">${totalActual.toLocaleString()}${estPill}</div>
         <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">logged to date</div>
       </div>
       <div class="hub-card" style="padding:14px;">
         <div style="font-size:11px;color:var(--ies-gray-500);font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Consumption</div>
-        <div style="font-size:26px;font-weight:800;color:${pct < 100 ? 'var(--c-purple)' : 'var(--c-danger)'};margin-top:6px;">${pct.toFixed(0)}%</div>
+        <div style="font-size:26px;font-weight:800;color:${pct < 100 ? 'var(--c-purple)' : 'var(--c-danger)'};margin-top:6px;">${pct.toFixed(0)}%${estPill}</div>
         <div style="font-size:11px;color:var(--ies-gray-400);margin-top:2px;">actual / forecast</div>
       </div>
     </div>

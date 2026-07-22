@@ -9,7 +9,7 @@ import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import * as dealContext from '../../shared/deal-context.js?v=20260722-s1a';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 // P2-2 (2026-07-02) — pure element sanitation lives in calc.js
-import { sanitizeElementForWrite } from './calc.js?v=20260704-ux2d';
+import { sanitizeElementForWrite } from './calc.js?v=20260722-s3a';
 
 // ============================================================
 // TEMPLATES

@@ -521,10 +521,10 @@ async function handleSaveNetopt() {
     rootEl.innerHTML = renderShell();
     bindShellEvents();
     renderContentView();
-    showToast(`Saved "${_configName}".`, 'ok');
+    showToast(`Saved "${_configName}".`, 'success');
   } catch (err) {
     console.error('[NetOpt] save failed:', err);
-    showToast(`Save failed: ${err.message || err}`, 'err');
+    showToast(`Save failed: ${err.message || err}`, 'error');
   }
 }
 
