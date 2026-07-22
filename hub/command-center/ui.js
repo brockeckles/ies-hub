@@ -8,8 +8,12 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260722-s3c';
+import * as api from './api.js?v=20260722-s3d';
 import { escapeHtml, safeHttpUrl } from '../../shared/escape.js?v=20260702-sec2';
+// C2 (2026-07-22): DOS_STAGES is the SINGLE canonical stage definition
+// (names + colors) — the snapshot's stage bar derives from it instead of
+// carrying its own duplicate arrays.
+import { DOS_STAGES } from '../../tools/deal-manager/calc.js?v=20260722-s2b';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -221,14 +225,55 @@ function renderSparkline(data, color) {
   `;
 }
 
-/** Pipeline Snapshot — active deal count + pipeline $ + stage distribution mini-bar. */
+/** Short stage labels for the snapshot's mini-bar, keyed by DOS stage number
+ *  (abbreviations only — names + colors come from the canonical DOS_STAGES). */
+const CC_STAGE_SHORT = { 1: 'Pre-Sales', 2: 'Qual', 3: 'Design', 4: 'Ops', 5: 'Exec', 6: 'Handover' };
+
+/**
+ * Pipeline Snapshot — active deal count + pipeline $ (est-badged when any
+ * active deal's revenue is estimated) + total sites + grade distribution +
+ * ★ coverage + stage distribution mini-bar. Static card inside an <a>: no
+ * listeners, so bind-once delegation in bindEvents() is untouched.
+ */
 function renderPipelineSnapshot(p) {
   if (!p) return '';
   const totalDeals = p.activeDeals || 0;
-  const stageNames = ['Pre-Sales', 'Qual', 'Design', 'Ops', 'Exec', 'Handover'];
-  const stageColors = ['#6b7280', '#2563eb', '#7c3aed', '#d97706', '#ea580c', '#16a34a'];
+  const stageNames = DOS_STAGES.map(s => CC_STAGE_SHORT[s.number] || s.name);
+  const stageColors = DOS_STAGES.map(s => s.color);
   const counts = p.stageCounts || [];
-  const sumCounts = counts.reduce((s, n) => s + (n || 0), 0) || 1;
+
+  // Repo-standard amber est pill — Pipeline $ includes estimated revenue
+  // (display-must-match-mechanism: badge what feeds the roll-up).
+  const estPill = p.anyEstimate
+    ? `<span title="Includes Σ★ roll-ups with partial coverage or heuristic pricing" style="font-size:10px;font-weight:700;color:var(--c-warn-deep);background:var(--c-warn-bg);border-radius:8px;padding:1px 6px;vertical-align:middle;margin-left:6px;">est</span>`
+    : '';
+
+  // Compact grade distribution — letter + count chips, one row. Letter color
+  // mirrors the DM rule: A-grades success-green, everything else info-blue.
+  const GRADE_ORDER = ['A', 'B', 'C', 'D', 'F'];
+  const gc = p.gradeCounts || {};
+  const gradeKeys = GRADE_ORDER.filter(g => Number(gc[g]) > 0)
+    .concat(Object.keys(gc).filter(g => !GRADE_ORDER.includes(g) && Number(gc[g]) > 0).sort());
+  const gradeChips = gradeKeys.map(g => `
+    <span style="display:inline-flex;align-items:baseline;gap:2px;white-space:nowrap;">
+      <span style="font-size:13px;font-weight:800;color:${g.startsWith('A') ? 'var(--c-success)' : 'var(--c-info)'};">${escapeHtml(g)}</span>
+      <span style="font-size:11px;font-weight:700;color:var(--ies-gray-500);">×${Number(gc[g])}</span>
+    </span>`).join('');
+
+  // ★ coverage — deals whose every active site carries a ★ scenario.
+  const cov = p.starCoverage;
+  const covChip = cov && Number(cov.total) > 0
+    ? `<span title="Deals with a ★ scenario on every active site" style="font-size:11px;font-weight:700;color:var(--ies-gray-500);white-space:nowrap;flex-shrink:0;"><span style="color:var(--c-warn-strong);">★</span> ${Number(cov.covered) || 0}/${Number(cov.total)} covered</span>`
+    : '';
+  const detailRow = (gradeChips || covChip)
+    ? `<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;min-width:0;">
+        <span style="display:inline-flex;align-items:baseline;gap:10px;overflow:hidden;white-space:nowrap;">
+          ${gradeChips ? `<span class="hub-kpi-tile__label" style="min-height:0;">Scores</span>${gradeChips}` : ''}
+        </span>
+        ${covChip}
+      </div>`
+    : '';
+
   return `
     <a href="#deals" class="hub-card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;text-decoration:none;color:inherit;cursor:pointer;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -242,19 +287,24 @@ function renderPipelineSnapshot(p) {
         </div>
         <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
           <span class="hub-kpi-tile__label" style="min-height:0;">Pipeline</span>
-          <span class="hub-kpi-tile__value" style="font-size:20px;">$${(p.totalRevenue / 1e6).toFixed(0)}M</span>
+          <span class="hub-kpi-tile__value" style="font-size:20px;">$${(p.totalRevenue / 1e6).toFixed(0)}M${estPill}</span>
         </div>
         <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
           <span class="hub-kpi-tile__label" style="min-height:0;">Avg margin</span>
           <span class="hub-kpi-tile__value" style="font-size:20px;">${(p.avgMargin || 0).toFixed(1)}%</span>
         </div>
+        <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+          <span class="hub-kpi-tile__label" style="min-height:0;">Sites</span>
+          <span class="hub-kpi-tile__value" style="font-size:20px;">${Number(p.totalSites) || 0}</span>
+        </div>
       </div>
+      ${detailRow}
       <div>
         <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--ies-gray-100);">
-          ${counts.map((n, i) => n > 0 ? `<div style="flex:${n};background:${stageColors[i]};" title="${stageNames[i]}: ${n}"></div>` : '').join('')}
+          ${counts.map((n, i) => n > 0 ? `<div style="flex:${n};background:${stageColors[i]};" title="${escapeHtml(DOS_STAGES[i]?.name || stageNames[i] || '')}: ${n}"></div>` : '').join('')}
         </div>
         <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:9px;color:var(--ies-gray-400);font-weight:600;">
-          ${stageNames.map((n, i) => `<span title="${n}: ${counts[i] || 0}">${n}</span>`).join('')}
+          ${stageNames.map((n, i) => `<span title="${escapeHtml(DOS_STAGES[i]?.name || n)}: ${counts[i] || 0}">${escapeHtml(n)}</span>`).join('')}
         </div>
       </div>
     </a>

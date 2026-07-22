@@ -10,15 +10,23 @@
  */
 
 /**
- * Revenue estimate for one cost-model scenario: cost grossed up by its own
- * target margin, falling back to the deal margin, then 10%. Mirrors the
- * legacy deal-level fallback formula so the no-★ path stays byte-identical.
+ * Revenue for one cost-model scenario — ENGINE-FIRST (C2 ruling, Brock
+ * 2026-07-22): precedence is
+ *   1. m.total_annual_revenue when Number(...) > 0 — the CM engine's stamped
+ *      price, CM-authoritative (mirrors computeSiteFinancials / the bid
+ *      manifest's engine-priced item);
+ *   2. otherwise the markup heuristic: cost grossed up by the model's own
+ *      target margin, falling back to the deal margin, then 10% (byte-
+ *      identical to the legacy deal-level fallback formula).
  *
- * @param {{target_margin_pct?: number|string|null, total_annual_cost?: number|string|null}|null} m
+ * @param {{total_annual_revenue?: number|string|null, target_margin_pct?: number|string|null, total_annual_cost?: number|string|null}|null} m
  * @param {number} [fallbackMarginPct]
- * @returns {number} annual revenue in dollars (0 when the model has no cost)
+ * @returns {number} annual revenue in dollars (0 when the model has no
+ *          engine revenue and no cost)
  */
 export function modelRevenueEst(m, fallbackMarginPct) {
+  const engineRev = Number(m?.total_annual_revenue);
+  if (engineRev > 0) return engineRev;
   const mMargin = Number(m?.target_margin_pct);
   const pct = (Number.isFinite(mMargin) && mMargin > 0 ? mMargin : (Number(fallbackMarginPct) || 10)) / 100;
   const cost = Number(m?.total_annual_cost) || 0;
@@ -30,35 +38,53 @@ export function modelRevenueEst(m, fallbackMarginPct) {
  * Applies ONLY when at least one site has a ★ — otherwise the legacy
  * heuristic numbers pass through untouched (zero-diff for existing deals).
  *
- * @param {Array<{inBidModelId?: number|string|null, status?: string}>} sites
+ * C2 (2026-07-22, engine-first ruling): each ★ model is priced engine-first
+ * via modelRevenueEst (total_annual_revenue > 0 wins; heuristic otherwise),
+ * and the result now carries pricing provenance so the UI can badge
+ * honestly: `siteSources` lists one entry per contributing ★ site with
+ * revenueSource 'cm-engine' | 'estimate', and `anyHeuristicStar` is true
+ * when any contributing ★ was priced by the markup heuristic. Existing
+ * field names/shapes are unchanged — provenance fields are additive.
+ *
+ * @param {Array<{id?: number|string, inBidModelId?: number|string|null, status?: string}>} sites
  * @param {Map<string, object>} modelById — String(model id) → model summary
- *        with target_margin_pct + total_annual_cost
+ *        with target_margin_pct + total_annual_cost (+ engine-stamped
+ *        total_annual_revenue when the model was saved through CM)
  * @param {{revenue: number, margin: number}} legacy — the pre-S1 heuristic
  *        values (deal column → model averages)
  * @returns {{revenue: number, margin: number, rollupFromStars: boolean,
- *           rollupIsEstimate: boolean, bidCoverage: {starred: number, active: number}}}
+ *           rollupIsEstimate: boolean, bidCoverage: {starred: number, active: number},
+ *           anyHeuristicStar: boolean,
+ *           siteSources: Array<{siteId: number|string|null, modelId: number|string,
+ *             revenueSource: 'cm-engine'|'estimate'}>}}
  */
 export function computeStarRollup(sites, modelById, legacy) {
   const list = Array.isArray(sites) ? sites : [];
   const active = list.filter(s => s.status !== 'dropped');
   const starred = list.filter(s => s.inBidModelId != null);
   const bidCoverage = { starred: starred.length, active: active.length };
-  const starModels = starred
-    .map(s => modelById.get(String(s.inBidModelId)))
-    .filter(Boolean);
   const out = {
     revenue: Number(legacy?.revenue) || 0,
     margin: Number(legacy?.margin) || 0,
     rollupFromStars: false,
     rollupIsEstimate: false,
     bidCoverage,
+    anyHeuristicStar: false,
+    siteSources: [],
   };
-  if (!starModels.length) return out;
+  const starPairs = starred
+    .map(s => ({ site: s, model: modelById.get(String(s.inBidModelId)) }))
+    .filter(p => p.model);
+  if (!starPairs.length) return out;
   let rev = 0, gp = 0;
-  for (const m of starModels) {
+  for (const { site, model: m } of starPairs) {
     const r = modelRevenueEst(m, out.margin);
     rev += r;
     gp += r - (Number(m.total_annual_cost) || 0);
+    // Provenance mirrors modelRevenueEst's precedence exactly.
+    const src = Number(m.total_annual_revenue) > 0 ? 'cm-engine' : 'estimate';
+    out.siteSources.push({ siteId: site.id ?? null, modelId: site.inBidModelId, revenueSource: src });
+    if (src === 'estimate') out.anyHeuristicStar = true;
   }
   if (rev > 0) {
     out.revenue = rev;

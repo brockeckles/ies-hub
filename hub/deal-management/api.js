@@ -10,7 +10,7 @@ import { db } from '../../shared/supabase.js?v=20260703-hw1';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
 import { recordAudit } from '../../shared/audit.js?v=20260504-auth1';
 // S1 (2026-07-22): Σ★ roll-up is pure — one formula shared with ui.js.
-import { computeStarRollup } from './calc.js?v=20260722-s3c';
+import { computeStarRollup } from './calc.js?v=20260722-s3d';
 // S2 (2026-07-22, Brock ruling: wire the score): deal health grade from the
 // same MSA engine the Financials tab runs, ★-preferred basis, per-★-model
 // CM escalation knobs.
@@ -187,7 +187,10 @@ export async function listRealDeals() {
       // S1 roll-up (ruling #6): Σ of each site's ★ scenario when any ★
       // exists; the exact legacy heuristic above passes through otherwise
       // (byte-identical list/pipeline numbers for no-★ deals).
-      const { revenue, margin, rollupFromStars, rollupIsEstimate, bidCoverage } =
+      // C2 (2026-07-22): anyHeuristicStar + siteSources are the roll-up's
+      // pricing provenance — stamped through so the UI badges heuristic-priced
+      // ★ rows exactly on first paint (ui.js also has an MSA-join fallback).
+      const { revenue, margin, rollupFromStars, rollupIsEstimate, bidCoverage, anyHeuristicStar, siteSources } =
         computeStarRollup(sites, modelById, { revenue: legacyRevenue, margin: legacyMargin });
       // S2 (Brock ruling: wire computeDealScore). Basis mirrors the
       // Financials tab's _binderSites semantics: ★ scenarios when any exist,
@@ -233,6 +236,8 @@ export async function listRealDeals() {
         bidCoverage,
         rollupIsEstimate,
         rollupFromStars,
+        anyHeuristicStar,
+        siteSources,
         revenue,
         margin,
         owner: d.deal_owner || '—',
@@ -257,6 +262,9 @@ export async function listRealDeals() {
           facility_sqft: m.facility_sqft,
           target_margin_pct: m.target_margin_pct,
           total_annual_cost: m.total_annual_cost,
+          // C2: engine-stamped revenue rides the summary so ui provenance
+          // checks don't need the MSA-row join fallback.
+          total_annual_revenue: m.total_annual_revenue,
           updated_at: m.updated_at,
           // C1: derived from the deal_sites ★ authority above, not the column.
           in_bid: starIds.has(String(m.id)),

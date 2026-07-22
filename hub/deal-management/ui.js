@@ -7,7 +7,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260722-s3c';
+import * as api from './api.js?v=20260722-s3d';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260722-s1a';
@@ -17,7 +17,7 @@ import { icon } from '../../shared/icons.js?v=20260710-r2';
 import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260722-s2b';
 import * as msaApi from '../../tools/deal-manager/api.js?v=20260722-s3b';
 // S1 (2026-07-22): shared pure Σ★ roll-up (same module api.js computes with).
-import * as dmCalc from './calc.js?v=20260722-s3c';
+import * as dmCalc from './calc.js?v=20260722-s3d';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -1181,7 +1181,7 @@ function renderDetail() {
 
       <!-- Quick Stats — 5-tile strip overrides hub-kpi-strip\'s 4-column default -->
       <div class="hub-kpi-strip" style="grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:20px;">
-        ${kpi(d.rollupFromStars ? 'Revenue (Σ★)' : 'Revenue', '$' + (d.revenue / 1e6).toFixed(1) + 'M' + (d.rollupIsEstimate ? ' <span title="Some sites have no ★ scenario yet — totals cover the starred sites only" style="font-size:10px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:8px;padding:1px 6px;vertical-align:middle;">est</span>' : ''))}
+        ${kpi(d.rollupFromStars ? 'Revenue (Σ★)' : 'Revenue', '$' + (d.revenue / 1e6).toFixed(1) + 'M' + (d.rollupIsEstimate ? _estPill('Some sites have no ★ scenario yet — totals cover the starred sites only' + (_anyHeuristicStar(d) ? '. Also: some ★ scenarios are markup-heuristic priced — no engine-stamped revenue.' : '')) : ''))}
         ${kpi('Margin', d.margin > 0 ? d.margin + '%' : 'TBD', d.margin > 0 && d.margin < 10 ? 'var(--ies-orange)' : null)}
         ${kpi('Total sqft', totalSqft > 0 ? (totalSqft / 1000).toFixed(0) + 'K' : '—')}
         ${kpi('Days in Stage', d.daysInStage, d.daysInStage > 14 ? 'var(--ies-red)' : null)}
@@ -1375,7 +1375,15 @@ function _dosStatusFor(dealId, tpl) {
 async function _hydrateDealDetail(dealId) {
   if (!dealId) return;
   if (!_isRealDealId(dealId)) return;
-  if (_hydratedDeals.has(dealId)) return;
+  if (_hydratedDeals.has(dealId)) {
+    // C2 walk-wart fix (2026-07-22): the designs cache was fetched once per
+    // session, so scenarios saved in a design tool didn't reach the workflow
+    // rail (or the bid manifest) until hard refresh. Every ENTRY into the
+    // detail view now refetches designs; tab switches inside the view don't
+    // (hydrate only runs on the entry paths).
+    _refreshDesignScenarios(dealId);
+    return;
+  }
   _hydratedDeals.add(dealId);
   try {
     const [strategy, artifacts, dosStatus, designScenarios, outcome, msaSites, bidMeta] = await Promise.all([
@@ -1442,6 +1450,42 @@ async function _hydrateDealDetail(dealId) {
     console.warn('[deal-mgmt] _hydrateDealDetail failed', err);
     // Allow retry on next entry by clearing the membership
     _hydratedDeals.delete(dealId);
+  }
+}
+
+/** Order-insensitive-enough signature of the per-tool design rows: tool key +
+ *  id + site_id + updated_at is exactly what the rail counts / site pages /
+ *  bid manifest read from the cache. */
+function _designSig(ds) {
+  return JSON.stringify(['wsc', 'most', 'cog', 'netopt', 'fleet'].map(k =>
+    ((ds && ds[k]) || []).map(r => [String(r.id), r.site_id ?? null, r.updated_at ?? null])));
+}
+
+/** In-flight guard so double-entry (e.g. rapid back/forward) doesn't stack
+ *  refetches for the same deal. */
+const _designRefreshInFlight = new Set();
+
+/** C2 walk-wart fix: async refetch of the per-deal design scenarios on
+ *  re-entry into the detail view. Updates _designScenariosByDeal (which the
+ *  workflow rail, site pages AND _bidManifestFor all read) and re-renders
+ *  the visible detail content only when the rows actually changed and we're
+ *  still on this deal — race-safe, no polling. */
+async function _refreshDesignScenarios(dealId) {
+  if (!dealId || _designRefreshInFlight.has(dealId)) return;
+  _designRefreshInFlight.add(dealId);
+  try {
+    const fresh = await api.listDesignScenariosByDeal(dealId);
+    if (!fresh) return;
+    const prev = _designScenariosByDeal.get(dealId);
+    const changed = !prev || _designSig(prev) !== _designSig(fresh);
+    _designScenariosByDeal.set(dealId, fresh);
+    if (changed && viewMode === 'detail' && selectedDeal && selectedDeal.id === dealId) {
+      renderDetailContent();
+    }
+  } catch (err) {
+    console.warn('[deal-mgmt] _refreshDesignScenarios failed', err);
+  } finally {
+    _designRefreshInFlight.delete(dealId);
   }
 }
 
@@ -2282,17 +2326,80 @@ function _modelRevenueEst(m, fallbackMarginPct) {
   return dmCalc.modelRevenueEst(m, fallbackMarginPct);
 }
 
+// ── C2 (2026-07-22, engine-first Σ★ ruling): pricing-provenance badges ──
+// Display must match mechanism: a ★ row priced by the markup heuristic
+// (no engine-stamped total_annual_revenue) carries the repo-standard amber
+// est pill wherever its revenue figure renders. Engine-priced rows never do.
+
+const _EST_PILL_STYLE = 'font-size:10px;font-weight:700;color:var(--c-warn-deep);background:var(--c-warn-bg);border-radius:8px;padding:1px 6px;vertical-align:middle;';
+const _HEUR_STAR_TIP = 'Markup-heuristic estimate — no engine-stamped revenue on the ★ scenario.';
+
+/** Repo-standard amber est pill (leading space so it appends to a figure). */
+function _estPill(title) {
+  return ` <span title="${escapeAttr(title)}" style="${_EST_PILL_STYLE}">est</span>`;
+}
+
+/**
+ * Revenue provenance for a site's ★ scenario: 'cm-engine' | 'estimate',
+ * or null when the site has no ★ (or provenance is not yet knowable).
+ * Prefers the calc-stamped contract (computeStarRollup's siteSources, kept
+ * on the deal by _recomputeDealRollup); falls back to the same precedence
+ * rule the calc uses — engine-stamped total_annual_revenue > 0 wins — via
+ * the model summary or the MSA-shape rows (which carry it as annualRevenue,
+ * the same join _bidManifestFor uses).
+ */
+function _starRevenueSource(d, site) {
+  if (!d || !site || site.inBidModelId == null) return null;
+  const stamped = Array.isArray(d.siteSources)
+    ? d.siteSources.find(x => String(x.siteId) === String(site.id))
+    : null;
+  if (stamped) return stamped.revenueSource;
+  const m = (d.models || []).find(x => String(x.id) === String(site.inBidModelId));
+  if (!m) return null;
+  if (m.total_annual_revenue !== undefined) {
+    return Number(m.total_annual_revenue) > 0 ? 'cm-engine' : 'estimate';
+  }
+  // Model summary drops total_annual_revenue — join the MSA rows. Before
+  // hydrate lands we can't know, so return null (no badge) rather than guess.
+  const msaRows = _msaSitesByDeal.get(d.id);
+  if (!msaRows) return null;
+  const row = msaRows.find(rw => String(rw.costModelId) === String(m.id));
+  return Number(row?.annualRevenue) > 0 ? 'cm-engine' : 'estimate';
+}
+
+/** C2 contract: true when any contributing ★ is heuristic-priced. Reads the
+ *  computeStarRollup stamp when present; derives per-site otherwise. */
+function _anyHeuristicStar(d) {
+  if (typeof d?.anyHeuristicStar === 'boolean') return d.anyHeuristicStar;
+  return (Array.isArray(d?.sites) ? d.sites : [])
+    .some(s => _starRevenueSource(d, s) === 'estimate');
+}
+
 /** Recompute the deal's Σ★ roll-up locally after a ★ / site / assignment
  *  change. Same pure formula the fetch path uses (calc.computeStarRollup) —
  *  legacy heuristic values pass through when no ★ exists. */
 function _recomputeDealRollup(d) {
-  const modelById = new Map((d.models || []).map(m => [String(m.id), m]));
+  // C2 engine-first: the deal's model summaries drop total_annual_revenue;
+  // the MSA-shape rows for the same cost_model_projects carry it as
+  // annualRevenue. Join by id (the _bidManifestFor seam) so the optimistic
+  // roll-up prices — and stamps provenance — exactly like the engine rule.
+  const revById = new Map((_msaSitesByDeal.get(d.id) || [])
+    .map(r => [String(r.costModelId), Number(r.annualRevenue) || 0]));
+  const modelById = new Map((d.models || []).map(m => [String(m.id),
+    (m.total_annual_revenue === undefined && revById.has(String(m.id)))
+      ? { ...m, total_annual_revenue: revById.get(String(m.id)) }
+      : m,
+  ]));
   const r = dmCalc.computeStarRollup(d.sites || [], modelById, { revenue: d.revenue, margin: d.margin });
   d.revenue = r.revenue;
   d.margin = r.margin;
   d.rollupFromStars = r.rollupFromStars;
   d.rollupIsEstimate = r.rollupIsEstimate;
   d.bidCoverage = r.bidCoverage;
+  // C2 provenance contract (engine-first ruling): per-★-site revenueSource
+  // + anyHeuristicStar drive the est badges.
+  d.anyHeuristicStar = !!r.anyHeuristicStar;
+  d.siteSources = Array.isArray(r.siteSources) ? r.siteSources : [];
 }
 
 function _scenarioChips(d, site, group) {
@@ -2352,8 +2459,10 @@ function renderDealSites() {
     const starModel = s.inBidModelId != null ? group.find(m => String(m.id) === String(s.inBidModelId)) : null;
     const starRev = starModel ? _modelRevenueEst(starModel, d.margin) : 0;
     const starCost = starModel ? (Number(starModel.total_annual_cost) || 0) : 0;
+    // C2: heuristic-priced ★ revenue carries the est pill (engine rows don't).
+    const starEst = starModel && _starRevenueSource(d, s) === 'estimate' ? _estPill(_HEUR_STAR_TIP) : '';
     const starLine = starModel && starRev > 0
-      ? `★ $${(starRev / 1e6).toFixed(1)}M · ${(((starRev - starCost) / starRev) * 100).toFixed(1)}%`
+      ? `★ $${(starRev / 1e6).toFixed(1)}M · ${(((starRev - starCost) / starRev) * 100).toFixed(1)}%${starEst}`
       : `<span class="u-faint">${s.status === 'dropped' ? '— dropped' : group.length ? 'no ★ yet' : '— excluded from roll-up'}</span>`;
     return `
     <div class="hub-card" style="padding:14px 16px;display:flex;flex-direction:column;gap:9px;${group.length === 0 ? 'border-style:dashed;' : ''}">
@@ -2430,6 +2539,8 @@ function renderSiteDetail(d, site) {
   const starModel = site.inBidModelId != null ? group.find(m => String(m.id) === String(site.inBidModelId)) : null;
   const starRev = starModel ? _modelRevenueEst(starModel, d.margin) : 0;
   const starCost = starModel ? (Number(starModel.total_annual_cost) || 0) : 0;
+  // C2: est pill on the ★ scenario's revenue when it's heuristic-priced.
+  const starEst = starModel && _starRevenueSource(d, site) === 'estimate' ? _estPill(_HEUR_STAR_TIP) : '';
 
   const scenarioRows = group.map(m => {
     const star = site.inBidModelId != null && String(site.inBidModelId) === String(m.id);
@@ -2441,7 +2552,7 @@ function renderSiteDetail(d, site) {
         ? '<span style="color:var(--c-success);font-size:15px;">★</span>'
         : `<button data-action="mark-in-bid" data-model-id="${escapeAttr(m.id)}" title="Make this the site's ★ bid scenario" style="border:none;background:var(--ies-gray-50);border-radius:10px;padding:2px 8px;font-size:12px;cursor:pointer;color:var(--ies-gray-500);">☆</button>`}</td>
       <td style="padding:8px;font-weight:${star ? '700' : '500'};">${escapeHtml(m.scenario_label || 'Baseline')}</td>
-      <td style="padding:8px;text-align:right;">${rev > 0 ? '$' + (rev / 1e6).toFixed(2) + 'M' : '—'}</td>
+      <td style="padding:8px;text-align:right;">${rev > 0 ? '$' + (rev / 1e6).toFixed(2) + 'M' + (star ? starEst : '') : '—'}</td>
       <td style="padding:8px;text-align:right;">${rev > 0 ? (((rev - cost) / rev) * 100).toFixed(1) + '%' : '—'}</td>
       <td style="padding:8px;color:var(--ies-gray-400);font-size:11px;">${m.updated_at ? formatDate(String(m.updated_at).slice(0, 10)) : '—'}</td>
       <td style="padding:8px;text-align:right;">
@@ -2461,7 +2572,7 @@ function renderSiteDetail(d, site) {
     </div>
 
     <div class="hub-kpi-strip" style="margin-bottom:14px;">
-      <div class="hub-kpi-tile"><div class="hub-kpi-tile__label">★ Y1 Revenue</div><div class="hub-kpi-tile__value">${starRev > 0 ? '$' + (starRev / 1e6).toFixed(1) + 'M' : '—'}</div></div>
+      <div class="hub-kpi-tile"><div class="hub-kpi-tile__label">★ Y1 Revenue</div><div class="hub-kpi-tile__value">${starRev > 0 ? '$' + (starRev / 1e6).toFixed(1) + 'M' + starEst : '—'}</div></div>
       <div class="hub-kpi-tile"><div class="hub-kpi-tile__label">★ Margin</div><div class="hub-kpi-tile__value">${starRev > 0 ? (((starRev - starCost) / starRev) * 100).toFixed(1) + '%' : '—'}</div></div>
       <div class="hub-kpi-tile"><div class="hub-kpi-tile__label">Scenarios</div><div class="hub-kpi-tile__value">${group.length}</div></div>
       <div class="hub-kpi-tile"><div class="hub-kpi-tile__label">Designs</div><div class="hub-kpi-tile__value">${atSite.length}</div></div>

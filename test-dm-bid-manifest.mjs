@@ -12,7 +12,7 @@
 //   5. manual_checks toggles are strict-boolean (=== true).
 //   6. Item ORDER + required flags pinned — UI renders in array order.
 
-import { computeBidManifest } from './hub/deal-management/calc.js?v=20260722-s3c';
+import { computeBidManifest } from './hub/deal-management/calc.js?v=20260722-s3d';
 
 let pass = 0, fail = 0;
 const t = (name, cond, extra = '') => {

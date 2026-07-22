@@ -702,12 +702,16 @@ function _resolveCpm() {
 // numbers and all reflect the round-trip factor. Without this, kMeansCog
 // alone produces no cost — chrome shows '—' and the per-row table runs its
 // own one-way formula that disagrees with the Analysis-tab totals.
-function _enrichCogResultWithCost(result, solvePts) {
+// C2 wave (2026-07-22) — `cfg` param (default: module config) lets the
+// Compare tab re-enrich SAVED rows under their own saved config without
+// touching editor state. All pre-existing call sites pass no cfg and are
+// byte-for-byte unchanged in behavior.
+function _enrichCogResultWithCost(result, solvePts, cfg = config) {
   if (!result || !Array.isArray(result.centers)) return result;
   try {
     // 2026-05-28 27b — route through estimateBlendedCost which handles
     // legacy (modeMixEnabled=false) and parcel-aware (on) paths.
-    const costEst = calc.estimateBlendedCost(result, solvePts, config);
+    const costEst = calc.estimateBlendedCost(result, solvePts, cfg);
     result.totalCost = costEst.totalCost;
     result.truckCost = costEst.truckCost;
     result.parcelCost = costEst.parcelCost;
@@ -721,14 +725,14 @@ function _enrichCogResultWithCost(result, solvePts) {
     // CO₂ driven by TRUCK truck-miles only; parcel emissions are baked
     // into carrier rates and not exposed separately by FedEx/UPS.
     result.totalTruckMiles = costEst.totalTruckMiles;
-    const co2Intensity = Math.max(0, +config.co2KgPerTruckMile || 1.62);
+    const co2Intensity = Math.max(0, +cfg.co2KgPerTruckMile || 1.62);
     const truckCo2Kg = (costEst.totalTruckMiles || 0) * co2Intensity;
     // 2026-05-29 — parcel slice CO₂. Default 0.5 kg/pkg = EPA SmartWay
     // average for ground parcel (FedEx ~0.46, UPS ~0.55). Surfaced in
     // both the truck KPI and a separate parcelCo2Tons field so downstream
     // (CM writeback, print) can show truck/parcel split.
     const parcelPkgs = result.parcelDetails?.totalPackages || 0;
-    const parcelKgPerPkg = +config.parcelCo2KgPerPkg || 0.5;
+    const parcelKgPerPkg = +cfg.parcelCo2KgPerPkg || 0.5;
     const parcelCo2Kg = parcelPkgs * parcelKgPerPkg;
     result.co2Kg = truckCo2Kg + parcelCo2Kg;
     result.co2Tons = result.co2Kg / 1000;
@@ -740,7 +744,10 @@ function _enrichCogResultWithCost(result, solvePts) {
   return result;
 }
 
-function _pointsForSolve() {
+// C2 wave (2026-07-22) — optional (pts, cfg) params (defaults: module
+// points/config) so the Compare tab can build a saved row's solve set from
+// its OWN saved points + config. Existing zero-arg call sites unchanged.
+function _pointsForSolve(pts = points, cfg = config) {
   // H1: optionally winsorize point weights to a percentile cap before
   // running k-means / sensitivity. Mitigates a single mega-shipper
   // dominating the centroid in real customer data.
@@ -751,15 +758,15 @@ function _pointsForSolve() {
   // 2026-05-29 — apply demandScaleFactor uniformly. Spread to keep the
   // original points[] untouched — important because the points table
   // displays raw input values.
-  const scale = Math.max(0.001, +config.demandScaleFactor || 1.0);
-  let live = points.filter(p => p.type !== 'excluded' && p.lat != null && p.lng != null);
+  const scale = Math.max(0.001, +cfg.demandScaleFactor || 1.0);
+  let live = pts.filter(p => p && p.type !== 'excluded' && p.lat != null && p.lng != null);
   if (scale !== 1.0) live = live.map(p => ({ ...p, weight: (p.weight || 0) * scale }));
   // 2026-05-26 — Exclude Alaska & Hawaii from the solve when the toggle is
   // on. AK lat ~51-71, lng ~-180 to -130. HI lat ~18-23, lng ~-161 to -154.
   // Use generous bounding boxes; cleaner than testing each point against
   // every state polygon. PR (lat ~18, lng -67) is in the HI box's longitude
   // but VERY different latitude, so guard separately.
-  if (config.excludeOffshore) {
+  if (cfg.excludeOffshore) {
     live = live.filter(p => {
       const inAK = (p.lat >= 51 && p.lat <= 72) && (p.lng >= -180 && p.lng <= -130);
       const inHI = (p.lat >= 18 && p.lat <= 23) && (p.lng >= -161 && p.lng <= -154);
@@ -769,8 +776,8 @@ function _pointsForSolve() {
       return !inAK && !inHI && !inPR;
     });
   }
-  if (config.outlierCapEnabled) {
-    return calc.capWeightsByPercentile(live, config.outlierCapPercentile || 95);
+  if (cfg.outlierCapEnabled) {
+    return calc.capWeightsByPercentile(live, cfg.outlierCapPercentile || 95);
   }
   return live;
 }
@@ -3585,6 +3592,52 @@ function _cogMetricsFromSavedRow(row) {
   };
 }
 
+/**
+ * C2 wave (2026-07-22, engine-first ruling) — put a compared row on CURRENT
+ * engine math. Mirrors openEditor's load-time re-enrichment exactly: rebuild
+ * the solve when the saved result lacks assignments, then ALWAYS re-stamp
+ * capacity / cost / service / CO₂ via the same calc calls, but against the
+ * ROW's saved points + config (deep-copied — the _savedScenariosCache rows
+ * must never be mutated). Returns { data, stale }:
+ *   data  — scenario_data safe to feed _cogMetricsFromSavedRow
+ *   stale — true when re-enrichment was impossible (results-only row with no
+ *           points, empty solve set, or a compute failure) and the SAVED
+ *           result payload is being shown as-is; the column header gets the
+ *           est badge in that case (display-must-match-mechanism).
+ * @param {object} row saved scenario row from api.listScenarios
+ */
+function _freshScenarioDataForCompare(row) {
+  const d = row?.scenario_data || {};
+  const savedResult = d.result || null;
+  const rawPts = Array.isArray(d.points) ? d.points : [];
+  // No saved result → nothing to show either way (metrics render '—'); not
+  // stale, just empty. No points → cannot re-run the engine: stale fallback.
+  if (!savedResult) return { data: d, stale: false };
+  if (!rawPts.length) return { data: d, stale: true };
+  try {
+    const cfg = { ...calc.DEFAULT_CONFIG, ...(d.config || {}) };
+    // Deep-copy points before solving — capacity/service stamping and weight
+    // scaling must not leak into the cached saved row.
+    const solvePts = _pointsForSolve(rawPts.filter(Boolean).map(p => ({ ...p })), cfg);
+    if (!solvePts.length) return { data: d, stale: true };
+    let result = JSON.parse(JSON.stringify(savedResult));
+    if (!Array.isArray(result.assignments) || !result.assignments.length) {
+      // Saved row had only a summary — solve from scratch (openEditor parity).
+      result = calc.kMeansCog(solvePts, cfg.numCenters, cfg.maxIterations, cfg.kmeansRestarts ?? 10, (cfg.snapToCandidates ? (cfg.candidateFacilities || []).filter(c => c.locked) : []));
+      if (cfg.snapToCandidates && (cfg.candidateFacilities || []).length > 0) {
+        result = calc.snapCentersToCandidates(result, solvePts, cfg.candidateFacilities);
+      }
+    }
+    calc.applyCapacityConstraints(result, solvePts, cfg.capacityPerDC ?? 0);
+    _enrichCogResultWithCost(result, solvePts, cfg);
+    calc.flagServiceViolations(result, solvePts, cfg.maxServiceMiles ?? 0, cfg.roadFactor ?? 1.22);
+    return { data: { ...d, config: cfg, result }, stale: false };
+  } catch (err) {
+    console.warn('[COG] Compare re-enrichment failed for row', row?.id, '— falling back to saved result:', err);
+    return { data: d, stale: true };
+  }
+}
+
 function renderCompare(el) {
   // Lazy-load the saved-scenarios list on first view.
   if (_savedScenariosCache === null) {
@@ -3607,6 +3660,11 @@ function renderCompare(el) {
     scenario_data: { points, config, result: cogResult },
   };
   const activeMetrics = _cogMetricsFromSavedRow(activeRow);
+  // Active column basis: openEditor re-enriches on load and every Run
+  // re-stamps, so the in-memory result IS current engine math — except the
+  // results-only case (result but no points) where openEditor's rebuild is
+  // skipped. Badge that the same way as a stale compared column.
+  activeMetrics.stale = !!(cogResult && !points.length);
 
   // Picker options — all saved scenarios except the active one.
   const otherScenarios = _savedScenariosCache.filter(r => r.id !== activeScenarioId);
@@ -3615,13 +3673,26 @@ function renderCompare(el) {
   const compared = comparedScenarioIds
     .map(id => _savedScenariosCache.find(r => r.id === id))
     .filter(Boolean);
-  const comparedMetrics = compared.map(_cogMetricsFromSavedRow);
+  // C2 wave (2026-07-22) — compared columns re-computed on CURRENT engine
+  // math (saved payloads can carry truck-only / pre-mode-mix totals from
+  // older engine versions); rows that can't be re-run fall back to saved
+  // values and get the est badge via metrics.stale.
+  const comparedMetrics = compared.map(r => {
+    const { data, stale } = _freshScenarioDataForCompare(r);
+    const m = _cogMetricsFromSavedRow({ ...r, scenario_data: data });
+    m.stale = stale;
+    return m;
+  });
 
-  // Helper: render one column header.
+  // Repo-standard est pill (amber, 10px/700) — stale column = saved math.
+  const estBadge = '<span title="saved result — predates current engine math" style="font-size:10px;font-weight:700;color:var(--c-warn-deep);background:var(--c-warn-bg);border-radius:8px;padding:1px 6px;vertical-align:middle;margin-left:6px;">est</span>';
+
+  // Helper: render one column header. Names + context come from DB strings —
+  // escape them (2026-07-22 audit: m.label was interpolated raw).
   const colHeader = (m, ix) => {
-    const ctxParts = [m.customer, m.industry, m.dealStage].filter(Boolean);
+    const ctxParts = [m.customer, m.industry, m.dealStage].filter(Boolean).map(s => escapeHtml(String(s)));
     return `<div style="font-weight:700;font-size:12px;line-height:1.35;">
-        ${m.label}
+        ${escapeHtml(String(m.label))}${m.stale ? estBadge : ''}
         ${ctxParts.length ? `<div style="font-weight:500;font-size:10px;color:var(--ies-gray-400);margin-top:2px;">${ctxParts.join(' · ')}</div>` : ''}
       </div>`;
   };
@@ -3642,6 +3713,7 @@ function renderCompare(el) {
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
         <h3 class="text-section u-m0">Compare Scenarios</h3>
         <span style="font-size:12px;color:var(--ies-gray-400);">Active scenario vs up to 2 saved scenarios</span>
+        ${comparedMetrics.length > 0 ? '<span class="u-faint" style="font-size:13px;">all columns re-computed on current engine</span>' : ''}
       </div>
 
       <div class="hub-card" style="padding:14px 16px;margin-bottom:16px;">
@@ -3708,7 +3780,7 @@ function renderCompare(el) {
             })()}
           </div>
           <div style="font-size:11px;color:var(--ies-gray-400);margin-top:14px;line-height:1.5;border-top:1px dashed var(--ies-gray-200);padding-top:10px;">
-            Values come from each scenario's saved result + config. Scenarios saved before today's commits may show '—' for newer metrics (CO₂, coverage, peak utilization) — re-Run those scenarios to populate.
+            Compared columns are re-computed from each scenario's saved points + config on the current engine, so every column shares one cost basis. A column marked <strong>est</strong> couldn't be re-run (its saved row lacks demand points) and shows its saved result as-is — open and re-save that scenario to upgrade it. '—' means the metric isn't available for that scenario.
           </div>
         </div>
       `}

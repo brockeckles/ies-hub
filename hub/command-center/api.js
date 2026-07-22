@@ -9,7 +9,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
-import { listRealDeals } from '../deal-management/api.js?v=20260722-s3c';
+import { listRealDeals } from '../deal-management/api.js?v=20260722-s3d';
 
 /**
  * Fetch all dashboard data. Tries Supabase first, falls back to demo data.
@@ -205,12 +205,38 @@ export async function fetchDashboardData() {
         const idx = (Number(d.stage) || 1) - 1;
         if (idx >= 0 && idx < 6) stageCounts[idx]++;
       }
+      // C2 (2026-07-22, engine-first wave): surface the S1/S2 deal model the
+      // snapshot already fetches instead of discarding it.
+      // gradeCounts — tally of listRealDeals' `score` letter grades
+      // ('A'..'F'; '—' = no ★/model basis, skipped).
+      const gradeCounts = {};
+      for (const d of active) {
+        const g = String(d.score ?? '').trim();
+        if (g && g !== '—') gradeCounts[g] = (gradeCounts[g] ?? 0) + 1;
+      }
+      // starCoverage — deals whose every active site carries a ★ scenario
+      // (bidCoverage = {starred, active} from computeStarRollup).
+      const starCovered = active.filter(d => {
+        const bc = d.bidCoverage;
+        return bc && Number(bc.active) > 0 && Number(bc.starred) >= Number(bc.active);
+      }).length;
+      // anyEstimate — Pipeline $ includes estimated revenue somewhere:
+      // rollupIsEstimate (★ coverage gap → legacy/partial basis) is what
+      // listRealDeals returns today; anyHeuristicStar (a ★ priced by the
+      // markup heuristic instead of the CM engine) is computeStarRollup's
+      // C2 provenance flag, checked defensively for when the deal rows
+      // start carrying it through.
+      const anyEstimate = active.some(d =>
+        d.rollupIsEstimate === true || d.anyHeuristicStar === true);
       pipeline = {
         activeDeals: active.length,
         totalRevenue,
         avgMargin,
         totalSites,
         stageCounts,
+        gradeCounts,
+        starCoverage: { covered: starCovered, total: active.length },
+        anyEstimate,
       };
     }
   } catch (err) {
@@ -704,6 +730,10 @@ const DEMO_PIPELINE = {
   avgMargin: 10.9,
   totalSites: 24,
   stageCounts: [2, 2, 2, 2, 1, 1], // per DOS stage 1-6
+  gradeCounts: { A: 2, B: 4, C: 3, F: 1 }, // deal-score letters (sums to activeDeals)
+  starCoverage: { covered: 3, total: 10 }, // deals fully ★-covered vs total active
+  // Demo numbers are curated, not Σ★ roll-ups — no est badge on the fallback.
+  anyEstimate: false,
 };
 
 const DEMO_ACTIVITY = [

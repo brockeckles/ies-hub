@@ -19,7 +19,7 @@
 // mutated fixture proves the zero-diff guard bites.
 
 import { readFileSync } from 'node:fs';
-import { computeStarRollup, modelRevenueEst } from './hub/deal-management/calc.js?v=20260722-s3c';
+import { computeStarRollup, modelRevenueEst } from './hub/deal-management/calc.js?v=20260722-s3d';
 
 let pass = 0, fail = 0;
 const t = (name, cond, extra = '') => {
