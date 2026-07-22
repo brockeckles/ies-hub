@@ -1,8 +1,8 @@
 {
-  "tag": "2026.07.16-ec15646",
-  "sha": "ec15646",
-  "shaFull": "ec1564626f65ab6e0054a864710e42d33b2da7b4",
-  "date": "2026-07-16",
-  "timestamp": "2026-07-16T02:31:07Z",
-  "builtBy": "eager-ecstatic-franklin@claude"
+  "tag": "2026.07.22-0d6f8cf",
+  "sha": "0d6f8cf",
+  "shaFull": "0d6f8cfd80e4136937c3a3085e41827bbca32349",
+  "date": "2026-07-22",
+  "timestamp": "2026-07-22T13:00:44Z",
+  "builtBy": "unknown@vm"
 }
