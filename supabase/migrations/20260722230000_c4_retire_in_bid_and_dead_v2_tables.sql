@@ -27,5 +27,11 @@
 alter table public.cost_model_projects drop column if exists in_bid;
 
 drop table if exists public.network_optimization_scenarios;
+-- deal_qualifications + project_elements: v2 children of projects (FK
+-- dependents discovered on staging apply) — zero rows, zero code refs,
+-- appear only in past RLS/search-path hygiene sweeps. Dropped first so
+-- projects can go without CASCADE.
+drop table if exists public.deal_qualifications;
+drop table if exists public.project_elements;
 drop table if exists public.projects;
 drop table if exists public.vertical_spotlight_deals;
