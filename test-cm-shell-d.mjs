@@ -181,6 +181,23 @@ t('updateDRail blanks all values when not ready', () => {
 });
 
 // ---- 5. ui.js integration pins ----
+t('sub-nav pills follow the STATION section order, not SECTIONS order', () => {
+  // Operation order is a Brock ruling (2026-07-22): flow -> facility -> labor.
+  const o = makeOpts();
+  o.chrome.activeSection = 'flow';
+  o.chrome.sections = [
+    { key: 'facility', label: 'Facility' }, { key: 'labor', label: 'Labor' },
+    { key: 'flow', label: 'Operational Flow' },
+  ];
+  o.depth = 'engineering';
+  const nav = shellD.renderDSubnav(o);
+  const iFlow = nav.indexOf('data-tc-section="flow"');
+  const iFac = nav.indexOf('data-tc-section="facility"');
+  const iLab = nav.indexOf('data-tc-section="labor"');
+  assert(iFlow !== -1 && iFac !== -1 && iLab !== -1, 'all three pills render');
+  assert(iFlow < iFac && iFac < iLab, `station order must win: flow(${iFlow}) < facility(${iFac}) < labor(${iLab})`);
+});
+
 t('ui.js: _useDShell gates on the pref alone (M8b: std guard deleted)', () => {
   assert(uiSrc.includes("shellD.getShellPref() === 'd'"), 'pref consulted');
   assert(!uiSrc.includes('_isStdKey'), 'std guard must stay deleted (M8b)');

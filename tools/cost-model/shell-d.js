@@ -244,7 +244,12 @@ export function renderDSubnav(opts) {
   const activeStation = stationForSection(opts.chrome.activeSection) || D_STATIONS[0];
   const depth = opts.depth === 'essentials' ? 'essentials' : 'engineering';
   const visible = sectionsForDepth(activeStation, depth, opts.chrome.activeSection);
-  const secs = opts.chrome.sections.filter(s => visible.includes(s.key));
+  // 2026-07-22 (Brock facility-after-Flow ruling surfaced this): pills must
+  // follow the STATION's declared section order (D_STATIONS), not the legacy
+  // ui.js SECTIONS array order — otherwise reordering a station is invisible.
+  const secs = visible
+    .map(k => opts.chrome.sections.find(s => s.key === k))
+    .filter(Boolean);
   const pills = secs.map(s => {
     const on = s.key === opts.chrome.activeSection;
     const c = opts.chrome.sectionCompleteness ? opts.chrome.sectionCompleteness(s.key) : 'empty';
