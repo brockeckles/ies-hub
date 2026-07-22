@@ -13,13 +13,13 @@ import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=2026070
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import ofpStyles from './operational-flow-styles.js?v=20260714-a2';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
-import * as calc from './calc.js?v=20260714-a3';
+import * as calc from './calc.js?v=20260722-e1';
 import * as api from './api.js?v=20260704-cmp1';
-import * as scenarios from './calc.scenarios.js?v=20260714-a3';
+import * as scenarios from './calc.scenarios.js?v=20260722-e1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260705-u3d';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260705-u3d';
 import { renderImplementation } from './render-implementation.js?v=20260705-u3d';
-import * as monthlyCalc from './calc.monthly.js?v=20260714-a3';
+import * as monthlyCalc from './calc.monthly.js?v=20260722-e1';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
 import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
@@ -36,7 +36,7 @@ import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import * as dealContext from '../../shared/deal-context.js?v=20260703-dc1';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
-import { computeAll } from './compute-all.js?v=20260714-a3';
+import { computeAll } from './compute-all.js?v=20260722-e1';
 import * as shellD from './shell-d.js?v=20260722-s5';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
 import * as stationEco from './station-economics.js?v=20260713-m5d';
@@ -108,11 +108,11 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260714-a3';
+} from './operational-flow-render.js?v=20260722-e1';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260714-a3';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260714-a3';
+import { computeHeaderKpis } from './header-kpis.js?v=20260722-e1';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260722-e1';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.

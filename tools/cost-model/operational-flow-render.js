@@ -38,7 +38,7 @@ import {
 } from './ofp-helpers.js?v=20260702-sec2';
 import { escapeHtml, escapeAttr } from '../../shared/escape.js?v=20260702-sec2';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
-import * as calc from './calc.js?v=20260714-a3';
+import * as calc from './calc.js?v=20260722-e1';
 import ofpStyles from './operational-flow-styles.js?v=20260714-a2';
 
 // v0.10 — Helper extracted from _renderOfpArea so we can reuse it for
