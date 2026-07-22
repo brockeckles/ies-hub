@@ -36,7 +36,7 @@
 
   <!-- Module Preloads (shared core) -->
   <link rel="modulepreload" href="./shared/event-bus.js?v=20260418-sK">
-  <link rel="modulepreload" href="./shared/router.js?v=20260722-s3b">
+  <link rel="modulepreload" href="./shared/router.js?v=20260722-s4e">
 
   <!-- Design System -->
   <link rel="stylesheet" href="./css/hub.css?v=20260710-r2">
@@ -210,15 +210,15 @@
   <!-- App Bootstrap -->
   <script type="module">
     import { auth } from './shared/auth.js?v=20260705-u1a';
-    import { router } from './shared/router.js?v=20260722-s3b';
-    import { search } from './shared/search.js?v=20260722-s4a';
+    import { router } from './shared/router.js?v=20260722-s4e';
+    import { search } from './shared/search.js?v=20260722-s4e';
     import { bus } from './shared/event-bus.js?v=20260418-sK';
     // Shared UX modules — self-wire their listeners/guards on import.
     import { showToast } from './shared/toast.js?v=20260705-u1a';
     import './shared/error-net.js?v=20260703-net1';  // P3-2 global error net — keep first among side-effect imports
-    import { mountFeedbackFab } from './shared/feedback-fab.js?v=20260722-s4c';
+    import { mountFeedbackFab } from './shared/feedback-fab.js?v=20260722-s4e';
     import './shared/unsaved-guard.js?v=20260703-p34';
-    import { tour } from './shared/tour.js?v=20260722-s4a';
+    import { tour } from './shared/tour.js?v=20260722-s4e';
     import { analytics } from './shared/analytics.js?v=20260504-auth1';
     import { openMfaGate } from './shared/mfa-ui.js?v=20260705-u1a';
     // Expose a couple of helpers for inline handlers + console debugging.
@@ -574,12 +574,12 @@
 
       // Design Tool sub-routes (lazy loaded)
       const toolRoutes = {
-        'designtools/cost-model': { title: 'Cost Model Builder', path: './tools/cost-model/ui.js?v=20260722-s4a' },
-        'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260722-s3b' },
-        'designtools/most-standards': { title: 'MOST Labor Standards', path: './tools/most-standards/ui.js?v=20260722-s4a' },
-        'designtools/network-opt': { title: 'Network Optimization', path: './tools/network-opt/ui.js?v=20260722-s4a' },
-        'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260722-s4b' },
-        'designtools/center-of-gravity': { title: 'Center of Gravity', path: './tools/center-of-gravity/ui.js?v=20260722-s4a' },
+        'designtools/cost-model': { title: 'Cost Model Builder', path: './tools/cost-model/ui.js?v=20260722-s4e' },
+        'designtools/warehouse-sizing': { title: 'Warehouse Sizing Calculator', path: './tools/warehouse-sizing/ui.js?v=20260722-s4e' },
+        'designtools/most-standards': { title: 'MOST Labor Standards', path: './tools/most-standards/ui.js?v=20260722-s4e' },
+        'designtools/network-opt': { title: 'Network Optimization', path: './tools/network-opt/ui.js?v=20260722-s4e' },
+        'designtools/fleet-modeler': { title: 'Fleet Modeler', path: './tools/fleet-modeler/ui.js?v=20260722-s4e' },
+        'designtools/center-of-gravity': { title: 'Center of Gravity', path: './tools/center-of-gravity/ui.js?v=20260722-s4e' },
       };
 
       for (const [route, config] of Object.entries(toolRoutes)) {
@@ -591,11 +591,11 @@
 
       // Hub section routes (lazy loaded)
       const hubRoutes = {
-        'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260722-s4b' },
-        'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260722-s4a' },
-        'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260722-s4b' },
-        'admin': { title: 'Admin', path: './hub/admin/ui.js?v=20260722-s4c' },
-        'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260722-s4c' },
+        'overview': { title: 'Command Center', path: './hub/command-center/ui.js?v=20260722-s4e' },
+        'marketmap': { title: 'Market Explorer', path: './hub/market-explorer/ui.js?v=20260722-s4e' },
+        'deals': { title: 'Deal Management', path: './hub/deal-management/ui.js?v=20260722-s4e' },
+        'admin': { title: 'Admin', path: './hub/admin/ui.js?v=20260722-s4e' },
+        'feedback': { title: 'Ideas & Feedback', path: './hub/feedback/ui.js?v=20260722-s4e' },
       };
 
       for (const [route, config] of Object.entries(hubRoutes)) {

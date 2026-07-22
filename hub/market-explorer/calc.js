@@ -41,7 +41,7 @@ export const DEMO_MARKETS = [
 // STATISTICS
 // ============================================================
 
-/** @param {import('./types.js?v=20260722-s4a').MarketData[]} markets */
+/** @param {import('./types.js?v=20260722-s4e').MarketData[]} markets */
 export function computeStats(markets) {
   if (!markets.length) return { totalMarkets: 0, avgLaborScore: 0, avgWage: 0, avgWarehouseRate: 0, marketsWithDeals: 0 };
   const n = markets.length;

@@ -5,8 +5,8 @@
  * @module hub/market-explorer/ui
  */
 
-import * as calc from './calc.js?v=20260722-s4a';
-import * as api from './api.js?v=20260722-s4a';
+import * as calc from './calc.js?v=20260722-s4e';
+import * as api from './api.js?v=20260722-s4e';
 import { escapeHtml, safeHttpUrl } from '../../shared/escape.js?v=20260702-sec2';
 
 // Per-market signal cache: marketId → { news, alerts, fetchedAt }

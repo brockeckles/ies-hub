@@ -7,8 +7,8 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as calc from './calc.js?v=20260722-s4c';
-import * as api from './api.js?v=20260722-s4c';
+import * as calc from './calc.js?v=20260722-s4e';
+import * as api from './api.js?v=20260722-s4e';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { getEnv, getEnvLabel, getProjectRef } from '../../shared/supabase.js?v=20260703-hw1';
 import { getBuildInfo, getBuildInfoSync } from '../../shared/build-info.js?v=20260424-A2';

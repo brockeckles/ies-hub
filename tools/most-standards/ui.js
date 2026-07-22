@@ -21,7 +21,7 @@ import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=202607
 // "clean/dirty" gate would be misleading here. Revisit if/when MOST gains a
 // heavier recompute path (MOST B4 productivity factor, maybe).
 import * as calc from './calc.js?v=20260722-s3a';
-import * as api from './api.js?v=20260722-s4c';
+import * as api from './api.js?v=20260722-s4e';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 
 // ============================================================

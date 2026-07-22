@@ -15,13 +15,13 @@
  * into the UI.
  *
  * Usage:
- *   import { search } from './search.js?v=20260722-s4a';
+ *   import { search } from './search.js?v=20260722-s4e';
  *   search.init(document.querySelector('.hub-search-container'));
  *
  * @module shared/search
  */
 
-import { router } from './router.js?v=20260722-s3b';
+import { router } from './router.js?v=20260722-s4e';
 import { bus } from './event-bus.js?v=20260418-sK';
 import { escapeHtml as _h } from './escape.js?v=20260702-sec2';
 import { db } from './supabase.js?v=20260703-hw1';

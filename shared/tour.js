@@ -5,7 +5,7 @@
  * popover; the rest of the page stays fully interactive (no modal overlay).
  *
  * Usage:
- *   import { tour } from './shared/tour.js?v=20260722-s4a';
+ *   import { tour } from './shared/tour.js?v=20260722-s4e';
  *   tour.start('welcome');    // start a named tour (unknown names → 'welcome')
  *   tour.next();              // advance manually (normally user clicks)
  *   tour.stop();              // end immediately

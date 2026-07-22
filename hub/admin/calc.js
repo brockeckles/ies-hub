@@ -9,7 +9,7 @@
 // MASTER TABLE DEFINITIONS
 // ============================================================
 
-/** @type {import('./types.js?v=20260722-s4c').MasterTableConfig[]} */
+/** @type {import('./types.js?v=20260722-s4e').MasterTableConfig[]} */
 export const MASTER_TABLES = [
   {
     id: 'cost_buckets', name: 'Cost Buckets', description: 'Standard cost categories for cost models',
@@ -188,12 +188,12 @@ export const MASTER_TABLES = [
 
 /**
  * Compute admin panel stats.
- * @param {import('./types.js?v=20260722-s4c').UserAccount[]} users
- * @param {import('./types.js?v=20260722-s4c').MasterTableConfig[]} tables
- * @param {import('./types.js?v=20260722-s4c').EscalationRule[]} escalations
- * @param {import('./types.js?v=20260722-s4c').AuditLogEntry[]} auditLog
+ * @param {import('./types.js?v=20260722-s4e').UserAccount[]} users
+ * @param {import('./types.js?v=20260722-s4e').MasterTableConfig[]} tables
+ * @param {import('./types.js?v=20260722-s4e').EscalationRule[]} escalations
+ * @param {import('./types.js?v=20260722-s4e').AuditLogEntry[]} auditLog
  * @param {string} [referenceDate] — ISO date for 7-day window
- * @returns {import('./types.js?v=20260722-s4c').AdminStats}
+ * @returns {import('./types.js?v=20260722-s4e').AdminStats}
  */
 export function computeStats(users, tables, escalations, auditLog, referenceDate) {
   const refDate = referenceDate || new Date().toISOString().slice(0, 10);
@@ -216,7 +216,7 @@ export function computeStats(users, tables, escalations, auditLog, referenceDate
 /**
  * Validate a record against table column definitions.
  * @param {Record<string, any>} record
- * @param {import('./types.js?v=20260722-s4c').ColumnDef[]} columns
+ * @param {import('./types.js?v=20260722-s4e').ColumnDef[]} columns
  * @returns {{ valid: boolean, errors: string[] }}
  */
 export function validateRecord(record, columns) {
@@ -249,8 +249,8 @@ export function validateRecord(record, columns) {
  * Evaluate a metric value against escalation rules.
  * @param {string} metric — metric key (e.g. 'gross_margin_pct')
  * @param {number} value
- * @param {import('./types.js?v=20260722-s4c').EscalationRule[]} rules
- * @returns {import('./types.js?v=20260722-s4c').EscalationRule[]} — triggered rules
+ * @param {import('./types.js?v=20260722-s4e').EscalationRule[]} rules
+ * @returns {import('./types.js?v=20260722-s4e').EscalationRule[]} — triggered rules
  */
 export function evaluateEscalations(metric, value, rules) {
   return rules.filter(r => {
@@ -264,8 +264,8 @@ export function evaluateEscalations(metric, value, rules) {
 /**
  * Check all escalation rules against a set of metrics.
  * @param {Record<string, number>} metrics — key-value pairs (e.g. { gross_margin_pct: 7.5 })
- * @param {import('./types.js?v=20260722-s4c').EscalationRule[]} rules
- * @returns {Array<{ rule: import('./types.js?v=20260722-s4c').EscalationRule, metricValue: number }>}
+ * @param {import('./types.js?v=20260722-s4e').EscalationRule[]} rules
+ * @returns {Array<{ rule: import('./types.js?v=20260722-s4e').EscalationRule, metricValue: number }>}
  */
 export function checkAllEscalations(metrics, rules) {
   const triggered = [];
@@ -284,9 +284,9 @@ export function checkAllEscalations(metrics, rules) {
 
 /**
  * Filter users.
- * @param {import('./types.js?v=20260722-s4c').UserAccount[]} users
+ * @param {import('./types.js?v=20260722-s4e').UserAccount[]} users
  * @param {{ role?: string, active?: boolean | 'all' }} filters
- * @returns {import('./types.js?v=20260722-s4c').UserAccount[]}
+ * @returns {import('./types.js?v=20260722-s4e').UserAccount[]}
  */
 export function filterUsers(users, filters = {}) {
   let result = users;
@@ -301,7 +301,7 @@ export function filterUsers(users, filters = {}) {
 
 /**
  * Count users by role.
- * @param {import('./types.js?v=20260722-s4c').UserAccount[]} users
+ * @param {import('./types.js?v=20260722-s4e').UserAccount[]} users
  * @returns {{ admin: number, editor: number, viewer: number }}
  */
 export function usersByRole(users) {
@@ -314,10 +314,10 @@ export function usersByRole(users) {
 
 /**
  * Find inactive users (no login within N days).
- * @param {import('./types.js?v=20260722-s4c').UserAccount[]} users
+ * @param {import('./types.js?v=20260722-s4e').UserAccount[]} users
  * @param {string} referenceDate — ISO datetime
  * @param {number} [days=30]
- * @returns {import('./types.js?v=20260722-s4c').UserAccount[]}
+ * @returns {import('./types.js?v=20260722-s4e').UserAccount[]}
  */
 export function inactiveUsers(users, referenceDate, days = 30) {
   const cutoff = new Date(new Date(referenceDate).getTime() - days * 86400000).toISOString();
@@ -330,9 +330,9 @@ export function inactiveUsers(users, referenceDate, days = 30) {
 
 /**
  * Filter audit log entries.
- * @param {import('./types.js?v=20260722-s4c').AuditLogEntry[]} log
+ * @param {import('./types.js?v=20260722-s4e').AuditLogEntry[]} log
  * @param {{ action?: string, tableName?: string, userId?: string }} filters
- * @returns {import('./types.js?v=20260722-s4c').AuditLogEntry[]}
+ * @returns {import('./types.js?v=20260722-s4e').AuditLogEntry[]}
  */
 export function filterAuditLog(log, filters = {}) {
   let result = log;
@@ -350,7 +350,7 @@ export function filterAuditLog(log, filters = {}) {
 
 /**
  * Count audit actions by type.
- * @param {import('./types.js?v=20260722-s4c').AuditLogEntry[]} log
+ * @param {import('./types.js?v=20260722-s4e').AuditLogEntry[]} log
  * @returns {{ create: number, update: number, delete: number }}
  */
 export function auditActionCounts(log) {
@@ -363,7 +363,7 @@ export function auditActionCounts(log) {
 
 /**
  * Get most active users from audit log.
- * @param {import('./types.js?v=20260722-s4c').AuditLogEntry[]} log
+ * @param {import('./types.js?v=20260722-s4e').AuditLogEntry[]} log
  * @param {number} [limit=5]
  * @returns {Array<{ userId: string, userName: string, count: number }>}
  */

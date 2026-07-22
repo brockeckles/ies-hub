@@ -14,11 +14,11 @@ import { RunStateTracker } from '../../shared/run-state.js?v=20260419-uE';
 import { downloadCSV } from '../../shared/export.js?v=20260702-p1m1';
 // C3 split (2026-07-22) — pure export/document generation (CSV, GeoJSON,
 // PPTX deck, print HTML) lives in ./export.js; ui.js is the thin trigger.
-import { buildAnalysisCsv, buildPerShipmentCsv, buildGeoJson, buildPptxDeck, buildPrintHtml } from './export.js?v=20260722-s4a';
+import { buildAnalysisCsv, buildPerShipmentCsv, buildGeoJson, buildPptxDeck, buildPrintHtml } from './export.js?v=20260722-s4e';
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import * as calc from './calc.js?v=20260704-ux2c';
 import * as api from './api.js?v=20260722-s3a';
-import * as cmApi from '../cost-model/api.js?v=20260722-s4d';
+import * as cmApi from '../cost-model/api.js?v=20260722-s4e';
 import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';

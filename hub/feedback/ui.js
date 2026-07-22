@@ -6,8 +6,8 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as calc from './calc.js?v=20260722-s4c';
-import * as api from './api.js?v=20260722-s4c';
+import * as calc from './calc.js?v=20260722-s4e';
+import * as api from './api.js?v=20260722-s4e';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 import { escapeHtml as _h, escapeAttr as _a } from '../../shared/escape.js?v=20260702-sec2';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
