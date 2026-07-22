@@ -1114,6 +1114,11 @@ export async function mount(el) {
     console.warn('[CM] Failed to consume Deal-Management create handoff:', e);
   }
 
+  // A-rail (2026-07-22 s2): the Deal-Management pending-open handoff above
+  // hydrates the model DIRECTLY (bypasses loadModelByCmId), so it needs the
+  // same eager profile load before first paint. Empty-model mounts have no
+  // market → instant no-op.
+  await ensureMarketLaborProfileLoaded();
   renderCurrentView();
 
 }
@@ -1267,6 +1272,16 @@ async function loadModelByCmId(id) {
     _dCompareOn = false;
     _dBaselineCmp = null;
     _activeProvCell = null;
+    // A-rail (2026-07-22 s2, Brock ruling: Option A — eager load). The market
+    // labor profile keys computeAll's memo fingerprint but used to load ONLY
+    // on Summary/Timeline open (sole call site), so every computeAll surface
+    // (header KPI strip, D-shell P&L rail) painted a profile-less transient
+    // until then (Hearthwood: $7.86M/29.2% → $8.00M/29.3%). Await BEFORE the
+    // first render so the rail's first paint is the canonical profile-loaded
+    // number. Markets without a profile row resolve null → byte-identical.
+    // Fetch failure is swallowed inside ensureMarketLaborProfileLoaded
+    // (profile stays null; render proceeds).
+    await ensureMarketLaborProfileLoaded();
     renderCurrentView();
     refreshSaveStateChip();
 
