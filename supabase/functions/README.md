@@ -42,29 +42,32 @@ require a Bearer token at the top of the handler:
 Authorization: Bearer <token>
 ```
 
-where `<token>` is resolved as:
+where the token rules are (C5b, 2026-07-23 — INGEST_SECRET is live in prod):
 
-1. `INGEST_SECRET` — if this Edge Function secret is set in the dashboard, it
-   is the **only** accepted token; or, when it is not set,
-2. the project **anon key** (`SUPABASE_ANON_KEY`, auto-injected into the edge
-   runtime).
+1. `INGEST_SECRET` set (current prod state): the request must carry the
+   secret in the **`x-ingest-secret` header** (or, equivalently, as the
+   Bearer — only usable if verify_jwt were off). The Bearer itself must still
+   be a platform-valid key because the functions deploy with verify_jwt=true,
+   which rejects any non-JWT/non-key Bearer BEFORE code runs. The cron jobs
+   therefore send BOTH:
+   `Authorization: Bearer <publishable key>` (satisfies verify_jwt) and
+   `x-ingest-secret: <INGEST_SECRET>` (satisfies the in-code gate).
+2. `INGEST_SECRET` unset (fallback): Bearer must equal `SUPABASE_ANON_KEY` —
+   NOTE the edge runtime injects the **publishable** key under that env name,
+   not the legacy anon JWT.
 
-Wrong or missing token → `401 {"error":"unauthorized"}`. The gate fails
-closed: if neither env var resolves, every request is rejected.
+Wrong or missing secret → `401 {"error":"unauthorized"}`. The gate fails
+closed. With the secret set, the public publishable key alone is NOT
+sufficient — verified 2026-07-23 (publishable-only → 401, dual-header → 200).
 
-Consequences:
+Operational notes:
 
-- **The pg_cron jobs must send the header.** Each `net.http_post` call that
-  triggers these functions needs
-  `headers := jsonb_build_object('Authorization', 'Bearer <anon key>')`
-  (or the INGEST_SECRET value). Header-less cron invocations now get 401.
-- **Hardening escalation path:** the anon key is public (it ships in the
-  frontend), so this gate only stops header-less internet drive-bys —
-  anonymous data poisoning of `labor_markets`/`fuel_prices` and fetch/prune
-  storms via `ingest-labor-watch`. To fully harden with **zero redeploys**:
-  set `INGEST_SECRET` in Edge Function secrets and update the cron jobs'
-  Authorization header to match. The functions check `INGEST_SECRET` first,
-  so the switch takes effect on the next invocation.
+- Rotating the secret = update the dashboard secret + the three cron jobs'
+  `x-ingest-secret` header. No redeploy.
+- `ingest-labor-watch` runs ~150s (21 sequential Google News RSS queries) and
+  can hit the ~150s gateway timeout (504 to the CALLER) while the ingest
+  completes server-side — pre-existing behavior, harmless for cron. Batching
+  the queries is a candidate future fix.
 
 Also fixed in C5: `ingest-eia-diesel`'s manual-POST branch
 (`{ report_date, price_per_gallon }`) now runs **before** the `EIA_API_KEY`

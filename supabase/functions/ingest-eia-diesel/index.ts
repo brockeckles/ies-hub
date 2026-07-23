@@ -13,10 +13,18 @@ Deno.serve(async (req: Request) => {
   // the anon-key gate stops header-less drive-bys; a dedicated INGEST_SECRET
   // dashboard env var is the hardening follow-up (set INGEST_SECRET + update
   // the cron job's header — no code redeploy needed).
+  // C5b (2026-07-23): INGEST_SECRET rides the x-ingest-secret header, NOT the
+  // Authorization Bearer — platform verify_jwt=true rejects a non-JWT Bearer
+  // before code runs, so the Bearer must stay a valid key (publishable) and
+  // the private secret travels alongside. Fallback (no INGEST_SECRET set):
+  // Bearer must equal SUPABASE_ANON_KEY (the publishable key), as before.
   const ingestSecret = Deno.env.get("INGEST_SECRET");
-  const expectedToken = ingestSecret || Deno.env.get("SUPABASE_ANON_KEY") || "";
   const bearer = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
-  if (!expectedToken || bearer !== expectedToken) {
+  const xSecret = (req.headers.get("x-ingest-secret") || "").trim();
+  const authorized = ingestSecret
+    ? (xSecret === ingestSecret || bearer === ingestSecret)
+    : (!!bearer && bearer === (Deno.env.get("SUPABASE_ANON_KEY") || ""));
+  if (!authorized) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" }
