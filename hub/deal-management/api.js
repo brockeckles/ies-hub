@@ -452,6 +452,27 @@ export async function deleteArtifact(id) {
 }
 
 /**
+ * S3-P2-b (2026-07-23): record a bid-binder generation as provenance — a
+ * deal_artifacts row with kind:'binder'. Generation does NOT write a bid
+ * snapshot; the ref string carries variant/pct (+ latest snapshot id when
+ * one exists). createArtifact already writes the audit row (enum
+ * action:'insert', fields.op:'create_artifact') — do not double-audit.
+ *
+ * @param {string} dealId
+ * @param {{ variant:'customer'|'elt', manifestPct:number,
+ *           snapshotId?:number|string|null }} opts
+ * @returns {Promise<Object>} the inserted deal_artifacts row
+ */
+export async function recordBinderGenerated(dealId, { variant, manifestPct, snapshotId = null } = {}) {
+  const pct = Number.isFinite(Number(manifestPct)) ? Number(manifestPct) : 0;
+  return createArtifact(dealId, {
+    kind: 'binder',
+    name: `Bid binder — ${variant === 'elt' ? 'ELT Approval' : 'Customer Presentation'}${pct < 100 ? ' (DRAFT)' : ''}`,
+    ref: `variant=${variant};pct=${pct}${snapshotId ? ';snap=' + snapshotId : ''}`,
+  });
+}
+
+/**
  * Load DOS status overrides for a deal. Returns an object map
  * { element_id: status } so the UI can apply overrides on top of defaults.
  *
@@ -946,7 +967,7 @@ export async function latestBidSnapshot(dealId) {
 
 export default { fetchStages, fetchActivityTemplates, listRealDeals, createDeal, deleteDeal,
   loadStrategy, saveStrategy,
-  listArtifactsByDeal, createArtifact, deleteArtifact,
+  listArtifactsByDeal, createArtifact, deleteArtifact, recordBinderGenerated,
   loadDosStatusByDeal, setDosElementStatus, advanceDealStage,
   setModelInBid, listDesignScenariosByDeal, recordDealOutcome, getLatestDealOutcome,
   listSitesByDeal, createSite, updateSite, deleteSite, assignModelToSite, assignDesignToSite, listMarkets,

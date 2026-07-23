@@ -7,7 +7,7 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260723-s5a';
+import * as api from './api.js?v=20260723-s5b';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
 // P2-a (2026-07-23): explicit "Mark as submitted" confirms before stamping
 // the immutable bid-of-record snapshot.
@@ -19,6 +19,9 @@ import { icon } from '../../shared/icons.js?v=20260710-r2';
 // Analyzer's pure calc + site mapping instead of duplicating the math.
 import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260723-s5a';
 import * as msaApi from '../../tools/deal-manager/api.js?v=20260723-s5a';
+// S3-P2-b (2026-07-23): pure bid-binder builder — customer/ELT print docs
+// from the SAME buildBidSnapshotPayload output the submit path stamps.
+import * as binder from '../../tools/deal-manager/bid-binder.js?v=20260723-s5b';
 // S1 (2026-07-22): shared pure Σ★ roll-up (same module api.js computes with).
 import * as dmCalc from './calc.js?v=20260722-s3d';
 
@@ -590,6 +593,15 @@ function bindDelegatedEvents() {
     // confirms (danger), then stamps the immutable bid-of-record snapshot.
     if (target.closest('[data-action="submit-bid"]')) {
       _onSubmitBid();
+      return;
+    }
+
+    // P2-b (2026-07-23) — Package tab: "Generate binder" (customer/ELT print
+    // popup + fail-soft provenance artifact). Always enabled — the pure
+    // module handles the DRAFT watermark below manifest 100%.
+    const gb = target.closest('[data-action="generate-binder"]');
+    if (gb) {
+      _openBinderDoc(/** @type {HTMLElement} */ (gb).dataset.variant || 'customer');
       return;
     }
 
@@ -2392,6 +2404,64 @@ async function _onSubmitBid() {
   }
 }
 
+/** P2-b — "Generate binder" click: build the binder model from the SAME
+ *  _buildSubmitFields payload the submit path stamps, open a print popup
+ *  (cost-model _openReviewDoc pattern: window.open + document.write), then
+ *  record provenance as a deal_artifacts row (kind:'binder') — fail-soft;
+ *  the binder is already open even if the write fails. Works at ANY
+ *  manifest pct (the pure module watermarks DRAFT <100%); generation
+ *  never writes a bid snapshot. Demo deals open the read-only doc but
+ *  skip the write.
+ *  @param {'customer'|'elt'} variant */
+function _openBinderDoc(variant) {
+  const d = selectedDeal;
+  if (!d) return;
+  let fields;
+  try {
+    fields = _buildSubmitFields(d);
+    const model = binder.buildBinderModel({
+      payload: fields.payload,
+      variant,
+      generatedAt: new Date().toISOString(),
+    });
+    const win = window.open('', '_blank');
+    if (!win) {
+      showToast('Popup blocked — allow popups for this site to open the binder.', 'warning');
+      return;
+    }
+    win.document.write(binder.renderBinderHtml(model));
+    win.document.close();
+  } catch (err) {
+    console.error('[deal-mgmt] binder generation failed', err);
+    showToast('Binder generation failed: ' + (err?.message || err), 'error');
+    return;
+  }
+  const pct = fields.payload?.manifest?.pct ?? 0;
+  const label = variant === 'elt' ? 'ELT Approval' : 'Customer Presentation';
+  if (!_isRealDealId(d.id)) {
+    showToast('Demo deal — binder opened; generation not recorded.', 'info');
+    return;
+  }
+  const dealId = d.id;
+  api.recordBinderGenerated(dealId, {
+    variant,
+    manifestPct: pct,
+    snapshotId: (_bidSnapshotsByDeal.get(dealId) || [])[0]?.id ?? null,
+  }).then(row => {
+    // Surgical cache sync (same row shape openAddArtifactModal pushes);
+    // re-render only when the Artifacts tab is the one on screen.
+    const list = getArtifacts(dealId);
+    list.push({
+      id: row.id, kind: row.kind, name: row.name, ref: row.ref || '',
+      updated: row.updated_at ? String(row.updated_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
+    });
+    if (viewMode === 'detail' && selectedDeal?.id === dealId && detailTab === 'artifacts') renderDetailContent();
+  }).catch(err => {
+    console.warn('[deal-mgmt] recordBinderGenerated failed (binder still opened)', err);
+  });
+  showToast(`Binder generated — ${label}${pct < 100 ? ' (DRAFT)' : ''}.`, 'success');
+}
+
 /** Bottom-of-Package-tab section: submitted state (badge + history + drift
  *  warning) and the gated "Mark as submitted" button. */
 function _renderBidSubmitSection(d, man) {
@@ -2424,11 +2494,27 @@ function _renderBidSubmitSection(d, man) {
     : `<button class="hub-btn hub-btn-primary" data-action="submit-bid" disabled style="opacity:.45;cursor:not-allowed;">Mark as submitted</button>
        <div class="u-faint" style="font-size:12px;margin-top:6px;">${escapeHtml(`Complete the bid manifest to submit — ${remaining} required item(s) remaining.`)}</div>`;
 
+  // P2-b — binder buttons are ALWAYS enabled: below 100% the pure module
+  // stamps a DRAFT watermark instead of gating.
+  const binderCaption = man.pct >= 100
+    ? 'Print-ready binder from the current bid package.'
+    : 'Generates with a DRAFT watermark until the manifest reaches 100%.';
+  const binderRow = `
+      <div style="margin-top:14px;border-top:1px solid var(--ies-gray-100);padding-top:12px;">
+        <div style="font-size:11px;font-weight:700;color:var(--ies-gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Bid binder</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="generate-binder" data-variant="customer" title="Open the customer-facing binder in a print window">Customer Presentation</button>
+          <button class="hub-btn hub-btn-sm hub-btn-secondary" data-action="generate-binder" data-variant="elt" title="Open the internal ELT approval binder in a print window">ELT Approval</button>
+        </div>
+        <div class="u-faint" style="font-size:12px;margin-top:6px;">${escapeHtml(binderCaption)}</div>
+      </div>`;
+
   return `
     <div class="hub-card" style="padding:16px;margin-top:16px;">
       <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Bid of record</div>
       ${submittedBlock}
       ${gate}
+      ${binderRow}
     </div>`;
 }
 

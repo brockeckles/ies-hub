@@ -7,7 +7,7 @@
  * @module hub/command-center/ui
  */
 
-import * as api from './api.js?v=20260723-s5a';
+import * as api from './api.js?v=20260723-s5b';
 import { escapeHtml, safeHttpUrl } from '../../shared/escape.js?v=20260702-sec2';
 // C2 (2026-07-22): DOS_STAGES is the SINGLE canonical stage definition
 // (names + colors) — the snapshot's stage bar derives from it instead of
