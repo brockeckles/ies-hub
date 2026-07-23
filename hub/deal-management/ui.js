@@ -1783,6 +1783,13 @@ const ARTIFACT_KINDS = {
   network_opt:       { label: 'Network Opt',       color: '#20c997', route: 'designtools/network-opt' },
   most_standards:    { label: 'MOST Standards',    color: '#0047AB', route: 'designtools/most-standards' },
   center_of_gravity: { label: 'Center of Gravity', color: '#0ea5e9', route: 'designtools/center-of-gravity' },
+  // BW (2026-07-23): P2-b's recordBinderGenerated writes kind:'binder' rows;
+  // without an entry here they rendered via the grey unknown-kind fallback
+  // with a dead Open button. `route` is the DM *detail tab* (Package), not a
+  // hash route — renderDealArtifacts special-cases binder to emit
+  // data-detail-tab (the fixTab precedent) instead of data-artifact-open,
+  // which would hash-navigate away from DM entirely.
+  binder:            { label: 'Bid Binder',        color: '#7c3aed', route: 'package' },
 };
 
 function renderDealArtifacts() {
@@ -1816,7 +1823,14 @@ function renderDealArtifacts() {
                 <td style="padding:10px 12px;color:var(--ies-gray-500);font-family:monospace;font-size:11px;">${escapeAttr(a.ref)}</td>
                 <td style="padding:10px 12px;color:var(--ies-gray-500);">${formatDate(a.updated)}</td>
                 <td style="padding:10px 16px;text-align:right;">
-                  ${a.kind === 'cost_model' && a.modelId
+                  ${a.kind === 'binder'
+                    // BW (2026-07-23): binder rows live on the Package detail
+                    // tab — jump tabs via the delegated data-detail-tab
+                    // handler (same in-content pattern as the manifest's
+                    // fixTab buttons), NOT data-artifact-open, which
+                    // hash-navigates away from Deal Management.
+                    ? `<button class="hub-btn hub-btn-sm hub-btn-secondary u-cap" data-detail-tab="package" title="Open the Package tab">Open →</button>`
+                    : a.kind === 'cost_model' && a.modelId
                     ? `<button class="hub-btn hub-btn-sm hub-btn-secondary u-cap" data-action="open-cost-model-id" data-model-id="${a.modelId}">Open →</button>`
                     : (a.kind === 'cost_model'
                         ? `<button class="hub-btn hub-btn-sm hub-btn-secondary u-cap" data-artifact-open="${escapeAttr(kind.route)}" title="Demo artifact — opens Cost Model landing">Open →</button>`
@@ -1894,15 +1908,32 @@ function renderWorkflowRail(d) {
   const smartLabel = (n, noun) => n === 0 ? `Start ${noun} →` : (n === 1 ? `Open →` : `View ${n} →`);
   const dot = (n) => `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:${n > 0 ? 'var(--c-success)' : 'var(--ies-gray-200)'};"></span>`;
 
+  // BW (2026-07-23): rail hydration flash. For real deals the designs cache
+  // (_designScenariosByDeal) is only populated by _hydrateDealDetail's async
+  // Promise.all, so first paint showed a false "0" on Size / Labor / Network
+  // and then flashed to the real counts on the hydrate re-render. While the
+  // cache has no entry yet, render a muted '—' in the count pill, keep the
+  // stage dot unlit (railCount('—') is never > 0), and hold the neutral
+  // secondary "Open →" button so the primary "Start … →" CTA can't flash
+  // either. Demo deals never hydrate (_hydrateDealDetail bails on
+  // !_isRealDealId and nothing else seeds the Map for them), so a bare
+  // `.has()` check would pin demos on '—' forever — their empty counts are
+  // authoritative immediately, hence the _isRealDealId gate. No extra
+  // plumbing: the existing hydrate re-render flips '—' to the real counts.
+  const designsLoading = _isRealDealId(d.id) && !_designScenariosByDeal.has(d.id);
+  const railCount = (n) => designsLoading ? '—' : n;
+  const toolBtn = (n, noun, route) =>
+    `<button class="hub-btn hub-btn-sm ${designsLoading || n ? 'hub-btn-secondary' : 'hub-btn-primary'}" data-action="launch-tool" data-tool-route="${route}">${designsLoading ? 'Open →' : smartLabel(n, noun)}</button>`;
+
   const stages = [
     { key: 'scope',   name: 'Scope',   sub: 'Deal basics · DOS',   count: null,
       dotHtml: `<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:${dosPct >= 100 ? 'var(--c-success)' : dosPct > 0 ? '#eab308' : 'var(--ies-gray-200)'};"></span>`,
       countTxt: `DOS ${dosPct}%`,
       btn: `<button class="hub-btn hub-btn-sm hub-btn-secondary" data-detail-tab="dos">Open DOS →</button>` },
-    { key: 'size',    name: 'Size',    sub: 'Warehouse Sizing',    count: ds.wsc.length,
-      btn: `<button class="hub-btn hub-btn-sm ${ds.wsc.length ? 'hub-btn-secondary' : 'hub-btn-primary'}" data-action="launch-tool" data-tool-route="designtools/warehouse-sizing">${smartLabel(ds.wsc.length, 'sizing')}</button>` },
-    { key: 'labor',   name: 'Labor',   sub: 'MOST Standards',      count: ds.most.length,
-      btn: `<button class="hub-btn hub-btn-sm ${ds.most.length ? 'hub-btn-secondary' : 'hub-btn-primary'}" data-action="launch-tool" data-tool-route="designtools/most-standards">${smartLabel(ds.most.length, 'labor std')}</button>` },
+    { key: 'size',    name: 'Size',    sub: 'Warehouse Sizing',    count: railCount(ds.wsc.length),
+      btn: toolBtn(ds.wsc.length, 'sizing', 'designtools/warehouse-sizing') },
+    { key: 'labor',   name: 'Labor',   sub: 'MOST Standards',      count: railCount(ds.most.length),
+      btn: toolBtn(ds.most.length, 'labor std', 'designtools/most-standards') },
     { key: 'cost',    name: 'Cost',    sub: 'Cost Model',          count: models.length,
       btn: models.length === 0
         ? `<button class="hub-btn hub-btn-sm hub-btn-primary" data-action="create-cost-model" data-deal-id="${escapeAttr(d.id)}">Start cost model →</button>`
@@ -1916,7 +1947,7 @@ function renderWorkflowRail(d) {
     // when ONLY Fleet has scenarios, "Open →" routes to Fleet instead of
     // lying about an empty COG.
     { key: 'network', name: 'Network', sub: 'COG · Network Opt · Fleet',
-      count: ds.cog.length + (ds.netopt || []).length + (ds.fleet || []).length,
+      count: railCount(ds.cog.length + (ds.netopt || []).length + (ds.fleet || []).length),
       btn: (() => {
         const n = ds.cog.length + (ds.netopt || []).length + (ds.fleet || []).length;
         const route = ds.cog.length === 0 && (ds.netopt || []).length > 0
@@ -1924,7 +1955,7 @@ function renderWorkflowRail(d) {
           : ds.cog.length === 0 && (ds.netopt || []).length === 0 && (ds.fleet || []).length > 0
             ? 'designtools/fleet-modeler'
             : 'designtools/center-of-gravity';
-        return `<button class="hub-btn hub-btn-sm ${n ? 'hub-btn-secondary' : 'hub-btn-primary'}" data-action="launch-tool" data-tool-route="${route}">${smartLabel(n, 'network')}</button>`;
+        return toolBtn(n, 'network', route);
       })() },
     // S3-P1 (2026-07-22): Package stage = bid-manifest completeness (was an
     // artifacts count). The count slot shows the manifest pct; the dot goes

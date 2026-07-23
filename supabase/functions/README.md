@@ -64,10 +64,12 @@ Operational notes:
 
 - Rotating the secret = update the dashboard secret + the three cron jobs'
   `x-ingest-secret` header. No redeploy.
-- `ingest-labor-watch` runs ~150s (21 sequential Google News RSS queries) and
-  can hit the ~150s gateway timeout (504 to the CALLER) while the ingest
-  completes server-side — pre-existing behavior, harmless for cron. Batching
-  the queries is a candidate future fix.
+- `ingest-labor-watch` runs its 21 Google News RSS queries in concurrent
+  waves of 5 (2026-07-23; previously ~150s sequential, which hit the ~150s
+  gateway timeout → 504 to the caller). Wall-clock now lands well under 60s;
+  each fetch has a 15s timeout and fail-softs to `[]`. If Google News starts
+  returning 429s, drop the `POOL` constant to 3–4. The response includes
+  `elapsed_ms` for observability.
 
 Also fixed in C5: `ingest-eia-diesel`'s manual-POST branch
 (`{ report_date, price_per_gallon }`) now runs **before** the `EIA_API_KEY`

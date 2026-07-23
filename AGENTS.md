@@ -133,6 +133,16 @@ patch it.
   `deal_outcomes` bid prefill, explicit values always beat snapshot values.
   Snapshot payloads carry `schema_version` (`buildBidSnapshotPayload`,
   `tools/deal-manager/calc.js`) — bump it on any shape change.
+- **`feedback_votes` is deliberately NOT append-only** (unlike
+  `deal_bid_snapshots`): deletes ARE the un-vote. One row per
+  (feedback item, user), enforced by a unique constraint; no UPDATE policy
+  and no immutability trigger — do not "fix" this by adding one.
+- **`approve_scenario` is owner/admin-gated (2026-07-23 ruling).** Approval
+  is a write-power: team/shared visibility grants READ, never approval — do
+  not add a team arm to the gate. Never DROP this fn (ACL drift); always
+  CREATE OR REPLACE.
+- **`deal_outcomes` reads through the parent deal's visibility** (aligned
+  with siblings 2026-07-23); its WRITE policies stay row-owner-or-admin.
 - **`paybackMonths === 0` is a sentinel** meaning "never recovers", not
   "instant payback". Zero-payback with startup cost scores 0 in the grade.
 - **Cost Model landing is cold-start-gated.** A hard refresh shows the

@@ -16,7 +16,7 @@
  * @module shared/feedback-fab
  */
 
-import { submitFeedback } from '../hub/feedback/api.js?v=20260722-s4e';
+import { submitFeedback } from '../hub/feedback/api.js?v=20260723-s5d';
 import { showToast } from './toast.js?v=20260705-u1a';
 
 const FAB_ID = 'hub-feedback-fab';

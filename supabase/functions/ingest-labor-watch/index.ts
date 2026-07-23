@@ -94,9 +94,16 @@ function detectLocation(title) {
 
 async function fetchRss(query) {
   const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}+when:30d&hl=en-US&gl=US&ceid=US:en`;
-  const res = await fetch(url);
-  if (!res.ok) return [];
-  const xml = await res.text();
+  // 15s per-fetch timeout so one hung RSS request can't stall a whole wave;
+  // timeout/abort fail-softs to [] just like a non-OK response.
+  let xml;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return [];
+    xml = await res.text();
+  } catch (_e) {
+    return [];
+  }
   const items = [];
   const rx = /<item>([\s\S]*?)<\/item>/g;
   let m;
@@ -167,19 +174,30 @@ Deno.serve(async (req) => {
   const counters = { inserted: 0, stale: 0, noise: 0, errors: [] as string[] };
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 90);
   const cutoffStr = cutoff.toISOString().slice(0,10);
+  const t0 = Date.now();
 
-  // National queries — location from title parsing
-  for (const q of NATIONAL) {
-    try { await ingestItems(sb, await fetchRss(q.q), '', q.severity, cutoffStr, counters); }
-    catch(e) { counters.errors.push('nat: ' + e.message); }
-  }
+  // Unified task list: national queries (location from title parsing) +
+  // state-scoped queries (location GUARANTEED from query itself).
+  const tasks = [
+    ...NATIONAL.map((q) => ({ q: q.q, loc: '', sev: q.severity, tag: 'nat' })),
+    ...STATES.map((st) => ({
+      q: `(union OR strike OR UAW OR Teamsters OR NLRB) workers ${st.name} -russia -ukraine`,
+      loc: st.loc,
+      sev: 'medium',
+      tag: 'state ' + st.name
+    }))
+  ];
 
-  // State-scoped queries — location GUARANTEED from query itself
-  for (const st of STATES) {
-    try {
-      const q = `(union OR strike OR UAW OR Teamsters OR NLRB) workers ${st.name} -russia -ukraine`;
-      await ingestItems(sb, await fetchRss(q), st.loc, 'medium', cutoffStr, counters);
-    } catch(e) { counters.errors.push('state ' + st.name + ': ' + e.message); }
+  // Process in concurrent waves instead of ~21 sequential fetches (~150s →
+  // gateway 504 for callers). Pool sized for Google News politeness; drop to
+  // 3–4 if 429s appear. Each task keeps its own try/catch + error tag, and
+  // ingestItems stays internally sequential (upsert is duplicate-safe).
+  const POOL = 5;
+  for (let i = 0; i < tasks.length; i += POOL) {
+    await Promise.all(tasks.slice(i, i + POOL).map(async (t) => {
+      try { await ingestItems(sb, await fetchRss(t.q), t.loc, t.sev, cutoffStr, counters); }
+      catch(e) { counters.errors.push(t.tag + ': ' + e.message); }
+    }));
   }
 
   // Prune anything stale
@@ -192,6 +210,7 @@ Deno.serve(async (req) => {
     pruned: count || 0,
     errors: counters.errors.slice(0,5),
     cutoff: cutoffStr,
+    elapsed_ms: Date.now() - t0,
     ts: new Date().toISOString()
   }), { headers: { 'Content-Type': 'application/json' }});
 });

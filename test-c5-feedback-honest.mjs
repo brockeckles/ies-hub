@@ -2,9 +2,11 @@
 //
 // Pins the C5 trim pass on hub/feedback via source scan (pure, no network,
 // no DOM):
-//   1. No "voting" claim: no vote write exists anywhere, so the ui.js
-//      docstring must not claim voting, the board must not render a
-//      vote-count column, and the "Most Voted" sort option is gone.
+//   1. (RETIRED 2026-07-23) The "no voting UI" pins are gone: voting is now
+//      REAL — feedback_votes table (migration 20260723150000), api.toggleVote
+//      write path, board pill + Votes sort. The new surface is pinned by
+//      test-bw-feedback-votes.mjs; this test keeps only the honesty pins
+//      that are still true.
 //   2. DEMO_FEEDBACK (fabricated demo rows incl. invented comments) is
 //      deleted from calc.js and imported nowhere.
 //   3. Status chips cover every status the DB enum can actually produce
@@ -12,8 +14,10 @@
 //      'planned' status (unreachable per feedback_status enum in
 //      supabase/migrations/20260330123655_create_feedback_table.sql) is
 //      gone from calc.js/types.js.
-//   4. Single write path: the global FAB routes through api.submitFeedback
-//      instead of a second raw db.insert('hub_feedback', ...).
+//   4. Single write path INTO hub_feedback: the global FAB routes through
+//      api.submitFeedback instead of a second raw db.insert('hub_feedback',
+//      ...). (toggleVote writes feedback_votes, a different table — the
+//      pin's intent was "no phantom hub_feedback paths" and still holds.)
 
 import { readFileSync } from 'node:fs';
 
@@ -29,15 +33,10 @@ const typesSrc = readFileSync(new URL('./hub/feedback/types.js', import.meta.url
 const apiSrc   = readFileSync(new URL('./hub/feedback/api.js', import.meta.url), 'utf8');
 const fabSrc   = readFileSync(new URL('./shared/feedback-fab.js', import.meta.url), 'utf8');
 
-// ── 1. No voting claim / no vote UI ─────────────────────────────────────
-const uiDocstring = uiSrc.slice(0, uiSrc.indexOf('*/'));
-check('ui docstring: no "voting" claim (no vote write exists)', !/voting/i.test(uiDocstring));
-check('ui: no "Most Voted" sort option', !uiSrc.includes('Most Voted'));
-check('ui: default sort is date, not upvotes', !/sortBy = 'upvotes'/.test(uiSrc));
-check('ui: board rows carry no vote-count column', !/>votes</.test(uiSrc));
-check('ui: detail view shows no vote count', !uiSrc.includes('${item.upvotes}'));
-check('ui: no vote write anywhere (honest — read-only upvotes)',
-  !/upvote/i.test(uiSrc.replace(/sortBy/g, '')));
+// ── 1. RETIRED (2026-07-23) — voting is real now ────────────────────────
+// The six "no voting UI / no vote write" pins that lived here were retired
+// when real voting shipped (feedback_votes). See test-bw-feedback-votes.mjs
+// for the pins on the new surface.
 
 // ── 2. DEMO_FEEDBACK deleted ─────────────────────────────────────────────
 check('calc: DEMO_FEEDBACK export deleted', !calcSrc.includes('DEMO_FEEDBACK'));
