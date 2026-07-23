@@ -7,15 +7,18 @@
  */
 
 import { bus } from '../../shared/event-bus.js?v=20260418-sK';
-import * as api from './api.js?v=20260722-s4e';
+import * as api from './api.js?v=20260723-s5a';
 import { showToast } from '../../shared/toast.js?v=20260705-u1a';
+// P2-a (2026-07-23): explicit "Mark as submitted" confirms before stamping
+// the immutable bid-of-record snapshot.
+import { showConfirm } from '../../shared/confirm-modal.js?v=20260705-u1a';
 import { escapeAttr, escapeHtml } from '../../shared/escape.js?v=20260702-sec2';
 import { setActive as setDealContext } from '../../shared/deal-context.js?v=20260722-s1a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 // UX-1 D1p2 (2026-07-03): the MSA merge — deal tabs reuse the Multi-Site
 // Analyzer's pure calc + site mapping instead of duplicating the math.
-import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260722-s2b';
-import * as msaApi from '../../tools/deal-manager/api.js?v=20260722-s4e';
+import * as msaCalc from '../../tools/deal-manager/calc.js?v=20260723-s5a';
+import * as msaApi from '../../tools/deal-manager/api.js?v=20260723-s5a';
 // S1 (2026-07-22): shared pure Σ★ roll-up (same module api.js computes with).
 import * as dmCalc from './calc.js?v=20260722-s3d';
 
@@ -39,6 +42,12 @@ const _msaSitesByDeal = new Map();
 const _strategyRowByDeal = new Map();
 const _bidMetaByDeal = new Map();
 const _bidMetaLoaded = new Set();
+// S3-P2-a (2026-07-23): bid-of-record snapshots per deal, NEWEST FIRST
+// (api.listBidSnapshots order). Fetched fail-soft on detail entry (hydrate)
+// or lazily on Package-tab entry; the submit handler prepends the inserted
+// row so badge/history/header chip update without a refetch.
+const _bidSnapshotsByDeal = new Map();
+const _bidSnapshotsLoaded = new Set();
 let _cmpSiteA = null;
 let _cmpSiteB = null;
 let detailTab = 'overview'; // overview | sites | dos | financials | sensitivity | compare | strategy | package | artifacts
@@ -351,6 +360,17 @@ function bindDelegatedEvents() {
   rootEl.addEventListener('click', (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
 
+    // P2pre F1 — grade ⓘ popover. Toggle on the affordance; any other click
+    // outside the open popover dismisses it (fall through to the branches).
+    const gradePop = rootEl?.querySelector('#dm-grade-pop');
+    if (target.closest('[data-action="toggle-grade-info"]')) {
+      if (gradePop) gradePop.style.display = gradePop.style.display === 'none' ? 'block' : 'none';
+      return;
+    }
+    if (gradePop && gradePop.style.display !== 'none' && !target.closest('#dm-grade-pop')) {
+      gradePop.style.display = 'none';
+    }
+
     // View toggle
     const viewBtn = target.closest('[data-view]');
     if (viewBtn) { viewMode = /** @type {HTMLElement} */ (viewBtn).dataset.view; selectedDeal = null; render(); return; }
@@ -565,6 +585,14 @@ function bindDelegatedEvents() {
       return;
     }
 
+    // P2-a (2026-07-23) — Package tab: explicit "Mark as submitted". Only
+    // rendered enabled at manifest 100%; the handler re-checks the gate,
+    // confirms (danger), then stamps the immutable bid-of-record snapshot.
+    if (target.closest('[data-action="submit-bid"]')) {
+      _onSubmitBid();
+      return;
+    }
+
     // Stage auto-advance
     if (target.closest('[data-action="advance-stage"]')) {
       if (selectedDeal && selectedDeal.stage < 6) {
@@ -650,6 +678,14 @@ function bindDelegatedEvents() {
 
   // Strategy inputs — debounced upsert via _scheduleStrategySave
   // UX-1 D1p2-C: Compare tab slot selects.
+  // P2pre F1 — Esc closes the grade ⓘ popover (focus stays inside rootEl
+  // after the toggle click, so the delegated keydown sees it).
+  rootEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const pop = rootEl?.querySelector('#dm-grade-pop');
+    if (pop && pop.style.display !== 'none') pop.style.display = 'none';
+  });
+
   rootEl.addEventListener('change', (e) => {
     // S1 — Unassigned bucket: attach a model to a site.
     const assignSel = /** @type {HTMLElement} */ (e.target).closest?.('[data-assign-model]');
@@ -1146,7 +1182,15 @@ function renderDetail() {
           </div>
         </div>
         <span style="display:inline-block;padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;color:#fff;background:${stage.color};">Stage ${d.stage}: ${stage.name}</span>
-        ${d.score !== '—' ? `<span title="Deal health ${d.scoreNum != null ? d.scoreNum + '/100' : ''} — ★-basis financials · weights: margin 35 / EBITDA 25 / payback 20 / NPV 20" style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;font-size:16px;font-weight:800;color:#fff;background:${d.score.startsWith('A') ? 'var(--c-success)' : 'var(--c-info)'};">${d.score}</span>` : ''}
+        <!-- P2-a: tiny bid-of-record chip. The span wrapper is ALWAYS in the
+             header (display:contents — zero footprint when empty) so the
+             async snapshot fetch can patch it in place with no layout shift. -->
+        <span id="dm-submitted-chip" style="display:contents;">${_submittedChipHtml(d)}</span>
+        ${d.score !== '—' ? `<span style="position:relative;display:inline-flex;align-items:center;gap:5px;">
+          <span title="Deal health ${d.scoreNum != null ? d.scoreNum + '/100' : ''} — ★-basis financials" style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;font-size:16px;font-weight:800;color:#fff;background:${d.score.startsWith('A') ? 'var(--c-success)' : 'var(--c-info)'};">${escapeHtml(String(d.score))}</span>
+          ${d.scoreDetail ? `<button data-action="toggle-grade-info" title="How this grade is computed" aria-label="How this grade is computed" style="border:none;background:none;cursor:pointer;padding:0;font-size:15px;line-height:1;color:var(--ies-gray-400);">ⓘ</button>
+          <div id="dm-grade-pop" class="hub-card" style="display:none;position:absolute;top:46px;right:0;z-index:60;width:320px;padding:14px 16px;text-align:left;box-shadow:0 8px 24px rgba(0,0,0,.14);">${_gradeInfoHtml(d)}</div>` : ''}
+        </span>` : ''}
       </div>
 
       <!-- Quick Action chip group — surfaces most-used workflow actions without
@@ -1181,7 +1225,7 @@ function renderDetail() {
       <div class="hub-kpi-strip" style="grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:20px;">
         ${kpi(d.rollupFromStars ? 'Revenue (Σ★)' : 'Revenue', '$' + (d.revenue / 1e6).toFixed(1) + 'M' + (d.rollupIsEstimate ? _estPill('Some sites have no ★ scenario yet — totals cover the starred sites only' + (_anyHeuristicStar(d) ? '. Also: some ★ scenarios are markup-heuristic priced — no engine-stamped revenue.' : '')) : ''))}
         ${kpi('Margin', d.margin > 0 ? d.margin + '%' : 'TBD', d.margin > 0 && d.margin < 10 ? 'var(--ies-orange)' : null)}
-        ${kpi('Total sqft', totalSqft > 0 ? (totalSqft / 1000).toFixed(0) + 'K' : '—')}
+        ${kpi('Total sqft', totalSqft > 0 ? (totalSqft / 1000).toFixed(0) + 'K' + (Array.isArray(d.sites) && d.sites.some(s => (s.sqft || 0) > 0 && _sqftIsEst(s)) ? _estPill(_SQFT_EST_TIP) : '') : '—')}
         ${kpi('Days in Stage', d.daysInStage, d.daysInStage > 14 ? 'var(--ies-red)' : null)}
         ${kpi('DOS Completion', dosCompletion + '%', (totalElements === 0 || completedElements === 0) ? 'var(--ies-gray-300)' : dosCompletion < 50 ? 'var(--ies-red)' : dosCompletion < 75 ? 'var(--ies-orange)' : null)}
       </div>
@@ -1218,7 +1262,7 @@ function renderDetailContent() {
     case 'dos': el.innerHTML = renderDealDos(); break;
     case 'financials': el.innerHTML = renderDealFinancialsMsa(); break;
     case 'strategy': el.innerHTML = renderDealWinStrategy(); break;
-    case 'package': el.innerHTML = renderPackageTab(); _ensureBidMeta(); break;
+    case 'package': el.innerHTML = renderPackageTab(); _ensureBidMeta(); _ensureBidSnapshots(); break;
     case 'artifacts': el.innerHTML = renderDealArtifacts(); break;
   }
 }
@@ -1384,7 +1428,7 @@ async function _hydrateDealDetail(dealId) {
   }
   _hydratedDeals.add(dealId);
   try {
-    const [strategy, artifacts, dosStatus, designScenarios, outcome, msaSites, bidMeta] = await Promise.all([
+    const [strategy, artifacts, dosStatus, designScenarios, outcome, msaSites, bidMeta, bidSnapshots] = await Promise.all([
       api.loadStrategy(dealId),
       api.listArtifactsByDeal(dealId),
       api.loadDosStatusByDeal(dealId),
@@ -1394,6 +1438,10 @@ async function _hydrateDealDetail(dealId) {
       // S3-P1: bid-meta rides the hydrate so the rail's manifest pct is
       // exact after first paint (getBidMeta is fail-soft null, never throws).
       api.getBidMeta(dealId),
+      // P2-a: bid-of-record snapshots ride the same hydrate (fail-soft [])
+      // — the Package tab's submitted state and the header "Submitted" chip
+      // both read this cache.
+      api.listBidSnapshots(dealId),
     ]);
 
     // Workflow rail data (UX-1 D1 phase 1).
@@ -1408,6 +1456,11 @@ async function _hydrateDealDetail(dealId) {
     _strategyRowByDeal.set(dealId, strategy || null);
     _bidMetaByDeal.set(dealId, bidMeta || null);
     _bidMetaLoaded.add(dealId);
+
+    // P2-a: snapshot cache + in-place header chip patch (no full header
+    // re-render — the chip span is always in the header, so no layout shift).
+    _bidSnapshotsByDeal.set(dealId, Array.isArray(bidSnapshots) ? bidSnapshots : []);
+    _bidSnapshotsLoaded.add(dealId);
 
     // Strategy: merge over the seeded defaults so any null-valued columns
     // fall back to the seed; non-null DB values win.
@@ -1442,6 +1495,7 @@ async function _hydrateDealDetail(dealId) {
 
     // Re-render currently visible detail content if we're still on this deal.
     if (viewMode === 'detail' && selectedDeal && selectedDeal.id === dealId) {
+      _refreshSubmittedChip();
       renderDetailContent();
     }
   } catch (err) {
@@ -2215,6 +2269,169 @@ function _saveBidMetaField(patch) {
   });
 }
 
+// ============================================================
+// S3-P2-a — "MARK AS SUBMITTED" (2026-07-23: bid of record)
+// The explicit submit action is THE friction point (Brock's ruling):
+// enabled only at manifest 100%, confirms (danger), then stamps ONE
+// immutable deal_bid_snapshots row via api.submitBid. Snapshots cache in
+// _bidSnapshotsByDeal (newest first) — hydrate fetches them on detail
+// entry; _ensureBidSnapshots covers Package-tab entry paths that skipped
+// hydrate. All fetches fail-soft: no snapshot data never breaks the tab.
+// ============================================================
+
+/** Σ★ money format, matching the header KPI ('$4.2M'); '—' when unknown. */
+function _fmtSigmaStar(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? '$' + (n / 1e6).toFixed(1) + 'M' : '—';
+}
+
+function _fmtSnapDate(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleDateString(); } catch { return '—'; }
+}
+
+/** Lazy snapshot fetch for the Package tab — same pattern as _ensureBidMeta
+ *  (fail-soft; listBidSnapshots never rejects). Also patches the header chip. */
+function _ensureBidSnapshots() {
+  const d = selectedDeal;
+  if (!d || _bidSnapshotsLoaded.has(d.id) || !_isRealDealId(d.id)) return;
+  const dealId = d.id;
+  api.listBidSnapshots(dealId).then(rows => {
+    _bidSnapshotsLoaded.add(dealId);
+    _bidSnapshotsByDeal.set(dealId, Array.isArray(rows) ? rows : []);
+    if (viewMode === 'detail' && selectedDeal?.id === dealId) {
+      _refreshSubmittedChip();
+      if (detailTab === 'package') renderDetailContent();
+    }
+  });
+}
+
+/** Header "Submitted" chip — '' when no snapshot exists (the #dm-submitted-chip
+ *  wrapper is display:contents, so absence costs zero layout). */
+function _submittedChipHtml(d) {
+  const snaps = _bidSnapshotsByDeal.get(d?.id) || [];
+  if (!snaps.length) return '';
+  const when = _fmtSnapDate(snaps[0]?.submitted_at);
+  return `<span title="Bid of record v${snaps.length} — submitted ${escapeAttr(when)} · Σ★ ${escapeAttr(_fmtSigmaStar(snaps[0]?.y1_revenue))}"
+    style="display:inline-flex;align-items:center;padding:5px 12px;border-radius:14px;font-size:11px;font-weight:800;letter-spacing:.03em;background:var(--c-success-bg);color:var(--c-success-ink);white-space:nowrap;">Submitted</span>`;
+}
+
+/** Patch the header chip in place (async snapshot loads / post-submit). */
+function _refreshSubmittedChip() {
+  const el = rootEl?.querySelector('#dm-submitted-chip');
+  if (el && selectedDeal) el.innerHTML = _submittedChipHtml(selectedDeal);
+}
+
+/** Assemble the snapshot fields from the SAME live data the Package tab
+ *  renders: _bidManifestFor's manifest, the msa-row revenue join (the
+ *  _recomputeDealRollup seam), cached bid meta and raw strategy row. Pure —
+ *  msaCalc.buildBidSnapshotPayload does all the math. */
+function _buildSubmitFields(d) {
+  const man = _bidManifestFor(d);
+  const revById = new Map((_msaSitesByDeal.get(d.id) || [])
+    .map(r => [String(r.costModelId), Number(r.annualRevenue) || 0]));
+  const models = (d.models || []).map(m =>
+    (m.total_annual_revenue === undefined && revById.has(String(m.id)))
+      ? { ...m, total_annual_revenue: revById.get(String(m.id)) }
+      : m);
+  return msaCalc.buildBidSnapshotPayload({
+    deal: d,
+    manifest: man,
+    bidMeta: _bidMetaByDeal.get(d.id) || null,
+    sites: d.sites || [],
+    models,
+    strategy: _strategyRowByDeal.get(d.id) || null,
+  });
+}
+
+/** True when the CURRENT manifest pct or Σ★ differs from the latest
+ *  snapshot's — this is what makes re-submission discoverable. Compares the
+ *  same builder output submitBid would stamp, so rounding is consistent. */
+function _bidDriftedSince(d, latest) {
+  if (!latest) return false;
+  const cur = _buildSubmitFields(d);
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  if (num(cur.manifest_pct) !== num(latest.manifest_pct)) return true;
+  const a = num(cur.y1_revenue), b = num(latest.y1_revenue);
+  if ((a == null) !== (b == null)) return true;
+  return a != null && b != null && Math.abs(a - b) > 0.005;
+}
+
+/** "Mark as submitted" click — gate re-check, danger confirm, submitBid,
+ *  cache prepend, toast, full detail re-render (header chip + tab). */
+async function _onSubmitBid() {
+  const d = selectedDeal;
+  if (!d) return;
+  const man = _bidManifestFor(d);
+  const remaining = Math.max(0, (man.requiredTotal || 0) - (man.requiredDone || 0));
+  if (!(man.requiredTotal > 0 && remaining === 0)) {
+    showToast(`Complete the bid manifest to submit — ${remaining} required item(s) remaining.`, 'warning');
+    return;
+  }
+  if (!_isRealDealId(d.id)) {
+    showToast('Demo deal — bid submissions are not recorded.', 'warning');
+    return;
+  }
+  const fields = _buildSubmitFields(d);
+  const ok = await showConfirm(
+    `Mark this bid as submitted?\n\nThis stamps an immutable bid-of-record snapshot (Σ★ ${_fmtSigmaStar(fields.y1_revenue)} · ${Number(fields.manifest_pct) || 0}% manifest) used to calibrate bid vs. outcome. You can submit again later if the bid changes — each submission is kept.`,
+    { danger: true, okLabel: 'Mark as submitted' }
+  );
+  if (!ok) return;
+  const dealId = d.id;
+  try {
+    const row = await api.submitBid(dealId, fields);
+    const list = [row, ...(_bidSnapshotsByDeal.get(dealId) || [])];
+    _bidSnapshotsByDeal.set(dealId, list);
+    _bidSnapshotsLoaded.add(dealId);
+    showToast(`Bid submitted — snapshot #${list.length} stamped.`, 'success');
+    if (viewMode === 'detail' && selectedDeal?.id === dealId) renderDetail();
+  } catch (err) {
+    console.error('[deal-mgmt] submitBid failed', err);
+    showToast('Submit failed: ' + (err?.message || err), 'error');
+  }
+}
+
+/** Bottom-of-Package-tab section: submitted state (badge + history + drift
+ *  warning) and the gated "Mark as submitted" button. */
+function _renderBidSubmitSection(d, man) {
+  const snaps = _bidSnapshotsByDeal.get(d.id) || [];
+  const latest = snaps[0] || null;
+  const remaining = Math.max(0, (man.requiredTotal || 0) - (man.requiredDone || 0));
+  const ready = man.requiredTotal > 0 && remaining === 0 && man.pct === 100;
+
+  let submittedBlock = '';
+  if (latest) {
+    const drift = _bidDriftedSince(d, latest);
+    const history = snaps.length > 1 ? `
+      <div style="margin-top:10px;border-top:1px solid var(--ies-gray-100);padding-top:8px;">
+        <div style="font-size:10px;font-weight:700;color:var(--ies-gray-400);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;">Submission history</div>
+        ${snaps.map((r, i) => `
+          <div class="u-faint" style="font-size:12px;padding:2px 0;">v${snaps.length - i} · ${escapeHtml(_fmtSnapDate(r.submitted_at))} · ${Number(r.manifest_pct) || 0}% manifest · Σ★ ${_fmtSigmaStar(r.y1_revenue)}</div>`).join('')}
+      </div>` : '';
+    submittedBlock = `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:${drift ? '6px' : '12px'};">
+        <span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:3px;background:var(--c-success-bg);color:var(--c-success-ink);letter-spacing:.04em;">SUBMITTED</span>
+        <span style="font-size:13px;font-weight:600;">Submitted ${escapeHtml(_fmtSnapDate(latest.submitted_at))} · Σ★ ${_fmtSigmaStar(latest.y1_revenue)} at submission · v${snaps.length}</span>
+      </div>
+      ${drift ? `<div style="font-size:12px;font-weight:600;color:var(--c-warn-deep);margin-bottom:12px;">⚠ Deal has changed since last submission — submit again to restamp the bid of record.</div>` : ''}
+      ${history}${history ? '<div style="height:10px;"></div>' : ''}`;
+  }
+
+  const gate = ready
+    ? `<button class="hub-btn hub-btn-primary" data-action="submit-bid" title="Stamp the immutable bid-of-record snapshot">Mark as submitted</button>
+       <div class="u-faint" style="font-size:12px;margin-top:6px;">Stamps an immutable bid-of-record snapshot used to calibrate bid vs. outcome. Each submission is kept.</div>`
+    : `<button class="hub-btn hub-btn-primary" data-action="submit-bid" disabled style="opacity:.45;cursor:not-allowed;">Mark as submitted</button>
+       <div class="u-faint" style="font-size:12px;margin-top:6px;">${escapeHtml(`Complete the bid manifest to submit — ${remaining} required item(s) remaining.`)}</div>`;
+
+  return `
+    <div class="hub-card" style="padding:16px;margin-top:16px;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:10px;">Bid of record</div>
+      ${submittedBlock}
+      ${gate}
+    </div>`;
+}
+
 function _manifestStatusChip(status) {
   if (status === 'done') {
     return '<span class="hub-badge hub-badge-green" style="min-width:24px;justify-content:center;">✓</span>';
@@ -2294,6 +2511,8 @@ function renderPackageTab() {
         style="width:100%;resize:vertical;font-family:var(--font-ui);font-size:13px;line-height:1.5;">${escapeHtml(meta?.exec_summary || '')}</textarea>
       <div class="u-faint" style="font-size:12px;margin-top:6px;">Saves on blur — feeds the 'Executive summary written' item above.</div>
     </div>
+
+    ${_renderBidSubmitSection(d, man)}
   `;
 }
 
@@ -2331,10 +2550,64 @@ function _modelRevenueEst(m, fallbackMarginPct) {
 
 const _EST_PILL_STYLE = 'font-size:10px;font-weight:700;color:var(--c-warn-deep);background:var(--c-warn-bg);border-radius:8px;padding:1px 6px;vertical-align:middle;';
 const _HEUR_STAR_TIP = 'Markup-heuristic estimate — no engine-stamped revenue on the ★ scenario.';
+// P2pre F3 (2026-07-23): flags a sqft total that includes at least one site
+// still on its manual estimate (no ★ scenario stamping facility_sqft).
+const _SQFT_EST_TIP = 'Includes site sq ft estimates — at least one site has no ★ scenario stamping its facility sq ft.';
 
 /** Repo-standard amber est pill (leading space so it appends to a figure). */
 function _estPill(title) {
   return ` <span title="${escapeAttr(title)}" style="${_EST_PILL_STYLE}">est</span>`;
+}
+
+/** P2pre F1 (2026-07-23) — grade ⓘ popover body. Explains the A–F chip from
+ *  the calc's own breakdown (api carries computeDealScore's components /
+ *  weights / thresholds through as d.scoreDetail). All values Number-coerced;
+ *  grade escaped. Returns '' when the breakdown didn't survive to the deal. */
+function _gradeInfoHtml(d) {
+  const det = d && d.scoreDetail;
+  if (!det || !det.components) return '';
+  const c = det.components || {};
+  const w = det.weights || {};
+  const th = det.thresholds || {};
+  const wPct = (k) => Math.round((Number(w[k]) || 0) * 100);
+  const row = (label, val, k) => `
+    <div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:3px 0;">
+      <span style="color:var(--ies-gray-600);">${label}</span>
+      <span style="font-weight:700;white-space:nowrap;">${Math.round(Number(val) || 0)} · ×${wPct(k)}%</span>
+    </div>`;
+  const starred = Number(d.bidCoverage && d.bidCoverage.starred) || 0;
+  return `
+    <div style="font-size:13px;font-weight:800;margin-bottom:6px;">How this grade is computed</div>
+    <div class="u-cap u-faint" style="margin-bottom:6px;">Each component normalized 0–100, then weighted:</div>
+    ${row('Gross margin', c.marginScore, 'margin')}
+    ${row('EBITDA', c.ebitdaScore, 'ebitda')}
+    ${row('Payback', c.paybackScore, 'payback')}
+    ${row('NPV', c.npvScore, 'npv')}
+    <div style="border-top:1px solid var(--ies-gray-200);margin-top:8px;padding-top:8px;font-size:13px;font-weight:700;">
+      Score ${Number(d.scoreNum) || 0} → ${escapeHtml(String(d.score))} · A≥${Number(th.A) || 90} B≥${Number(th.B) || 75} C≥${Number(th.C) || 60} D≥${Number(th.D) || 45}
+    </div>
+    <div style="font-size:13px;color:var(--ies-gray-500);margin-top:6px;">Scored from the deal's ★ scenarios${starred > 0 ? '' : ' (no ★ yet — using all attached scenarios)'}</div>
+  `;
+}
+
+/** P2pre F2 (2026-07-23) — Sites-tab coverage banner text. Names the actual
+ *  gap sites (active, no ★) instead of engine vocab ("non-dropped"), and says
+ *  what each gap site is falling back to: its manual sq ft estimate, "no ★
+ *  scenario yet" (scenarios exist, none starred), or "no scenarios yet".
+ *  Returns '' when coverage is complete. Site names escapeHtml'd. */
+function _rollupGapBanner(sites) {
+  const active = (Array.isArray(sites) ? sites : []).filter(s => s.status !== 'dropped');
+  const gaps = active.filter(s => s.inBidModelId == null);
+  if (!active.length || !gaps.length) return '';
+  const starred = active.length - gaps.length;
+  const parts = gaps.map(s => {
+    const name = escapeHtml(s.name || 'Unnamed site');
+    const est = Number(s.sqftEstimate) || 0;
+    if (est > 0) return `${name} is using its ${est.toLocaleString()} sq ft estimate`;
+    return Number(s.modelCount) > 0 ? `${name} has no ★ scenario yet` : `${name} has no scenarios yet`;
+  });
+  return `${starred} of ${active.length} site${active.length === 1 ? '' : 's'} ${starred === 1 ? 'has' : 'have'} a ★ scenario. `
+    + `${parts.join(', ')} — deal totals carry an <i>&nbsp;est&nbsp;</i> badge until every active site has a starred design (or is removed from the bid).`;
 }
 
 /**
@@ -2445,11 +2718,12 @@ function renderDealSites() {
   }
 
   const unassigned = (d.models || []).filter(m => !m.site_id);
-  const cov = d.bidCoverage || { starred: 0, active: sites.filter(s => s.status !== 'dropped').length };
-  const gap = cov.active - cov.starred;
-  const warn = sites.length > 0 && gap > 0 ? `
+  // P2pre F2 (2026-07-23): banner names the gap sites + their fallback basis
+  // instead of the old engine-vocab count line ("non-dropped").
+  const gapText = _rollupGapBanner(sites);
+  const warn = gapText ? `
     <div style="display:flex;align-items:center;gap:8px;background:#fef3c7;border:1px solid #fde68a;color:#92400e;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;margin-bottom:12px;">
-      ⚠ Roll-up covers ${cov.starred} of ${cov.active} sites — deal totals carry an <i>&nbsp;est&nbsp;</i> badge until every non-dropped site has a ★ scenario.
+      ⚠ ${gapText}
     </div>` : '';
 
   const cards = sites.map(s => {
@@ -2461,7 +2735,7 @@ function renderDealSites() {
     const starEst = starModel && _starRevenueSource(d, s) === 'estimate' ? _estPill(_HEUR_STAR_TIP) : '';
     const starLine = starModel && starRev > 0
       ? `★ $${(starRev / 1e6).toFixed(1)}M · ${(((starRev - starCost) / starRev) * 100).toFixed(1)}%${starEst}`
-      : `<span class="u-faint">${s.status === 'dropped' ? '— dropped' : group.length ? 'no ★ yet' : '— excluded from roll-up'}</span>`;
+      : `<span class="u-faint">${s.status === 'dropped' ? '— dropped' : group.length ? 'no ★ yet' : '— excluded from revenue roll-up (no ★ scenario)'}</span>`;
     return `
     <div class="hub-card" style="padding:14px 16px;display:flex;flex-direction:column;gap:9px;${group.length === 0 ? 'border-style:dashed;' : ''}">
       <div style="display:flex;align-items:center;gap:8px;">
@@ -2512,7 +2786,7 @@ function renderDealSites() {
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;">${cards}</div>`}
     ${unassignedBlock}
     <div style="margin-top:12px;font-size:12px;color:var(--ies-gray-400);">
-      Total: ${sites.reduce((t, s) => t + (s.sqft || 0), 0).toLocaleString()} sq ft across ${sites.length} site${sites.length === 1 ? '' : 's'} ·
+      Total: ${sites.reduce((t, s) => t + (s.sqft || 0), 0).toLocaleString()} sq ft across ${sites.length} site${sites.length === 1 ? '' : 's'}${sites.some(s => (s.sqft || 0) > 0 && _sqftIsEst(s)) ? ' (includes estimates)' : ''} ·
       deal roll-up = Σ of each site's ★ scenario
     </div>
   `;

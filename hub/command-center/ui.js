@@ -7,12 +7,12 @@
  * @module hub/command-center/ui
  */
 
-import * as api from './api.js?v=20260722-s4e';
+import * as api from './api.js?v=20260723-s5a';
 import { escapeHtml, safeHttpUrl } from '../../shared/escape.js?v=20260702-sec2';
 // C2 (2026-07-22): DOS_STAGES is the SINGLE canonical stage definition
 // (names + colors) — the snapshot's stage bar derives from it instead of
 // carrying its own duplicate arrays.
-import { DOS_STAGES } from '../../tools/deal-manager/calc.js?v=20260722-s2b';
+import { DOS_STAGES } from '../../tools/deal-manager/calc.js?v=20260723-s5a';
 
 /** @type {HTMLElement|null} */
 let rootEl = null;
@@ -316,17 +316,26 @@ function renderPipelineSnapshot(p) {
 function renderWinLossCard(wl) {
   if (!wl) return '';
 
+  // P2-a (2026-07-23): the submit side of the loop is now visible. When bids
+  // have been submitted (deal_bid_snapshots rows) but no outcomes exist yet,
+  // the card counts them instead of claiming nothing has happened.
+  const bids = Number(wl.bidsSubmitted) || 0;
+
   const header = `
     <div style="display:flex;align-items:center;justify-content:space-between;">
       <div class="u-13 u-bold">Win / Loss Calibration</div>
-      <span style="font-size:11px;color:var(--ies-gray-400);font-weight:600;">${wl.total} outcome${wl.total === 1 ? '' : 's'}</span>
+      <span style="font-size:11px;color:var(--ies-gray-400);font-weight:600;">${!wl.total && bids > 0
+        ? `${bids} bid${bids === 1 ? '' : 's'} submitted · ${wl.total} outcome${wl.total === 1 ? '' : 's'} recorded`
+        : `${wl.total} outcome${wl.total === 1 ? '' : 's'}`}</span>
     </div>`;
 
   if (!wl.total) {
     return `
     <div class="hub-card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
       ${header}
-      <div style="font-size:13px;color:var(--ies-gray-500);line-height:1.5;">No outcomes recorded yet — close a deal Won/Lost to start the calibration loop.</div>
+      <div style="font-size:13px;color:var(--ies-gray-500);line-height:1.5;">${bids > 0
+        ? `${bids} bid${bids === 1 ? '' : 's'} submitted — awaiting outcomes. Close a deal Won/Lost to complete the loop.`
+        : 'No outcomes recorded yet — close a deal Won/Lost to start the calibration loop.'}</div>
     </div>`;
   }
 

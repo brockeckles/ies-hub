@@ -8,6 +8,14 @@
  * @module tools/deal-manager/calc
  */
 
+// P2-a (2026-07-23): ONE revenue formula — the bid snapshot prices ★ models
+// exactly like the Σ★ roll-up does (engine-stamped revenue wins; markup
+// heuristic otherwise). Importing beats re-implementing: any drift between
+// the live roll-up and the frozen bid of record would poison calibration.
+// hub/deal-management/calc.js is pure + import-free, so no cycle (it's the
+// hub API that imports THIS module, not the other way around).
+import { modelRevenueEst } from '../../hub/deal-management/calc.js?v=20260722-s3d';
+
 // ============================================================
 // CONSTANTS
 // ============================================================
@@ -1000,6 +1008,157 @@ export function runScenario(params) {
     }
   );
   return { ok: true, version: ENGINE_VERSION, result, errors: [] };
+}
+
+// ============================================================
+// P2-a (2026-07-23): BID-OF-RECORD SNAPSHOT PAYLOAD
+// ============================================================
+// "Mark as submitted" stamps an IMMUTABLE deal_bid_snapshots row. This is
+// the ONE pure builder for that row's fields + payload jsonb. Deterministic
+// given inputs — timestamps (submitted_at/submitted_by) come from DB
+// defaults, never Date.now(). No I/O, no DOM.
+
+/** Payload schema version — bump on any breaking payload-shape change. */
+export const BID_SNAPSHOT_SCHEMA_VERSION = 1;
+
+const _snapNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+const _snapR2 = (n) => (Number.isFinite(n) ? Math.round(n * 100) / 100 : null);
+const _snapR1 = (n) => (Number.isFinite(n) ? Math.round(n * 10) / 10 : null);
+
+/**
+ * Build the bid-of-record snapshot for a deal at submit time.
+ *
+ * Param shapes match what the Package tab already holds (see ui.js
+ * _bidManifestFor / listRealDeals' deal shape):
+ *
+ * @param {{
+ *   deal?:     {id?:string, name?:string, client?:string, revenue?:number,
+ *               margin?:number, score?:string, scoreNum?:number|null,
+ *               sites?:Array<object>, models?:Array<object>}|null,
+ *   manifest?: ReturnType<import('../../hub/deal-management/calc.js?v=20260722-s3d').computeBidManifest>|null,
+ *   rollup?:   ReturnType<import('../../hub/deal-management/calc.js?v=20260722-s3d').computeStarRollup>|null,
+ *   bidMeta?:  {exec_summary?:string, submission_due?:string|null, manual_checks?:object}|null,
+ *   sites?:    Array<{id:string|number, name?:string, status?:string,
+ *               inBidModelId?:string|number|null, sqft?:number}>|null,
+ *   models?:   Array<{id:string|number, name?:string, scenario_label?:string,
+ *               total_annual_revenue?:number|string|null,
+ *               total_annual_cost?:number|string|null,
+ *               target_margin_pct?:number|string|null,
+ *               facility_sqft?:number|string|null}>|null,
+ *   strategy?: {value_prop?:string|null}|null,
+ * }} input — every key optional; sites/models fall back to deal.sites/deal.models
+ * @returns {{manifest_pct:number|null, y1_revenue:number|null, y1_cost:number|null,
+ *           y1_margin_pct:number|null, payload:object}}
+ */
+export function buildBidSnapshotPayload({ deal, manifest, rollup, bidMeta, sites, models, strategy } = {}) {
+  const siteList = Array.isArray(sites) ? sites : (Array.isArray(deal?.sites) ? deal.sites : []);
+  const modelList = Array.isArray(models) ? models : (Array.isArray(deal?.models) ? deal.models : []);
+  const modelById = new Map(modelList.filter(Boolean).map(m => [String(m.id), m]));
+  const fallbackMargin = _snapNum(rollup?.margin) ?? _snapNum(deal?.margin) ?? 0;
+
+  // ── Per-site rows — ALL sites go on record (dropped ones keep status) ──
+  const siteRows = siteList.map((s, i) => {
+    const star = s?.inBidModelId != null ? (modelById.get(String(s.inBidModelId)) || null) : null;
+    const rev = star ? modelRevenueEst(star, fallbackMargin) : null;
+    const cost = star ? (_snapNum(star.total_annual_cost) ?? 0) : null;
+    const margin = rev != null && rev > 0 ? _snapR1(((rev - cost) / rev) * 100) : null;
+    return {
+      site_id: s?.id ?? null,
+      name: (typeof s?.name === 'string' && s.name.trim()) ? s.name.trim() : `Site ${i + 1}`,
+      status: s?.status || 'proposed',
+      star_model_id: s?.inBidModelId ?? null,
+      star_model_name: star ? (star.name || null) : null,
+      star_scenario_label: star ? (star.scenario_label || null) : null,
+      y1_revenue: _snapR2(rev),
+      y1_cost: _snapR2(cost),
+      y1_margin_pct: margin,
+      sqft: _snapNum(s?.sqft) ?? _snapNum(star?.facility_sqft) ?? 0,
+      // Same precedence as computeStarRollup / computeBidManifest: an
+      // engine-stamped total_annual_revenue > 0 is CM-authoritative.
+      revenue_source: star ? (Number(star.total_annual_revenue) > 0 ? 'cm-engine' : 'estimate') : null,
+    };
+  });
+
+  // ── Σ★ totals — same basis as computeStarRollup (every ★'d site whose
+  //    model resolves, regardless of site status). Legacy heuristic totals
+  //    pass through only when no ★ pair resolves.
+  const starModels = siteList
+    .filter(s => s?.inBidModelId != null)
+    .map(s => modelById.get(String(s.inBidModelId)))
+    .filter(Boolean);
+  let y1Revenue = null, y1Cost = null, y1MarginPct = null;
+  if (starModels.length) {
+    let rev = 0, cost = 0;
+    for (const m of starModels) {
+      rev += modelRevenueEst(m, fallbackMargin);
+      cost += _snapNum(m.total_annual_cost) ?? 0;
+    }
+    y1Revenue = _snapR2(rev);
+    y1Cost = _snapR2(cost);
+    y1MarginPct = rev > 0 ? _snapR1(((rev - cost) / rev) * 100) : null;
+  } else {
+    y1Revenue = _snapR2(_snapNum(rollup?.revenue) ?? _snapNum(deal?.revenue));
+    y1MarginPct = _snapR1(_snapNum(rollup?.margin) ?? _snapNum(deal?.margin));
+    y1Cost = (y1Revenue != null && y1MarginPct != null)
+      ? _snapR2(y1Revenue * (1 - y1MarginPct / 100)) : null;
+  }
+
+  const grade = (typeof deal?.score === 'string' && /^[A-F]$/.test(deal.score)) ? deal.score : null;
+  const scoreNum = _snapNum(deal?.scoreNum);
+  const coverage = rollup?.bidCoverage || deal?.bidCoverage || {
+    starred: siteList.filter(s => s?.inBidModelId != null).length,
+    active: siteList.filter(s => s?.status !== 'dropped').length,
+  };
+  const checks = (bidMeta?.manual_checks && typeof bidMeta.manual_checks === 'object')
+    ? bidMeta.manual_checks : {};
+  const manifestItems = Array.isArray(manifest?.items)
+    ? manifest.items.map(it => ({
+        key: it.key, label: it.label, group: it.group,
+        status: it.status, required: !!it.required, detail: it.detail,
+      }))
+    : [];
+
+  const payload = {
+    schema_version: BID_SNAPSHOT_SCHEMA_VERSION,
+    deal: {
+      id: deal?.id ?? null,
+      name: deal?.name ?? null,
+      client: deal?.client ?? null,
+    },
+    manifest: {
+      pct: _snapNum(manifest?.pct) ?? 0,
+      required_done: _snapNum(manifest?.requiredDone) ?? 0,
+      required_total: _snapNum(manifest?.requiredTotal) ?? 0,
+      due_date: manifest?.dueDate ?? bidMeta?.submission_due ?? null,
+      items: manifestItems,
+    },
+    sites: siteRows,
+    totals: {
+      y1_revenue: y1Revenue,
+      y1_cost: y1Cost,
+      y1_margin_pct: y1MarginPct,
+      rollup_from_stars: !!(rollup?.rollupFromStars ?? deal?.rollupFromStars),
+      rollup_is_estimate: !!(rollup?.rollupIsEstimate ?? deal?.rollupIsEstimate),
+      any_heuristic_star: !!(rollup?.anyHeuristicStar ?? deal?.anyHeuristicStar
+        ?? siteRows.some(r => r.revenue_source === 'estimate')),
+      bid_coverage: { starred: _snapNum(coverage.starred) ?? 0, active: _snapNum(coverage.active) ?? 0 },
+      grade,
+      score: scoreNum,
+    },
+    exec_summary: typeof bidMeta?.exec_summary === 'string' ? bidMeta.exec_summary : '',
+    manual_checks: checks,
+    strategy: strategy
+      ? { value_prop: typeof strategy.value_prop === 'string' ? strategy.value_prop : null }
+      : null,
+  };
+
+  return {
+    manifest_pct: _snapNum(manifest?.pct) ?? 0,
+    y1_revenue: y1Revenue,
+    y1_cost: y1Cost,
+    y1_margin_pct: y1MarginPct,
+    payload,
+  };
 }
 
 // ============================================================

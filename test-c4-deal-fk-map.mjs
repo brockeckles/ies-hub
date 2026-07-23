@@ -43,6 +43,8 @@ const EXPECTED = {
   deal_dos_status:      'deal_id',
   deal_bid_meta:        'deal_id',
   deal_outcomes:        'deal_id',
+  // P2-a (2026-07-23): new append-only bid-of-record table, canonical spelling.
+  deal_bid_snapshots:   'deal_id',
 };
 
 t('DEAL_FK covers the audited floor with exact spellings', () => {
@@ -128,6 +130,11 @@ const EVIDENCE = {
   deal_outcomes: {
     file: './hub/deal-management/api.js',
     re: /from\('deal_outcomes'\)[\s\S]{0,300}?\.eq\('deal_id'/,
+  },
+  deal_bid_snapshots: {
+    file: './hub/deal-management/api.js',
+    // listBidSnapshots / latestBidSnapshot filter the snapshot table by deal_id.
+    re: /from\('deal_bid_snapshots'\)[\s\S]{0,300}?\.eq\('deal_id'/,
   },
 };
 

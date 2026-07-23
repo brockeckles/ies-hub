@@ -78,6 +78,13 @@ export const DEAL_FK = Object.freeze({
   deal_dos_status:      'deal_id',
   deal_bid_meta:        'deal_id',
   deal_outcomes:        'deal_id',
+  // P2-a (2026-07-23): bid-of-record snapshots — NEW table, canonical
+  // spelling per the 2026-07-22 ruling. Evidence: migration
+  // 20260723120000_p2a_deal_bid_snapshots.sql (deal_id uuid NOT NULL
+  // REFERENCES public.deal_deals(id) ON DELETE CASCADE) + readers/writers in
+  // hub/deal-management/api.js (submitBid / listBidSnapshots /
+  // latestBidSnapshot all key on deal_id).
+  deal_bid_snapshots:   'deal_id',
 });
 
 /** The three legal spellings, for validation. */

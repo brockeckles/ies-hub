@@ -14,7 +14,7 @@ import { computeStarRollup } from './calc.js?v=20260722-s3d';
 // S2 (2026-07-22, Brock ruling: wire the score): deal health grade from the
 // same MSA engine the Financials tab runs, ★-preferred basis, per-★-model
 // CM escalation knobs.
-import { computeDealFinancials, computeDealScore, siteEscalationFromRow } from '../../tools/deal-manager/calc.js?v=20260722-s2b';
+import { computeDealFinancials, computeDealScore, siteEscalationFromRow } from '../../tools/deal-manager/calc.js?v=20260723-s5a';
 
 /**
  * Fetch the 6 canonical DOS stages.
@@ -207,12 +207,16 @@ export async function listRealDeals() {
           escalation: siteEscalationFromRow({ heuristic_overrides: m.heuristic_overrides, project_data: { financial: m.financial } }),
         }))
         .filter(s => s.annualCost > 0 || s.annualRevenue > 0);
-      let score = '—', scoreNum = null;
+      let score = '—', scoreNum = null, scoreDetail = null;
       if (scoreBasis.length) {
         const fin = computeDealFinancials(scoreBasis, Number(d.contract_term_years) || 5);
         const sc = computeDealScore(fin);
         score = sc.grade;
         scoreNum = sc.score;
+        // P2pre F1 (2026-07-23): carry the full breakdown so the detail
+        // header's grade ⓘ popover can explain the letter (components are
+        // 0-100 normalized; weights/thresholds echo the calc's config).
+        scoreDetail = { components: sc.components, weights: sc.weights, thresholds: sc.thresholds };
       }
       // 2026-04-29 (R6): deal_deals.current_stage_id is the stages.id (PK),
       // but the UI groups deals by stage_number (1..6). Map via stagesById.
@@ -240,6 +244,7 @@ export async function listRealDeals() {
         daysInStage: 0,
         score,
         scoreNum,
+        scoreDetail,
         startDate: d.created_at ? d.created_at.slice(0, 10) : null,
         targetClose: d.target_go_live || null,
         contractTermYears: Number(d.contract_term_years) || 5,
@@ -462,6 +467,26 @@ export async function deleteArtifact(id) {
  */
 export async function recordDealOutcome(dealId, p) {
   if (!dealId || !p?.outcome) throw new Error('recordDealOutcome: dealId + outcome required');
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  // P2-a (2026-07-23): bid-of-record prefill. Explicit caller values ALWAYS
+  // win; the latest immutable snapshot fills ONLY the missing bid_y1_*
+  // fields — so calibration compares actuals against the bid as submitted,
+  // not a reconstruction. bid_snapshot_id links the outcome to that frozen
+  // row whenever one exists (fail-soft: no snapshot → nulls, exactly the
+  // pre-P2a behavior).
+  let bidRev = num(p.bid_y1_revenue);
+  let bidCost = num(p.bid_y1_cost);
+  let bidMargin = num(p.bid_y1_margin_pct);
+  let bidSnapshotId = p.bid_snapshot_id || null;
+  if (bidRev === null || bidCost === null || bidMargin === null || !bidSnapshotId) {
+    const snap = await latestBidSnapshot(dealId);
+    if (snap) {
+      if (bidRev === null) bidRev = num(snap.y1_revenue);
+      if (bidCost === null) bidCost = num(snap.y1_cost);
+      if (bidMargin === null) bidMargin = num(snap.y1_margin_pct);
+      if (!bidSnapshotId) bidSnapshotId = snap.id || null;
+    }
+  }
   const row = await db.insert('deal_outcomes', {
     deal_id: dealId,
     outcome: p.outcome,
@@ -469,9 +494,10 @@ export async function recordDealOutcome(dealId, p) {
     reason_detail: p.reason_detail || null,
     competitor_won_to: p.competitor_won_to || null,
     go_live_date: p.go_live_date || null,
-    bid_y1_revenue: Number.isFinite(Number(p.bid_y1_revenue)) ? Number(p.bid_y1_revenue) : null,
-    bid_y1_cost: Number.isFinite(Number(p.bid_y1_cost)) ? Number(p.bid_y1_cost) : null,
-    bid_y1_margin_pct: Number.isFinite(Number(p.bid_y1_margin_pct)) ? Number(p.bid_y1_margin_pct) : null,
+    bid_y1_revenue: bidRev,
+    bid_y1_cost: bidCost,
+    bid_y1_margin_pct: bidMargin,
+    bid_snapshot_id: bidSnapshotId,
     notes: p.notes || null,
   });
   recordAudit({ table: 'deal_outcomes', id: row?.id, action: 'insert', fields: { op: 'record_outcome', deal_id: dealId, outcome: p.outcome } });
@@ -831,6 +857,93 @@ export async function saveBidMeta(dealId, payload = {}) {
   return data;
 }
 
+// ============================================================
+// P2-a — Bid-of-record snapshots (2026-07-23)
+// ============================================================
+// "Mark as submitted" stamps ONE append-only deal_bid_snapshots row — the
+// immutable bid of record. Fields + payload come from the pure engine
+// (tools/deal-manager/calc.js buildBidSnapshotPayload); submitted_at /
+// submitted_by are stamped by DB defaults. The table has no UPDATE/DELETE
+// policies AND an append-only trigger, so these rows never change —
+// recordDealOutcome prefills bid_y1_* from the latest one to close the
+// bid-vs-outcome calibration loop.
+// ============================================================
+
+const _SNAPSHOT_COLS = 'id, deal_id, submitted_at, submitted_by, manifest_pct, y1_revenue, y1_cost, y1_margin_pct, payload, notes';
+
+/**
+ * Mark the deal's bid as submitted: insert an immutable snapshot row.
+ *
+ * @param {string} dealId
+ * @param {{ manifest_pct?:number|null, y1_revenue?:number|null,
+ *           y1_cost?:number|null, y1_margin_pct?:number|null,
+ *           payload:Object, notes?:string|null }} snapshotFields
+ *        — the buildBidSnapshotPayload output (+ optional notes)
+ * @returns {Promise<Object>} the inserted row
+ */
+export async function submitBid(dealId, snapshotFields = {}) {
+  if (!dealId) throw new Error('submitBid: dealId required');
+  const f = snapshotFields || {};
+  if (!f.payload || typeof f.payload !== 'object') {
+    throw new Error('submitBid: snapshot payload required (buildBidSnapshotPayload output)');
+  }
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  const row = await db.insert('deal_bid_snapshots', {
+    deal_id: dealId,
+    manifest_pct: num(f.manifest_pct),
+    y1_revenue: num(f.y1_revenue),
+    y1_cost: num(f.y1_cost),
+    y1_margin_pct: num(f.y1_margin_pct),
+    payload: f.payload,
+    notes: f.notes || null,
+  });
+  recordAudit({ table: 'deal_bid_snapshots', id: row?.id, action: 'insert',
+    fields: { op: 'mark_submitted', deal_id: dealId, manifest_pct: num(f.manifest_pct) } });
+  return row;
+}
+
+/**
+ * All snapshots for a deal, newest first. Fail-soft [] — a missing table /
+ * RLS denial must never break the Package tab.
+ * @param {string} dealId
+ * @returns {Promise<Array<Object>>}
+ */
+export async function listBidSnapshots(dealId) {
+  if (!dealId) return [];
+  try {
+    const { data, error } = await db.from('deal_bid_snapshots')
+      .select(_SNAPSHOT_COLS)
+      .eq('deal_id', dealId)
+      .order('submitted_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.warn('[deal-mgmt] listBidSnapshots failed', err);
+    return [];
+  }
+}
+
+/**
+ * Latest snapshot for a deal — the current bid of record. Fail-soft null.
+ * @param {string} dealId
+ * @returns {Promise<Object|null>}
+ */
+export async function latestBidSnapshot(dealId) {
+  if (!dealId) return null;
+  try {
+    const { data, error } = await db.from('deal_bid_snapshots')
+      .select(_SNAPSHOT_COLS)
+      .eq('deal_id', dealId)
+      .order('submitted_at', { ascending: false })
+      .limit(1);
+    if (error) throw error;
+    return (data && data[0]) || null;
+  } catch (err) {
+    console.warn('[deal-mgmt] latestBidSnapshot failed', err);
+    return null;
+  }
+}
+
 export default { fetchStages, fetchActivityTemplates, listRealDeals, createDeal, deleteDeal,
   loadStrategy, saveStrategy,
   listArtifactsByDeal, createArtifact, deleteArtifact,
@@ -838,4 +951,5 @@ export default { fetchStages, fetchActivityTemplates, listRealDeals, createDeal,
   setModelInBid, listDesignScenariosByDeal, recordDealOutcome, getLatestDealOutcome,
   listSitesByDeal, createSite, updateSite, deleteSite, assignModelToSite, assignDesignToSite, listMarkets,
   getBidMeta, saveBidMeta,
+  submitBid, listBidSnapshots, latestBidSnapshot,
 };

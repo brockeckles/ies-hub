@@ -9,7 +9,7 @@
  */
 
 import { db } from '../../shared/supabase.js?v=20260703-hw1';
-import { listRealDeals } from '../deal-management/api.js?v=20260722-s4e';
+import { listRealDeals } from '../deal-management/api.js?v=20260723-s5a';
 
 /**
  * Fetch all dashboard data. Tries Supabase first, falls back to demo data.
@@ -267,22 +267,36 @@ export async function fetchDashboardData() {
  * Fail-soft: any fetch/aggregation failure returns zeros/empties so the card
  * renders its empty state instead of breaking the dashboard.
  *
+ * P2-a (2026-07-23): also carries the SUBMIT side of the loop — a cheap
+ * deal_bid_snapshots fetch (deal_id, submitted_at only; fail-soft []) so the
+ * card can say "N bids submitted — awaiting outcomes" before any deal closes.
+ * bidsSubmitted counts DISTINCT deals (re-submissions are the same bid,
+ * restamped); snapshotCount is the raw row count.
+ *
  * @returns {Promise<{total:number, wins:number, losses:number, withdrawn:number,
- *   winRatePct:number, topLossReasons:{reason:string,n:number}[],
+ *   winRatePct:number, bidsSubmitted:number, snapshotCount:number,
+ *   topLossReasons:{reason:string,n:number}[],
  *   topCompetitors:{competitor:string,n:number}[],
  *   recent:{deal_name:string,outcome:string,reason:string,competitor:string,created_at:string|null}[]}>}
  */
 export async function fetchWinLossCalibration() {
   const empty = {
     total: 0, wins: 0, losses: 0, withdrawn: 0, winRatePct: 0,
+    bidsSubmitted: 0, snapshotCount: 0,
     topLossReasons: [], topCompetitors: [], recent: [],
   };
   try {
-    const [rows, deals] = await Promise.all([
+    const [rows, deals, snaps] = await Promise.all([
       db.fetchAll('deal_outcomes').catch(() => []),
       db.fetchAll('deal_deals', 'id,deal_name').catch(() => []),
+      db.fetchAll('deal_bid_snapshots', 'deal_id,submitted_at').catch(() => []),
     ]);
-    if (!Array.isArray(rows) || rows.length === 0) return empty;
+    const snapRows = Array.isArray(snaps) ? snaps : [];
+    const bidsSubmitted = new Set(snapRows.map(s => s.deal_id).filter(Boolean)).size;
+    const snapshotCount = snapRows.length;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return { ...empty, bidsSubmitted, snapshotCount };
+    }
 
     const nameById = new Map((Array.isArray(deals) ? deals : []).map(d => [d.id, d.deal_name || '']));
 
@@ -322,7 +336,8 @@ export async function fetchWinLossCalibration() {
         created_at: r.recorded_at || null,
       }));
 
-    return { total: rows.length, wins, losses, withdrawn, winRatePct, topLossReasons, topCompetitors, recent };
+    return { total: rows.length, wins, losses, withdrawn, winRatePct,
+      bidsSubmitted, snapshotCount, topLossReasons, topCompetitors, recent };
   } catch (err) {
     console.warn('[CC] fetchWinLossCalibration failed, using empty state:', err);
     return empty;
