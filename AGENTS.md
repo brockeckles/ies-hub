@@ -100,6 +100,11 @@ enforce it yourself.
 9. **Grep the schema before writing SQL or payload code.** Real column names
    and CHECK constraints live in `supabase/migrations/`; do not guess them.
 
+10. **Auth touchpoints live only behind the `shared/auth.js` seam.** No file
+    outside it (plus `shared/supabase.js` client config) may call Supabase
+    Auth directly — enforced by `test-auth-seam.mjs`; identity inventory for
+    the GCP swap in [docs/auth-map.md](docs/auth-map.md).
+
 ## Invariants that look like bugs
 
 Do **not** "fix" any of the following. Each is intentional, ruled on by the
