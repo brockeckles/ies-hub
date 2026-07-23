@@ -2,7 +2,9 @@
 
 This document is the orientation map for anyone picking up the IES Hub codebase.
 Skim it before reading code; refer back to it when something doesn't fit your
-mental model.
+mental model. See also [AGENTS.md](AGENTS.md) (workflow rules + invariants for
+coding agents and new contributors) and [docs/gotchas.md](docs/gotchas.md)
+(debugging scar tissue).
 
 ## 1. What the Hub is
 
