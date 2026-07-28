@@ -30,7 +30,7 @@
  * @module tools/cost-model/compute-all
  */
 
-import * as calc from './calc.js?v=20260722-e1';
+import * as calc from './calc.js?v=20260727-s6a';
 import * as monthlyCalc from './calc.monthly.js?v=20260722-e1';
 import * as channelCalc from './calc.channels.js?v=20260429-vol13';
 import * as scenarios from './calc.scenarios.js?v=20260722-e1';

@@ -34,6 +34,17 @@ is never negotiable:
 only layer that touches the DOM. Enforced by convention, not tooling — so
 enforce it yourself.
 
+- **One bucket-cost path per pricing surface.** Every surface that prices
+  pricing buckets — the price-strip tiles, the rate-card table, What-If, the
+  override validator — must derive from `computeAll().pricingSnapshot`, or at
+  minimum pass the resolved `laborOpts` bag into `computeBucketCosts`. Dropping
+  `laborOpts` silently reprices labor by the effective-hours factor
+  `(1 + OT×0.5) × (1 − absence)` (0.902 on house defaults), so two surfaces on
+  the same screen quote different rates. This shipped for three weeks in the
+  Price station and was caught by eye, not by tests
+  (`test-cm-pricing-table-parity.mjs`). Never let a UI file assemble bucket
+  costs as a second source of truth.
+
 ## Non-negotiable workflow rules
 
 1. **Run `npm test` before every push.** That runs `scripts/run-tests.mjs`:

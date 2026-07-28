@@ -172,3 +172,20 @@ Format per entry: the trap → the symptom → the rule.
 - **Corporate email scanners consume one-time links.** Magic links arrive
   pre-clicked and dead. Use OTP codes, not magic links, for anything sent
   to corporate mailboxes.
+
+## Cost model pricing
+
+- **`laborOpts` is load-bearing on every pricing surface.** `computeBucketCosts`
+  prices labor through the engine's line-annual functions; without the
+  `laborOpts` bag it uses raw hours instead of the monthly engine's effective
+  hours. The gap is `(1 + OT×0.5) × (1 − absence)` = 0.902 on house defaults,
+  diluted per bucket by its non-labor share — so it looks like a random 2–8%
+  spread across buckets rather than a clean scalar, which is why it survived
+  review. If two pricing readouts disagree, check the `laborOpts` argument
+  before anything else.
+- **`otPct` / `absencePct` in the opts bag are FRACTIONS, not percents.**
+  Passing `12` for a 12% absence allowance yields a multiplier of `1 − 12 = −11`
+  and negative costs. Pass `0.12`.
+- **Pure tests cannot import UI modules** (layering law), so a UI-side pricing
+  assembly is untestable by construction. That is itself the argument for
+  keeping the assembly in `calc.js` and letting the UI consume it.

@@ -13,7 +13,7 @@ import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=2026070
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import ofpStyles from './operational-flow-styles.js?v=20260714-a2';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
-import * as calc from './calc.js?v=20260722-e1';
+import * as calc from './calc.js?v=20260727-s6a';
 import * as api from './api.js?v=20260722-s4e';
 import * as scenarios from './calc.scenarios.js?v=20260722-e1';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260705-u3d';
@@ -39,7 +39,7 @@ import * as dealContext from '../../shared/deal-context.js?v=20260722-s1a';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260722-s2a';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
-import { computeAll } from './compute-all.js?v=20260722-e1';
+import { computeAll } from './compute-all.js?v=20260727-s6a';
 import * as shellD from './shell-d.js?v=20260722-s5';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
 import * as stationEco from './station-economics.js?v=20260713-m5d';
@@ -111,11 +111,11 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260722-e1';
+} from './operational-flow-render.js?v=20260727-s6a';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260722-e1';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260722-e1';
+import { computeHeaderKpis } from './header-kpis.js?v=20260727-s6a';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260727-s6a';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -7993,7 +7993,31 @@ function renderPricing() {
     annual_amort: (l.one_time_cost || 0) / Math.max(1, contractYears),
   }));
 
-  const bucketCosts = calc.computeBucketCosts({
+  // P1-2 PARITY FIX (2026-07-27): this table used to derive its own bucket
+  // costs here, WITHOUT the laborOpts bag, while the price-strip tiles above it
+  // read computeAll().pricingSnapshot WITH it. Same engine, two labor bases —
+  // the table quoted rates ~8% above the P&L basis on labor-heavy buckets
+  // (effective-hours factor (1 + OT×0.5) × (1 − absence) = 0.902 on house
+  // defaults), diluted per bucket by its non-labor share. It also read the raw
+  // stored target margin instead of the resolved heuristic, so any What-If or
+  // heuristic margin override moved the tiles and not the table.
+  //
+  // One path now: consume the engine snapshot, which is the same object the
+  // tiles read. The local derivation below survives ONLY as a fallback for the
+  // case where computeAll throws — never as a second source of truth.
+  // See test-cm-pricing-table-parity.mjs.
+  let _snapshot = null;
+  let _snapMarginPct = null;
+  try {
+    const _cAll = computeAll(_computeCtx());
+    if (_cAll && _cAll.pricingSnapshot && _cAll.pricingSnapshot.bucketCosts) {
+      _snapshot = _cAll.pricingSnapshot;
+      const _hm = Number(_cAll.calcHeur?.targetMarginPct);
+      if (Number.isFinite(_hm)) _snapMarginPct = _hm;
+    }
+  } catch (_) { /* fall through to the local derivation */ }
+
+  const bucketCosts = _snapshot ? _snapshot.bucketCosts : calc.computeBucketCosts({
     buckets,
     laborLines: model.laborLines || [],
     indirectLaborLines: model.indirectLaborLines || [],
@@ -8009,7 +8033,9 @@ function renderPricing() {
     facilityBucketId: model.financial?.facilityBucketId || null,
   });
 
-  const targetMarginPct = (model.financial?.targetMargin || 0);
+  const targetMarginPct = _snapMarginPct != null
+    ? _snapMarginPct
+    : (model.financial?.targetMargin || 0);
   const marginPct = targetMarginPct / 100;
   // Sum only real bucket costs — exclude meta keys ('_unassigned', '_facilityOrphan', '_facilityTarget')
   const totalCost = Object.entries(bucketCosts).reduce((s, [k, v]) => (typeof v === 'number' && !k.startsWith('_')) ? s + v : s, 0);
@@ -8019,7 +8045,7 @@ function renderPricing() {
 
   // Single source of truth — enriched buckets carry recommendedRate +
   // overrideRate + effective rate, matching what the monthly engine reads.
-  const enriched = calc.enrichBucketsWithDerivedRates({
+  const enriched = _snapshot ? _snapshot.buckets : calc.enrichBucketsWithDerivedRates({
     buckets, bucketCosts, marginPct, volumeLines: model.volumeLines || [], model,
   });
   const impact = calc.computeOverrideImpact(enriched);
@@ -13562,7 +13588,16 @@ function updateValidation() {
     return;
   }
 
-  const warnings = calc.validateModel(model);
+  // P1-2 parity (2026-07-27): hand the validator the same labor basis the
+  // pricing surfaces use, so its achieved-margin warning judges the rates the
+  // user is actually looking at. Best-effort — validation still runs if
+  // computeAll throws.
+  let _valOpts = {};
+  try {
+    const _c = computeAll(_computeCtx());
+    if (_c && _c.laborOpts) _valOpts = { laborOpts: _c.laborOpts };
+  } catch (_) { /* validate on engine defaults */ }
+  const warnings = calc.validateModel(model, _valOpts);
   if (warnings.length === 0) {
     el.innerHTML = '<span style="color: var(--ies-green); font-weight: 600;">No issues found</span>';
     return;

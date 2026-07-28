@@ -3309,6 +3309,10 @@ export function validateModel(model, opts = {}) {
         facilityCost: 0,
         operatingHours: hrsForValidator,
         facilityBucketId: fin.facilityBucketId || null,
+        // P1-2 parity (2026-07-27): same labor basis as computeSummary /
+        // computePricingSnapshot. Without it this validator judged achieved
+        // margin against a bucket cost the pricing surfaces no longer use.
+        laborOpts: opts.laborOpts,
       });
       const enriched = enrichBucketsWithDerivedRates({
         buckets, bucketCosts,
