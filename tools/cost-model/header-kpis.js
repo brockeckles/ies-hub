@@ -51,9 +51,16 @@ export function computeHeaderKpis({
     const market = model?.projectDetails?.market;
     const fr = (refData?.facilityRates || []).find(r => r.market_id === market);
     const ur = (refData?.utilityRates  || []).find(r => r.market_id === market);
+    // S7b (2026-07-28): channel-aggregate orders basis — was starred-line
+    // only, understating multi-channel deals in the header strip (and its
+    // ready-gate) vs Summary/compute-all, which adopted this basis in W2.
+    // Starred line remains the channel-less legacy fallback.
     const outboundStar = (model?.volumeLines || []).find(v => v.isOutboundPrimary);
-    const orders = outboundStar?.volume || 0;
-    const outboundUomLabel = formatUomSingular(outboundStar?.uom);
+    const _chanOrders = channelCalc.getAggregateDerived(model || {}, 'orders');
+    const orders = _chanOrders > 0 ? _chanOrders : (outboundStar?.volume || 0);
+    const outboundUomLabel = _chanOrders > 0
+      ? formatUomSingular('orders')
+      : formatUomSingular(outboundStar?.uom);
     const contractYears = model?.projectDetails?.contractTerm || 5;
     const fin = model?.financial || {};
 

@@ -114,7 +114,7 @@ import {
 } from './operational-flow-render.js?v=20260728-s7a';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260728-s7a';
+import { computeHeaderKpis } from './header-kpis.js?v=20260728-s7b';
 import { computeWhatIfPreview } from './what-if-preview.js?v=20260728-s7a';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
@@ -9687,14 +9687,9 @@ function bindSectionEvents(section, container) {
     setTimeout(() => { try { input.focus(); input.select(); } catch (_) {} }, 0);
   });
 
-  // Star buttons (volumes)
-  container.querySelectorAll('.cm-star-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const idx = parseInt(btn.dataset.idx);
-      model.volumeLines.forEach((l, i) => l.isOutboundPrimary = i === idx);
-      renderSection();
-    });
-  });
+  // S7b (2026-07-28): legacy Volumes star-button binding DELETED — the
+  // channels page replaced that table; no render site emits .cm-star-btn
+  // (grep-verified). WSC-pull seeding still sets isOutboundPrimary directly.
 
   // Phase 4b: per-row labor seasonality editor (monthly OT/absence)
   container.querySelectorAll('[data-cm-action="edit-labor-seasonality"]').forEach(btn => {
@@ -12279,12 +12274,9 @@ async function handleAction(action, idx, btn) {
       loadModelByCmId(targetId);
       return;
     }
-    case 'add-volume':
-      model.volumeLines.push({ name: '', volume: 0, uom: 'each', isOutboundPrimary: false });
-      break;
-    case 'delete-volume':
-      model.volumeLines.splice(idx, 1);
-      break;
+    // S7b (2026-07-28): add-volume / delete-volume cases DELETED — the
+    // legacy Volumes table they served was replaced by the channels page
+    // (Phase 2.3); zero render sites emit these actions (grep-verified).
     // 2026-07-14 — legacy per-line rate diverges from its position: one
     // click adopts the position's wage (full attr re-pull, so employment/
     // markup/burden re-sync too).
@@ -13682,7 +13674,10 @@ function updateValidation() {
 function sectionHasData(key) {
   switch (key) {
     case 'setup': return !!(model.projectDetails?.name);
-    case 'volumes': return model.volumeLines.length > 0;
+    // S7b (2026-07-28): channels are the volumes store — legacy volumeLines
+    // only exists as the channels[0] mirror + labor-picker source rows.
+    case 'volumes': return channelCalc.getOutboundChannels(model).some(c => (Number(c.primary?.value) || 0) > 0)
+      || (model.volumeLines || []).length > 0;
     case 'facility': return (model.facility?.totalSqft || 0) > 0;
     case 'shifts': return true; // defaults always valid
     case 'labor': return model.laborLines.length > 0;
@@ -14525,9 +14520,21 @@ function buildEnrichedPricingBuckets(summary, marginFrac, opHrs, contractYears, 
  */
 
 /**
- * Phase 2.1 dual-write — mirror channels[0] back to legacy fields so unmigrated
- * calc consumers (volumeLines, orderProfile, seasonalityProfile) keep producing
- * correct output until Phase 3 migrates them to read from accessors.
+ * Phase 2.1 dual-write — mirror channels[0] back to legacy fields.
+ *
+ * S7b (2026-07-28) — NARROWED CONTRACT after the Phase-3 read migration:
+ * every calc/render consumer now reads channel accessors first
+ * (seasonality → getBlendedSeasonality; orders → getAggregateDerived;
+ * inbound pallets → getAggregateInbound; header KPIs aligned this commit).
+ * The mirror survives for exactly TWO reasons:
+ *   1. The direct-labor Volume-source picker references volumeLines rows BY
+ *      INDEX (line.volume_source_idx) — the starred row must track the
+ *      primary channel or new selections copy stale volume. FULL retirement
+ *      is blocked on migrating volume_source_idx → channel-key references
+ *      (its own session: save-shape change + picker rework + live walk).
+ *   2. Channel-less legacy saved models still hydrate through these fields.
+ * Do not add new READERS of volumeLines/orderProfile/seasonalityProfile —
+ * that list only shrinks.
  *
  * Only runs when channels[] is populated; otherwise no-op. Idempotent.
  *

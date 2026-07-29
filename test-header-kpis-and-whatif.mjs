@@ -209,6 +209,33 @@ test('higher target margin overlay produces higher revenue', () => {
     `20% margin should produce more revenue than 12% baseline (got ${scenario.totalRev} vs ${baseline.totalRev})`);
 });
 
+// ---- S7b (2026-07-28): channel-aggregate orders basis ----
+
+test('S7b — multi-channel model: header orders ride Σ channels, not the starred line', () => {
+  const model = makeModel();
+  // Starred legacy line says 1M orders; channels say 1.4M + 0.6M = 2.0M.
+  // Pre-S7b the header strip used the starred line (understating the deal
+  // vs Summary/compute-all, which adopted the channel aggregate in W2).
+  model.channels = [
+    { key: 'dtc', name: 'DTC', primary: { value: 1_400_000, uom: 'orders', activity: 'outbound' },
+      conversions: { linesPerOrder: 2, unitsPerLine: 5 }, assumptions: {}, overrides: [] },
+    { key: 'b2b', name: 'B2B', primary: { value: 600_000, uom: 'orders', activity: 'outbound' },
+      conversions: { linesPerOrder: 10, unitsPerLine: 20 }, assumptions: {}, overrides: [] },
+  ];
+  const out = computeHeaderKpis(makeOpts(model));
+  assert(out.ready === true, 'multi-channel model must be ready');
+  const cpu = out.items.find(i => /Cost \/ /.test(i.label));
+  assert(cpu, 'cost-per-unit tile present');
+  // 2M orders vs 1M: the per-order denominators must reflect the aggregate.
+  // computeSummary labor $2M + margin phrasing aside, cost/order at 2M
+  // orders is half the starred-line figure — pin via kpiCtx orders if
+  // exposed, else via the label reflecting the orders uom.
+  assert(out.kpiCtx && out.kpiCtx.projections, 'kpiCtx present');
+  const y1 = out.kpiCtx.projections?.[0];
+  assert(y1 && Math.abs((y1.orders ?? 0) - 2_000_000) < 1,
+    `Y1 orders should be the 2.0M channel aggregate, got ${y1 && y1.orders}`);
+});
+
 // ---- Report ----
 
 console.log();
