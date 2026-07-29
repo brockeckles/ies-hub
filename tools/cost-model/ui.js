@@ -41,6 +41,9 @@ import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
 import { computeAll } from './compute-all.js?v=20260728-s7a';
 import * as shellD from './shell-d.js?v=20260728-s7a';
+// S7c — shared value-provenance grammar (manual/derived/override/linked).
+// Pilot surface: Volumes page. Rules live in the module header.
+import * as prov from '../../shared/provenance.js?v=20260728-s7c';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
 import * as stationEco from './station-economics.js?v=20260713-m5d';
 import * as stationPrice from './station-price.js?v=20260713-m5g';
@@ -4774,12 +4777,12 @@ function renderVolumes() {
       <div class="cm-narrow-form" style="grid-template-columns: 2fr 1fr 1fr;">
         <div class="hub-field">
           <label class="hub-field__label">Annual volume</label>
-          <input class="hub-input" type="number" value="${primary.value || 0}" min="0" step="1000"
+          <input class="hub-input${(isByMix && primary.activity !== 'returns') || (primary.activity === 'returns' && primary.autoDerived !== false) ? ' ' + prov.provInputClass('derived') : ''}" type="number" value="${primary.value || 0}" min="0" step="1000"
                  data-field="channels.${activeIdx}.primary.value" data-type="number" data-field-commit="change"
                  ${isByMix && primary.activity !== 'returns'
-                   ? 'readonly title="Auto-derived from Total volume × this channel\'s mix %. Switch to By volume mode above to edit directly."'
+                   ? 'readonly title="ƒ Derived from Total volume × this channel\'s mix %. Switch to By volume mode above to edit directly."'
                    : (primary.activity === 'returns' && primary.autoDerived !== false)
-                     ? 'readonly title="Auto-derived from Σ outbound channels × returns rate. Click Override below to pin an authoritative value."'
+                     ? 'readonly title="ƒ Derived from Σ outbound channels × returns rate. Click Override below to pin an authoritative value."'
                      : ''
                  } />
         </div>
@@ -4802,15 +4805,17 @@ function renderVolumes() {
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--ies-gray-600);flex-wrap:wrap;">
-        <span class="cm-vol-pill cm-vol-pill--mute">Source: ${sourceBadge}</span>
+        ${(primary.source === 'wsc' || primary.source === 'netopt')
+          ? prov.provPill('linked', sourceBadge, `Pulled from ${sourceBadge} — open the tool to re-derive`)
+          : `<span class="cm-vol-pill cm-vol-pill--mute">Source: ${sourceBadge}</span>`}
         ${primary.activity === 'returns' && primary.autoDerived !== false
-          ? `<span class="cm-vol-pill cm-vol-pill--info">auto-derived from outbound × returns%</span>
+          ? `${prov.provPill('derived', 'ƒ Σ outbound × returns%', 'System-derived — recomputes whenever outbound volumes or returns rates change')}
              <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="vol-reverse-override" data-channel-key="${ch.key}"
                      title="Pin an authoritative value, breaking the auto-derive link">Override →</button>`
           : (primary.activity === 'returns' && primary.autoDerived === false)
-            ? `<span class="cm-vol-pill cm-vol-pill--warn" style="text-transform:none;">overridden — manual entry</span>
+            ? `${prov.provPill('override', 'pinned — manual entry', 'This value no longer tracks Σ outbound × returns%')}
                <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="vol-reverse-reset" data-channel-key="${ch.key}"
-                       title="Resume auto-derive from Σ outbound × returns%">↺ Reset to auto-derived</button>`
+                       title="Resume auto-derive from Σ outbound × returns%">↺ derived</button>`
             : ''}
       </div>
     </div>
@@ -4882,18 +4887,25 @@ function renderVolumes() {
         </thead>
         <tbody>
           ${derivedRows.map(r => {
+            // S7c — provenance grammar (shared/provenance.js). Derived rows
+            // stay calm (ƒ glyph only); overridden rows go amber and show
+            // BOTH numbers — pinned prominent, current-derived as the ghost,
+            // so upstream drift stays visible without any extra machinery.
             const isEditing = _volEditingOverrideKey === r.key;
             const inputDefault = r.d.isOverride ? r.d.value : r.d.derivedValue;
+            const isOv = r.d.isOverride && !isEditing;
             return `
-            <tr${r.d.isOverride && !isEditing ? ' class="cm-vol-derived-row--override"' : ''}${isEditing ? ' class="cm-vol-derived-row--editing"' : ''}>
+            <tr${isOv ? ' class="cm-vol-derived-row--override hub-prov-row--override"' : ''}${isEditing ? ' class="cm-vol-derived-row--editing"' : ''}>
               <td>
-                <div>${r.label}${r.d.isOverride && !isEditing ? ` <span class="cm-vol-pill cm-vol-pill--warn" title="Pinned value vs derived">override ${r.d.variancePct >= 0 ? '+' : ''}${r.d.variancePct.toFixed(1)}%</span>` : ''}</div>
-                <div class="cm-vol-formula">${r.formula}${r.d.isOverride && !isEditing ? ` &middot; pinned ${fmtFull(r.d.value)}` : ''}</div>
+                <div>${isOv ? '' : prov.fxGlyph(`Derived: ${r.formula}. Override to pin your own value.`)}${r.label}${isOv ? ` ${prov.provPill('override', `override ${r.d.variancePct >= 0 ? '+' : ''}${r.d.variancePct.toFixed(1)}%`, 'Pinned value vs what the system currently derives — this delta moves if upstream inputs change')}` : ''}</div>
+                <div class="cm-vol-formula">${r.formula}</div>
               </td>
               <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">
                 ${isEditing
                   ? `<input class="hub-input cm-vol-override-input" type="number" value="${Math.round(inputDefault)}" min="0" step="1" data-vol-override-key="${r.key}" autofocus title="Pin authoritative value (derived: ${fmtFull(r.d.derivedValue)})" style="width:130px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;" />`
-                  : fmtFull(r.d.value)
+                  : isOv
+                    ? `<span class="hub-val--override">${fmtFull(r.d.value)}</span>${prov.ghostDerived(fmtFull(r.d.derivedValue))}`
+                    : fmtFull(r.d.value)
                 }
               </td>
               <td class="u-right">
@@ -4904,7 +4916,7 @@ function renderVolumes() {
                   </div>` : r.d.isOverride ? `
                   <div style="display:inline-flex;gap:4px;">
                     <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="vol-override-start" data-key="${r.key}" title="Edit pinned value">Edit</button>
-                    <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="vol-override-remove" data-key="${r.key}" title="Remove override and revert to derived">×</button>
+                    <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="vol-override-remove" data-key="${r.key}" title="Remove the pin and return to the derived value (${fmtFull(r.d.derivedValue)})">↺ derived</button>
                   </div>` : `
                   <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="vol-override-start" data-key="${r.key}" title="Pin an authoritative value (e.g. when RFP figure differs from derived)">+ override</button>
                 `}
@@ -4917,10 +4929,13 @@ function renderVolumes() {
 
     <!-- Source / integration footer -->
     <div class="cm-vol-source-bar">
-      <span><span class="cm-vol-pill cm-vol-pill--mute">Source</span> ${sourceBadge}</span>
+      <span>${(primary.source === 'wsc' || primary.source === 'netopt')
+        ? prov.provPill('linked', sourceBadge, `Primary volume pulled from ${sourceBadge}`)
+        : `<span class="cm-vol-pill cm-vol-pill--mute">Source</span> ${sourceBadge}`}</span>
       <span class="u-muted">Pull from <button type="button" data-action="cm-launch-wsc" class="cm-link-arrow">WSC →</button> or <button type="button" data-action="cm-launch-netopt" class="cm-link-arrow">NetOpt →</button></span>
     </div>
 
+    ${prov.provenanceStyles()}
     <style>
       .cm-vol-nucleus { border: 1.5px solid var(--ies-blue); }
       .cm-vol-pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
