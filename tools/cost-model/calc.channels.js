@@ -533,6 +533,56 @@ export function normalizeMixAllocations(allocations) {
   return scaled;
 }
 
+// ────────────────────────────────────────────────────────────────
+// S7d (2026-07-28) — Labor volume sourcing: channel-key references.
+//
+// Replaces the retired volume_source_idx (index into legacy volumeLines).
+// A labor line's volume source is { channelKey, figure } where channelKey
+// is a channel's stable key or '__all__' (Σ outbound channels) and figure
+// is one of VOLUME_SOURCE_FIGURES. Semantics per Brock's S7d ruling:
+// COPY-AT-SELECTION — resolving is done by the UI at pick/re-sync time,
+// the engine only ever sees the copied line.volume. Drift between the
+// copied value and the current resolution is surfaced visually (provenance
+// grammar) with explicit re-sync; nothing reprices silently, so approved
+// scenarios stay reproducible.
+// ────────────────────────────────────────────────────────────────
+
+/** Figures a labor line can source. 'units' rides getChannelPrimaryIn;
+ *  the rest ride the override-aware derived accessors. */
+export const VOLUME_SOURCE_FIGURES = ['units', 'cases', 'pallets', 'orders', 'lines', 'returns', 'inbound'];
+
+/** Sentinel channelKey meaning "Σ across outbound channels". */
+export const VOLUME_SOURCE_ALL = '__all__';
+
+/**
+ * Resolve a labor-line volume source to its CURRENT value.
+ *
+ * @param {Object} model
+ * @param {{channelKey: string, figure: string}|null|undefined} source
+ * @returns {{value: number, label: string}|null} null when the source is
+ *   missing/malformed or references a channel that no longer exists —
+ *   callers treat null as "custom/manual" and keep the line's saved volume.
+ */
+export function resolveVolumeSource(model, source) {
+  if (!source || typeof source !== 'object') return null;
+  const figure = source.figure;
+  if (!VOLUME_SOURCE_FIGURES.includes(figure)) return null;
+
+  if (source.channelKey === VOLUME_SOURCE_ALL) {
+    const value = figure === 'units'
+      ? getAnnualVolume(model, 'units')
+      : getAggregateDerived(model, figure);
+    return { value, label: `All channels · annual ${figure}` };
+  }
+
+  const ch = getChannel(model, source.channelKey);
+  if (!ch) return null;
+  const value = figure === 'units'
+    ? getChannelPrimaryIn(ch, 'units')
+    : getChannelDerived(model, ch, figure).value;
+  return { value, label: `${ch.name || ch.key} · annual ${figure}` };
+}
+
 /**
  * Phase 5.1 — Channels-aware provenance lineage.
  *

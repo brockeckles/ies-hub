@@ -26,7 +26,7 @@
 
 // S7 (2026-07-28): calc.channels is import-free (leaf), so this edge keeps
 // the calc → monthly → scenarios chain one-directional and cycle-free.
-import { getBlendedSeasonality } from './calc.channels.js?v=20260728-s7a';
+import { getBlendedSeasonality } from './calc.channels.js?v=20260728-s7d';
 
 // Engine-parity 2026-06-11: single wage-load (burden) default. MIRRORS
 // calc.js DEFAULT_WAGE_LOAD_PCT — kept literal here to avoid the

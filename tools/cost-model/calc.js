@@ -14,15 +14,15 @@
  * @module tools/cost-model/calc
  */
 
-import * as monthly from './calc.monthly.js?v=20260728-s7a';
-import { permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260728-s7a';
-import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260728-s7a';
+import * as monthly from './calc.monthly.js?v=20260728-s7d';
+import { permMixFracForLine, tempMarkupFracForLine, blendLoadedRate } from './calc.scenarios.js?v=20260728-s7d';
+import { deriveFunctionForLine as _deriveFunctionForLine } from './shift-planner.js?v=20260728-s7d';
 import {
   getAnnualVolume as _getAnnualVolume,
   getAggregateDerived as _getAggregateDerived,
   getAggregateInbound as _getAggregateInbound,
   getOutboundChannels as _getOutboundChannels,
-} from './calc.channels.js?v=20260728-s7a';
+} from './calc.channels.js?v=20260728-s7d';
 
 // ============================================================
 // MARGIN / GROSS-UP

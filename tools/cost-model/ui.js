@@ -13,17 +13,17 @@ import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=2026070
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import ofpStyles from './operational-flow-styles.js?v=20260714-a2';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
-import * as calc from './calc.js?v=20260728-s7a';
-import * as api from './api.js?v=20260728-s7a';
-import * as scenarios from './calc.scenarios.js?v=20260728-s7a';
+import * as calc from './calc.js?v=20260728-s7d';
+import * as api from './api.js?v=20260728-s7d';
+import * as scenarios from './calc.scenarios.js?v=20260728-s7d';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260705-u3d';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260705-u3d';
 import { renderImplementation } from './render-implementation.js?v=20260705-u3d';
-import * as monthlyCalc from './calc.monthly.js?v=20260728-s7a';
-import * as channelCalc from './calc.channels.js?v=20260728-s7a';
+import * as monthlyCalc from './calc.monthly.js?v=20260728-s7d';
+import * as channelCalc from './calc.channels.js?v=20260728-s7d';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
-import * as shiftPlannerCalc from './shift-planner.js?v=20260728-s7a';
-import * as shiftPlannerUi from './shift-planner-ui.js?v=20260728-s7a';
+import * as shiftPlannerCalc from './shift-planner.js?v=20260728-s7d';
+import * as shiftPlannerUi from './shift-planner-ui.js?v=20260728-s7d';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260705-u1a';
@@ -39,7 +39,7 @@ import * as dealContext from '../../shared/deal-context.js?v=20260722-s1a';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260722-s2a';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
-import { computeAll } from './compute-all.js?v=20260728-s7a';
+import { computeAll } from './compute-all.js?v=20260728-s7d';
 import * as shellD from './shell-d.js?v=20260728-s7a';
 // S7c — shared value-provenance grammar (manual/derived/override/linked).
 // Pilot surface: Volumes page. Rules live in the module header.
@@ -114,11 +114,11 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260728-s7a';
+} from './operational-flow-render.js?v=20260728-s7d';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260728-s7b';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260728-s7a';
+import { computeHeaderKpis } from './header-kpis.js?v=20260728-s7d';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260728-s7d';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -1309,6 +1309,7 @@ async function loadModelByCmId(id) {
     api.backfillEquipmentLineTypes(model);
     api.backfillChannelsFromLegacy(model);
     api.normalizeChannelActivities(model); // S7 — inbound/transfer → outbound (engine semantics unchanged)
+    api.migrateLaborVolumeSources(model);  // S7d — volume_source_idx → channel-key refs (numbers untouched)
     resetDirty();
     userHasInteracted = setUserHasInteracted(false);
     activeSection = 'setup';
@@ -3102,7 +3103,7 @@ function getCellProvenance(rowKey, year) {
       value: cost,
       valueFormat: 'currency',
       inputs: [
-        { label: 'Annual volume', value: _fmtNum(l.volume || 0), source: 'Volumes tab' + (l.volume_source_idx != null && l.volume_source_idx !== '' ? ' (linked line)' : ' (custom)') },
+        { label: 'Annual volume', value: _fmtNum(l.volume || 0), source: l.volume_source ? 'Channel figure (copied — see drift chip on the Labor row)' : 'Custom (manual entry)' },
         { label: 'Base UPH', value: _fmtNum(l.base_uph || 0), source: tpl ? `MOST standard: ${tpl.code || tpl.name}` : 'Manual estimate — no MOST standard' },
         { label: 'Effective UPH', value: effUph.toLocaleString(undefined, { maximumFractionDigits: 1 }), source: 'base_uph × direct utilization × productivity (Labor Build-Up §2.1)' },
         { label: 'Annual hours', value: _fmtNum(l.annual_hours || 0), source: 'volume ÷ base UPH' },
@@ -5823,30 +5824,72 @@ const mostElTmu  = (e) => Number(e?.tmu_value || e?.tmu || 0);
  */
 /**
  * Render the Volume cell for a direct-labor row.
- * Dropdown of volumeLines (by name) + a "Custom" option for ad-hoc values.
- * Selecting a line syncs line.volume to the chosen volumeLines[].volume
- * and stores the source index in line.volume_source_idx.
+ *
+ * S7d (2026-07-28) — sources are CHANNEL-KEY references
+ * ({ channelKey, figure }, resolved via channelCalc.resolveVolumeSource),
+ * replacing the retired volumeLines-index shape. Semantics per Brock's S7d
+ * ruling: COPY-AT-SELECTION — picking (or re-syncing) copies the resolved
+ * figure into line.volume; nothing reprices silently afterward. When the
+ * source figure drifts from the copied value (>0.5%), an amber drift chip
+ * (provenance grammar) surfaces it with a one-click ↺ re-sync.
  */
 function renderLaborVolumeCell(line, idx) {
-  const volumes = model.volumeLines || [];
-  const sourceIdx = (line.volume_source_idx !== undefined && line.volume_source_idx !== null && line.volume_source_idx !== '')
-    ? String(line.volume_source_idx)
-    : 'custom';
-  const options = volumes.map((v, vi) => {
-    const label = `${v.name || ('Vol #' + (vi + 1))} (${(v.volume || 0).toLocaleString()} ${v.uom || ''})`;
-    return `<option value="${vi}"${String(vi) === sourceIdx ? ' selected' : ''}>${label}</option>`;
-  }).join('');
+  const channels = channelCalc.getChannels(model);
+  const src = (line.volume_source && typeof line.volume_source === 'object') ? line.volume_source : null;
+  const resolved = src ? channelCalc.resolveVolumeSource(model, src) : null;
+  const selValue = (src && resolved) ? `${src.channelKey}|${src.figure}` : 'custom';
+  const figures = channelCalc.VOLUME_SOURCE_FIGURES;
+  const optGroup = (key, name) => `<optgroup label="${escapeAttr(name)}">` + figures.map(f => {
+    const v = `${key}|${f}`;
+    return `<option value="${escapeAttr(v)}"${v === selValue ? ' selected' : ''}>${escapeHtml(name)} · ${f}</option>`;
+  }).join('') + '</optgroup>';
+  const isMulti = channels.filter(c => !c.hidden).length > 1;
+  const groups = [optGroup(channelCalc.VOLUME_SOURCE_ALL, isMulti ? 'All channels' : 'Channel total')]
+    .concat(isMulti ? channels.filter(c => !c.hidden).map(c => optGroup(c.key, c.name || c.key)) : [])
+    .join('');
+
+  let sourcedHtml = '';
+  if (selValue !== 'custom' && resolved) {
+    const cur = Number(line.volume) || 0;
+    const target = Math.round(resolved.value) || 0;
+    const driftFrac = target > 0 ? Math.abs(cur - target) / target : (cur > 0 ? 1 : 0);
+    sourcedHtml = `<div style="font-size:10px;color:var(--ies-gray-400);padding-left:4px;">${prov.fxGlyph(`Copied from ${resolved.label}. Copy-at-selection: this line holds ${cur.toLocaleString()} until you re-sync.`)}= ${cur.toLocaleString()}</div>`;
+    if (driftFrac > 0.005) {
+      sourcedHtml += `<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+        ${prov.provPill('override', `source now ${target.toLocaleString()}`, `${resolved.label} moved since this line copied ${cur.toLocaleString()}. Nothing changes until you re-sync.`)}
+        <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="labor-volume-resync" data-idx="${idx}" title="Copy the current ${escapeAttr(resolved.label)} (${target.toLocaleString()}) into this line and recompute hours">↺ re-sync</button>
+      </div>`;
+    }
+  }
+
   return `
     <div style="display:flex;flex-direction:column;gap:2px;">
-      <select style="width:170px;font-size:11px;" data-labor-volume-source data-idx="${idx}">
-        ${options}
-        <option value="custom"${sourceIdx === 'custom' ? ' selected' : ''}>— Custom —</option>
+      <select style="width:170px;font-size:11px;" data-labor-volume-source data-idx="${idx}" title="Source this line's volume from a channel figure (copies the value; drift shows here) or enter a custom number">
+        ${groups}
+        <option value="custom"${selValue === 'custom' ? ' selected' : ''}>— Custom —</option>
       </select>
-      ${sourceIdx === 'custom'
+      ${selValue === 'custom'
         ? `<input type="number" value="${line.volume || 0}" style="width:170px;font-size:11px;" data-array="laborLines" data-idx="${idx}" data-field="volume" data-type="number" placeholder="Volume" />`
-        : `<div style="font-size:10px;color:var(--ies-gray-400);padding-left:4px;">= ${(line.volume || 0).toLocaleString()}</div>`}
+        : sourcedHtml}
     </div>
   `;
+}
+
+/**
+ * S7d — count sourced labor lines whose copied volume has drifted >0.5%
+ * from their source figure's current value. Drives the re-sync-all button.
+ */
+function countDriftedLaborVolumes() {
+  return (model.laborLines || []).reduce((n, line) => {
+    const src = (line && line.volume_source && typeof line.volume_source === 'object') ? line.volume_source : null;
+    if (!src) return n;
+    const resolved = channelCalc.resolveVolumeSource(model, src);
+    if (!resolved) return n;
+    const cur = Number(line.volume) || 0;
+    const target = Math.round(resolved.value) || 0;
+    const driftFrac = target > 0 ? Math.abs(cur - target) / target : (cur > 0 ? 1 : 0);
+    return driftFrac > 0.005 ? n + 1 : n;
+  }, 0);
 }
 
 /**
@@ -6656,6 +6699,13 @@ function renderLaborMasterPane(lines, opHrs, lc) {
     <div class="hub-master-detail__master">
       <div class="hub-master-detail__master-header">
         <span>Lines (${lines.length})</span>
+        ${(() => {
+          // S7d — bulk drift closure for channel-sourced volumes.
+          const drifted = countDriftedLaborVolumes();
+          return drifted > 0
+            ? `<button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="labor-volume-resync-all" title="${drifted} sourced line${drifted === 1 ? '' : 's'} drifted from their channel figures — copy the current values in and recompute hours">↺ re-sync ${drifted}</button>`
+            : '';
+        })()}
         <button class="hub-btn hub-btn-secondary hub-btn-sm" data-action="add-labor" title="Add a new direct labor line">+ Add</button>
       </div>
       <div class="hub-master-detail__master-body">
@@ -9374,12 +9424,10 @@ function bindSectionEvents(section, container) {
         }
         // Dot-path assignment
         setNestedValue(model, field, val);
-        // Phase 2.3: dual-write — only mirror channel-0 mutations back to
-        // legacy fields. channels[1+] are dormant for calc until Phase 3
-        // consumer migration; their data persists but doesn't hit legacy.
-        if (field.startsWith('channels.0.')) {
-          syncLegacyFromChannel(model);
-        }
+        // S7d (2026-07-28): the Phase 2.1 channels→legacy dual-write is
+        // RETIRED. Every consumer reads channel accessors; legacy
+        // volumeLines/orderProfile/seasonalityProfile persist inert on old
+        // saves and hydrate through backfillChannelsFromLegacy only.
         // M1 (2026-04-21): recompute derived targetMargin whenever a component
         // margin field changes, so every downstream consumer (calc engine,
         // Pricing Schedule, validateModel, What-If) sees the updated total.
@@ -9642,8 +9690,9 @@ function bindSectionEvents(section, container) {
     });
   }
 
-  // Direct-labor Volume source picker — dropdown of volumeLines + "Custom".
-  // Selecting a volume line syncs the labor line's volume to that line's value.
+  // Direct-labor Volume source picker — S7d: channel-key sources.
+  // Copy-at-selection (Brock ruling): picking copies the resolved figure
+  // into line.volume; later channel edits surface as drift chips only.
   container.querySelectorAll('[data-labor-volume-source]').forEach(sel => {
     sel.addEventListener('change', () => {
       const idx = parseInt(sel.dataset.idx);
@@ -9651,13 +9700,15 @@ function bindSectionEvents(section, container) {
       if (!line) return;
       const val = sel.value;
       if (val === 'custom' || val === '') {
-        line.volume_source_idx = null; // user wants manual value
+        line.volume_source = null; // user wants manual value
       } else {
-        const srcIdx = parseInt(val);
-        const src = (model.volumeLines || [])[srcIdx];
-        if (src) {
-          line.volume_source_idx = srcIdx;
-          line.volume = src.volume || 0;
+        if (!Array.isArray(model.channels) || model.channels.length === 0) api.backfillChannelsFromLegacy(model);
+        const [channelKey, figure] = val.split('|');
+        const src = { channelKey, figure };
+        const resolved = channelCalc.resolveVolumeSource(model, src);
+        if (resolved) {
+          line.volume_source = src;
+          line.volume = Math.round(resolved.value) || 0;
           recomputeLineHours(line);
         }
       }
@@ -9735,8 +9786,7 @@ function bindSectionEvents(section, container) {
       const channelUom = c.primary.uom || 'units';
       c.primary.value = Math.round(channelCalc.convertUom(tgtUomCount, totalUom, channelUom, c.conversions) || 0);
     });
-    // Mirror primary channel back to legacy fields per dual-write contract.
-    syncLegacyFromChannel(model);
+    // S7d: dual-write retired — channels are the sole volumes store.
   }
 
   container.querySelectorAll('[data-cm-action="vol-mix-mode"]').forEach(btn => {
@@ -9844,7 +9894,6 @@ function bindSectionEvents(section, container) {
       if (!Array.isArray(model.channels) || model.channels.length === 0) api.backfillChannelsFromLegacy(model);
       const activeIdx = Math.max(0, model.channels.findIndex(c => c.key === _activeChannelKey));
       model.channels[activeIdx].seasonality = { preset: name, monthly_shares: preset.slice() };
-      if (activeIdx === 0) syncLegacyFromChannel(model);
       _markCmDirty();
       renderSection();
       showToast(`Applied "${SEASONALITY_PRESET_LABELS[name]}" profile`, 'success');
@@ -9867,9 +9916,7 @@ function bindSectionEvents(section, container) {
       // Hand-edit flips preset to 'custom' so future preset changes don't
       // silently clobber the user's tweaks.
       chSeason.preset = 'custom';
-      // Only sync to legacy when editing channel 0 (the canonical primary).
-      // Phase 3 will retire this branch when calc consumers read accessors.
-      if (chIdx === 0) syncLegacyFromChannel(model);
+      // S7d: dual-write retired — no legacy mirror.
       _markCmDirty();
       // Debounced re-render so sum/peak summary updates without losing focus
       clearTimeout(_seasonalityRerenderTimer);
@@ -12186,7 +12233,7 @@ function _launchToTool(target) {
       // state. Invisible to the cache-bust guard because the './tools/...'
       // path resolves module-relative in the scanner but page-relative at
       // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260728-s7a',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260728-s7d',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {
@@ -12292,6 +12339,32 @@ async function handleAction(action, idx, btn) {
     // S7b (2026-07-28): add-volume / delete-volume cases DELETED — the
     // legacy Volumes table they served was replaced by the channels page
     // (Phase 2.3); zero render sites emit these actions (grep-verified).
+    // S7d — channel-key volume sourcing: explicit re-sync per the
+    // copy-at-selection ruling. Drift only closes when the user clicks.
+    case 'labor-volume-resync': {
+      const line = (model.laborLines || [])[idx];
+      const resolved = line && line.volume_source ? channelCalc.resolveVolumeSource(model, line.volume_source) : null;
+      if (!line || !resolved) return;
+      line.volume = Math.round(resolved.value) || 0;
+      recomputeLineHours(line);
+      showToast(`Volume re-synced from ${resolved.label}`, 'success');
+      break;
+    }
+    case 'labor-volume-resync-all': {
+      let resynced = 0;
+      (model.laborLines || []).forEach(line => {
+        const resolved = line && line.volume_source ? channelCalc.resolveVolumeSource(model, line.volume_source) : null;
+        if (!resolved) return;
+        const target = Math.round(resolved.value) || 0;
+        if (target !== (Number(line.volume) || 0)) {
+          line.volume = target;
+          recomputeLineHours(line);
+          resynced++;
+        }
+      });
+      showToast(resynced ? `${resynced} labor volume${resynced === 1 ? '' : 's'} re-synced from channel figures` : 'All sourced volumes already current', resynced ? 'success' : 'info');
+      break;
+    }
     // 2026-07-14 — legacy per-line rate diverges from its position: one
     // click adopts the position's wage (full attr re-pull, so employment/
     // markup/burden re-sync too).
@@ -12435,7 +12508,6 @@ async function handleAction(action, idx, btn) {
       if (!Array.isArray(model.channels) || model.channels.length === 0) api.backfillChannelsFromLegacy(model);
       const rsIdx = Math.max(0, model.channels.findIndex(c => c.key === _activeChannelKey));
       model.channels[rsIdx].seasonality = { preset: 'flat', monthly_shares: new Array(12).fill(1/12) };
-      if (rsIdx === 0) syncLegacyFromChannel(model);
       _markCmDirty();
       renderSection();
       showToast('Seasonality reset to flat (1/12 per month)', 'info');
@@ -13592,7 +13664,13 @@ function handleExportExcel() {
     };
 
     // --- Sheets: Volumes / Labor (Direct, Indirect) / Equipment / Overhead / VAS / Startup / Pricing / Shifts ---
-    appendObjectSheet('Volumes',       model.volumeLines || [],        ['name','volume','uom','isOutboundPrimary']);
+    // S7d — export the CHANNELS (the volumes store), not legacy volumeLines.
+    appendObjectSheet('Volumes',       channelCalc.buildChannelLineage(model).map(r => ({
+      channel: r.name, activity: r.primary.activity, volume: r.primary.value, uom: r.primary.uom,
+      annual_units: Math.round(r.primaryAsUnits), annual_orders: Math.round(r.primaryAsOrders),
+      annual_pallets: Math.round(r.primaryAsPallets),
+      pct_of_outbound: Math.round((r.contributionPctOfOutboundUnits || 0) * 10) / 10,
+    })), ['channel','activity','volume','uom','annual_units','annual_orders','annual_pallets','pct_of_outbound']);
     appendObjectSheet('Labor-Direct',  model.laborLines || [],         ['activity_name','process_area','volume','base_uph','hourly_rate','burden_pct']);
     appendObjectSheet('Labor-Indirect',model.indirectLaborLines || [], ['role','hourly_rate','ratio_to_direct','burden_pct']);
     appendObjectSheet('Equipment',     model.equipmentLines || [],     ['equipment_name','category','quantity','acquisition_type','monthly_lease','acquisition_cost','annual_maintenance','amortization_years']);
@@ -13809,21 +13887,20 @@ function handleNetOptPush(payload) {
 
   const demand = Number(payload.totalAnnualDemand) || 0;
   if (demand > 0) {
-    model.volumeLines = Array.isArray(model.volumeLines) ? model.volumeLines : [];
-    const idx = model.volumeLines.findIndex(v => v.isOutboundPrimary);
-    const seeded = {
-      name: 'Outbound Orders (from NetOpt)',
-      volume: demand,
-      uom: 'order',
-      isOutboundPrimary: true,
-      source: 'netopt', // CM-VOL-3
+    // S7d (2026-07-28): write the PRIMARY CHANNEL, not legacy volumeLines.
+    // The old seed wrote the legacy starred row — a field the engine
+    // stopped reading in Phase 3, so on channel-backed models a NetOpt
+    // push silently updated nothing. Channels are the volumes store.
+    if (!Array.isArray(model.channels) || model.channels.length === 0) api.backfillChannelsFromLegacy(model);
+    const pc = model.channels[0];
+    pc.name = pc.archetypeId ? pc.name : (pc.name || 'Outbound');
+    pc.primary = {
+      ...(pc.primary || {}),
+      value: demand,
+      uom: 'orders',
+      activity: 'outbound',
+      source: 'netopt', // CM-VOL-3 — renders as the ⇄ linked pill
     };
-    if (idx >= 0) {
-      model.volumeLines[idx] = { ...model.volumeLines[idx], ...seeded };
-    } else {
-      model.volumeLines = model.volumeLines.map(v => ({ ...v, isOutboundPrimary: false }));
-      model.volumeLines.unshift(seeded);
-    }
   }
 
   model.netoptBenchmark = {
@@ -14534,57 +14611,15 @@ function buildEnrichedPricingBuckets(summary, marginFrac, opHrs, contractYears, 
  * (I-01 warning banner).
  */
 
-/**
- * Phase 2.1 dual-write — mirror channels[0] back to legacy fields.
- *
- * S7b (2026-07-28) — NARROWED CONTRACT after the Phase-3 read migration:
- * every calc/render consumer now reads channel accessors first
- * (seasonality → getBlendedSeasonality; orders → getAggregateDerived;
- * inbound pallets → getAggregateInbound; header KPIs aligned this commit).
- * The mirror survives for exactly TWO reasons:
- *   1. The direct-labor Volume-source picker references volumeLines rows BY
- *      INDEX (line.volume_source_idx) — the starred row must track the
- *      primary channel or new selections copy stale volume. FULL retirement
- *      is blocked on migrating volume_source_idx → channel-key references
- *      (its own session: save-shape change + picker rework + live walk).
- *   2. Channel-less legacy saved models still hydrate through these fields.
- * Do not add new READERS of volumeLines/orderProfile/seasonalityProfile —
- * that list only shrinks.
- *
- * Only runs when channels[] is populated; otherwise no-op. Idempotent.
- *
- * @param {Object} model
- */
-function syncLegacyFromChannel(model) {
-  if (!model || !Array.isArray(model.channels) || !model.channels[0]) return;
-  const ch = model.channels[0];
-  const conv = ch.conversions || {};
-  const primary = ch.primary || {};
-
-  if (!Array.isArray(model.volumeLines)) model.volumeLines = [];
-  let starred = model.volumeLines.find(v => v && v.isOutboundPrimary);
-  if (!starred) {
-    starred = { name: 'Outbound', volume: 0, uom: 'units', isOutboundPrimary: true };
-    model.volumeLines.push(starred);
-  }
-  starred.volume = Number(primary.value) || 0;
-  starred.uom = primary.uom || 'units';
-
-  if (!model.orderProfile) model.orderProfile = {};
-  if (Number.isFinite(Number(conv.linesPerOrder))) model.orderProfile.linesPerOrder = Number(conv.linesPerOrder);
-  if (Number.isFinite(Number(conv.unitsPerLine)))  model.orderProfile.unitsPerLine  = Number(conv.unitsPerLine);
-  if (Number.isFinite(Number(conv.weightPerUnit))) model.orderProfile.avgOrderWeight = Number(conv.weightPerUnit);
-  if (conv.weightUnit) model.orderProfile.weightUnit = conv.weightUnit;
-
-  if (ch.seasonality) {
-    model.seasonalityProfile = {
-      preset: ch.seasonality.preset || 'flat',
-      monthly_shares: Array.isArray(ch.seasonality.monthly_shares) && ch.seasonality.monthly_shares.length === 12
-        ? ch.seasonality.monthly_shares.slice()
-        : new Array(12).fill(1/12),
-    };
-  }
-}
+// S7d (2026-07-28): syncLegacyFromChannel DELETED — the Phase 2.1
+// channels→legacy dual-write is fully retired. Blocker cleared this commit:
+// the labor Volume-source picker now stores channel-key references
+// (line.volume_source, resolved via channelCalc.resolveVolumeSource), and
+// saved volume_source_idx values convert at hydrate
+// (api.migrateLaborVolumeSources — numbers untouched, drift surfaces
+// visually). Legacy volumeLines/orderProfile/seasonalityProfile persist
+// inert on old saves; backfillChannelsFromLegacy remains the one-way
+// legacy→channels hydration path. NEVER reintroduce a mirror.
 
 function setNestedValue(obj, path, value) {
   const parts = path.split('.');

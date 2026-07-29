@@ -23,7 +23,7 @@ globalThis.window = globalThis.window || { location: { hostname: '', pathname: '
 // NOTE: the ?v= pin MUST match ui.js/header-kpis.js's import URL — ES modules
 // key on the full URL, and a bare import would create a SECOND compute-all
 // instance with its own memo (feedback_test_cache_bust_match class).
-const { computeAll, invalidateComputeAll } = await import('./tools/cost-model/compute-all.js?v=20260728-s7a');
+const { computeAll, invalidateComputeAll } = await import('./tools/cost-model/compute-all.js?v=20260728-s7d');
 const { computeHeaderKpis } = await import('./tools/cost-model/header-kpis.js');
 const scenarios = await import('./tools/cost-model/calc.scenarios.js');
 

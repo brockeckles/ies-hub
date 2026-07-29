@@ -30,10 +30,10 @@
  * @module tools/cost-model/compute-all
  */
 
-import * as calc from './calc.js?v=20260728-s7a';
-import * as monthlyCalc from './calc.monthly.js?v=20260728-s7a';
-import * as channelCalc from './calc.channels.js?v=20260728-s7a';
-import * as scenarios from './calc.scenarios.js?v=20260728-s7a';
+import * as calc from './calc.js?v=20260728-s7d';
+import * as monthlyCalc from './calc.monthly.js?v=20260728-s7d';
+import * as channelCalc from './calc.channels.js?v=20260728-s7d';
+import * as scenarios from './calc.scenarios.js?v=20260728-s7d';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
 

@@ -19,10 +19,13 @@ import {
   getBlendedSeasonality,
   checkMixAllocations,
   normalizeMixAllocations,
+  resolveVolumeSource,
+  VOLUME_SOURCE_FIGURES,
+  VOLUME_SOURCE_ALL,
   _internals,
 } from './tools/cost-model/calc.channels.js';
 
-import { backfillChannelsFromLegacy, normalizeChannelActivities } from './tools/cost-model/api.js';
+import { backfillChannelsFromLegacy, normalizeChannelActivities, migrateLaborVolumeSources } from './tools/cost-model/api.js';
 
 let passed = 0, failed = 0;
 const failures = [];
@@ -817,6 +820,63 @@ test('S7 — normalizeChannelActivities: inbound/transfer coerce to outbound; re
   eq(m.channels[3].primary.activity, 'returns');
   eq(normalizeChannelActivities({}), 0, 'no channels → 0');
   eq(normalizeChannelActivities(null), 0, 'null model → 0');
+});
+
+// ── S7d (2026-07-28) — labor volume sourcing: channel-key refs ───
+
+test('S7d — resolveVolumeSource: per-channel figures ride the override-aware accessors', () => {
+  const m = multiChannelModel;
+  // dtc primary 18M units
+  approx(resolveVolumeSource(m, { channelKey: 'dtc', figure: 'units' }).value, 18000000, 1);
+  // dtc orders = 18M ÷ (2 lines/order × 3 units/line) = 3M
+  approx(resolveVolumeSource(m, { channelKey: 'dtc', figure: 'orders' }).value, 3000000, 1);
+  // dtc returns = 18M × 18% = 3.24M
+  approx(resolveVolumeSource(m, { channelKey: 'dtc', figure: 'returns' }).value, 3240000, 1);
+  const lbl = resolveVolumeSource(m, { channelKey: 'dtc', figure: 'orders' }).label;
+  if (!/DTC e-com/.test(lbl)) throw new Error(`label should carry channel name: ${lbl}`);
+});
+
+test('S7d — resolveVolumeSource: __all__ aggregates across outbound channels only', () => {
+  const m = multiChannelModel;
+  // 18M + 7M units (reverse excluded)
+  approx(resolveVolumeSource(m, { channelKey: VOLUME_SOURCE_ALL, figure: 'units' }).value, 25000000, 1);
+  // orders: dtc 3M + b2b 7M÷(80×200)=437.5 → 3000437.5
+  approx(resolveVolumeSource(m, { channelKey: VOLUME_SOURCE_ALL, figure: 'orders' }).value, 3000437.5, 1);
+});
+
+test('S7d — resolveVolumeSource: malformed/missing → null (caller treats as custom)', () => {
+  const m = multiChannelModel;
+  eq(resolveVolumeSource(m, null), null);
+  eq(resolveVolumeSource(m, { channelKey: 'ghost', figure: 'units' }), null, 'deleted channel');
+  eq(resolveVolumeSource(m, { channelKey: 'dtc', figure: 'bogus' }), null, 'unknown figure');
+  eq(VOLUME_SOURCE_FIGURES.includes('units') && VOLUME_SOURCE_FIGURES.includes('inbound'), true);
+});
+
+test('S7d — migrateLaborVolumeSources: starred idx → primary-channel figure by uom; numbers untouched', () => {
+  const m = {
+    channels: [{ key: 'outbound', name: 'Outbound', primary: { value: 2000000, uom: 'orders', activity: 'outbound' }, conversions: {}, assumptions: {}, overrides: [] }],
+    volumeLines: [
+      { name: 'Outbound Orders', volume: 1000000, uom: 'order', isOutboundPrimary: true },
+      { name: 'Receiving (Pallets)', volume: 15000, uom: 'pallets', isOutboundPrimary: false },
+    ],
+    laborLines: [
+      { activity_name: 'Pick', volume: 1000000, volume_source_idx: 0 },   // starred
+      { activity_name: 'Putaway', volume: 15000, volume_source_idx: 1 },  // named row — no channel equivalent
+      { activity_name: 'VAS', volume: 555, volume_source_idx: null },     // already custom
+      { activity_name: 'Pack', volume: 9 },                               // never sourced
+    ],
+  };
+  const n = migrateLaborVolumeSources(m);
+  eq(n, 1, 'one line converts to a channel source');
+  const [pick, putaway, vas, pack] = m.laborLines;
+  eq(pick.volume_source.channelKey, 'outbound');
+  eq(pick.volume_source.figure, 'orders', 'starred uom "order" → figure orders');
+  eq(pick.volume, 1000000, 'MIGRATION NEVER CHANGES NUMBERS — drift (2M now) surfaces visually instead');
+  eq(putaway.volume_source, null, 'non-starred row → custom');
+  eq(putaway.volume, 15000, 'volume preserved');
+  eq('volume_source_idx' in pick || 'volume_source_idx' in putaway || 'volume_source_idx' in vas, false, 'idx removed everywhere');
+  eq(pack.volume_source === undefined, true, 'untouched line stays untouched');
+  eq(migrateLaborVolumeSources(m), 0, 'idempotent');
 });
 
 console.log(`\n\n${passed} passed, ${failed} failed`);

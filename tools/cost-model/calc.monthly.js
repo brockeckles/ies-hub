@@ -24,7 +24,7 @@
  * @module tools/cost-model/calc.monthly
  */
 
-import { monthlyEffectiveHours, permMixFracForLine, tempMarkupFracForLine, blendLoadedRate, dealTempMarkupPct } from './calc.scenarios.js?v=20260728-s7a';
+import { monthlyEffectiveHours, permMixFracForLine, tempMarkupFracForLine, blendLoadedRate, dealTempMarkupPct } from './calc.scenarios.js?v=20260728-s7d';
 
 // ============================================================
 // LABOR BUILD-UP HELPERS (inlined from calc.js to avoid cache-bust

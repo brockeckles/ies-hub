@@ -13,7 +13,7 @@ import {
   getAggregateDerived,
   getAggregateInbound,
   getChannelDerived,
-} from './calc.channels.js?v=20260728-s7a';
+} from './calc.channels.js?v=20260728-s7d';
 
 // ============================================================
 // COST MODEL PROJECTS (CRUD)
@@ -516,6 +516,67 @@ export function normalizeChannelActivities(model) {
     }
   }
   return coerced;
+}
+
+/**
+ * S7d (2026-07-28) — migrate labor volume sourcing off volumeLines indexes.
+ *
+ * Old shape: line.volume_source_idx = index into legacy model.volumeLines
+ * (the last consumer that kept the channels→legacy dual-write alive).
+ * New shape: line.volume_source = { channelKey, figure } resolved through
+ * calc.channels.resolveVolumeSource.
+ *
+ * Mapping — NUMBERS NEVER CHANGE HERE (line.volume is untouched; only the
+ * reference shape converts; drift then surfaces visually per the S7d
+ * copy-at-selection ruling):
+ *   - idx → the STARRED volumeLines row → { channelKey: channels[0].key,
+ *     figure: <starred row's normalized uom> } — the starred row IS the
+ *     primary channel under the retired mirror.
+ *   - idx → any other row (arbitrary named volumes like 'Receiving
+ *     (Pallets)' — no channel equivalent) → custom (volume_source = null).
+ *   - idx out of range / no channels → custom.
+ * volume_source_idx is deleted from the line in all cases.
+ *
+ * Idempotent; lines already carrying volume_source (or nothing) pass through.
+ *
+ * @param {Object} model — mutated in place
+ * @returns {number} count of lines converted to a channel-key source
+ */
+export function migrateLaborVolumeSources(model) {
+  if (!model || !Array.isArray(model.laborLines)) return 0;
+  const volumeLines = Array.isArray(model.volumeLines) ? model.volumeLines : [];
+  const primaryCh = (Array.isArray(model.channels) && model.channels[0]) || null;
+  const normalizeUom = (uom) => {
+    const u = String(uom || '').toLowerCase().trim();
+    if (!u || u === 'each' || u === 'eaches' || u === 'unit' || u === 'units') return 'units';
+    if (u === 'case' || u === 'cases') return 'cases';
+    if (u === 'pallet' || u === 'pallets') return 'pallets';
+    if (u === 'order' || u === 'orders') return 'orders';
+    if (u === 'line' || u === 'lines') return 'lines';
+    return null; // unmappable uom → custom
+  };
+
+  let converted = 0;
+  for (const line of model.laborLines) {
+    if (!line || line.volume_source_idx === undefined || line.volume_source_idx === null || line.volume_source_idx === '') {
+      if (line && 'volume_source_idx' in line) delete line.volume_source_idx;
+      continue;
+    }
+    const idx = Number(line.volume_source_idx);
+    delete line.volume_source_idx;
+    const row = Number.isInteger(idx) ? volumeLines[idx] : null;
+    if (row && row.isOutboundPrimary && primaryCh) {
+      const figure = normalizeUom(row.uom);
+      if (figure) {
+        line.volume_source = { channelKey: primaryCh.key, figure };
+        converted++;
+        continue;
+      }
+    }
+    // Non-starred row / unmappable — drop to custom, volume preserved.
+    line.volume_source = null;
+  }
+  return converted;
 }
 
 /**

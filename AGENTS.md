@@ -177,14 +177,19 @@ patch it.
   coerces stored inbound/transfer on load — they were cosmetic), and By-mix
   allocations are guarded to Σ=100% (`checkMixAllocations` /
   `normalizeMixAllocations` in calc.channels.js).
-- **The channels[0]→legacy dual-write (`syncLegacyFromChannel`) is
-  deliberately still alive (S7b, 2026-07-28)** — narrowed, not deleted.
-  Every calc/render consumer reads channel accessors; the mirror exists
-  only for the labor Volume-source picker (index-based
-  `volume_source_idx` into `volumeLines`) and channel-less legacy saves.
-  Full retirement = migrate `volume_source_idx` to channel-key references
-  first. Never add new readers of
-  `volumeLines`/`orderProfile`/`seasonalityProfile`.
+- **The channels→legacy dual-write is FULLY RETIRED (S7d, 2026-07-28).**
+  `syncLegacyFromChannel` is deleted; channels[] is the sole volumes store.
+  Labor lines source volumes via `line.volume_source = {channelKey, figure}`
+  (resolved through `calc.channels.resolveVolumeSource`; saved
+  `volume_source_idx` converts at hydrate via
+  `api.migrateLaborVolumeSources`, numbers untouched). Sourcing is
+  **copy-at-selection by ruling** — a sourced line holds its copied volume
+  until the user clicks ↺ re-sync (drift shows as an amber chip; approved
+  scenarios stay reproducible). Do NOT make it live-sync, and never
+  reintroduce a legacy mirror or new readers of
+  `volumeLines`/`orderProfile`/`seasonalityProfile` —
+  `backfillChannelsFromLegacy` is the one-way legacy→channels hydration
+  path for old saves.
 - **Hearthwood is the canonical demo/walkthrough deal** (see
   `run_offline_hearthwood.mjs` and many tests). Known quirks in its live
   data (as of 2026-07): the Memphis site is a byte-copy of Columbus's model

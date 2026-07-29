@@ -24,7 +24,7 @@ import {
   getChannelPrimaryIn as _getChannelPrimaryIn,
   getChannelDerived as _getChannelDerived,
   convertUom as _convertUom,
-} from './calc.channels.js?v=20260728-s7a';
+} from './calc.channels.js?v=20260728-s7d';
 
 // The canonical function vocabulary. Keep in sync with the CHECK in the
 // ref_shift_archetype_defaults matrix JSONB schema.
