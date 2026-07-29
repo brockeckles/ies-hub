@@ -16,10 +16,13 @@ import {
   getChannelMix,
   buildChannelLineage,
   convertUom,
+  getBlendedSeasonality,
+  checkMixAllocations,
+  normalizeMixAllocations,
   _internals,
 } from './tools/cost-model/calc.channels.js';
 
-import { backfillChannelsFromLegacy } from './tools/cost-model/api.js';
+import { backfillChannelsFromLegacy, normalizeChannelActivities } from './tools/cost-model/api.js';
 
 let passed = 0, failed = 0;
 const failures = [];
@@ -711,6 +714,109 @@ test('Phase 5.1 — buildChannelLineage derived block carries returns/inbound/pe
   approx(dtc.derived.inbound, 10000000, 1);
   approx(dtc.derived.peakDay, 80000, 1);
   approx(dtc.derived.dailyAvg, 40000, 1);
+});
+
+// ── S7 (2026-07-28) — blended seasonality ────────────────────────
+
+test('S7 — getBlendedSeasonality: single outbound channel is a passthrough', () => {
+  const m = { channels: [JSON.parse(JSON.stringify(dtcChannel))], facility: { opDaysPerYear: 250 } };
+  const s = getBlendedSeasonality(m);
+  eq(s.preset, 'ecom_holiday_peak', 'preset preserved');
+  approx(s.monthly_shares[11], 15, 0.0001); // raw shares, untouched (monthly engine normalizes)
+});
+
+test('S7 — getBlendedSeasonality: multi-channel volume-weighted blend, reverse excluded', () => {
+  const s = getBlendedSeasonality(multiChannelModel);
+  eq(s.preset, 'blended');
+  // dtc 18M @ [5..15], b2b 7M @ flat 100/12. Jan: (5×18 + 8.3333×7)/25 = 5.9333% → 0.059333
+  approx(s.monthly_shares[0], 0.059333, 0.0005);
+  // Dec: (15×18 + 8.3333×7)/25 = 13.1333% → 0.131333
+  approx(s.monthly_shares[11], 0.131333, 0.0005);
+  // Normalized to sum 1; reverse's apparel curve must not leak in (Jan would be higher if it did)
+  approx(s.monthly_shares.reduce((a, b) => a + b, 0), 1, 0.0001);
+});
+
+test('S7 — getBlendedSeasonality: all-zero volumes fall to equal weights', () => {
+  const a = JSON.parse(JSON.stringify(dtcChannel)); a.primary.value = 0;
+  const b = JSON.parse(JSON.stringify(b2bChannel)); b.primary.value = 0;
+  const s = getBlendedSeasonality({ channels: [a, b] });
+  eq(s.preset, 'blended');
+  // Equal-weight Jan: (5 + 8.3333)/2 = 6.6667% → 0.066667 after normalize
+  approx(s.monthly_shares[0], 0.066667, 0.0005);
+});
+
+test('S7 — getBlendedSeasonality: malformed shares contribute flat; no channels → null', () => {
+  const a = JSON.parse(JSON.stringify(dtcChannel));
+  a.seasonality = { preset: 'custom', monthly_shares: [1, 2, 3] }; // wrong length
+  const b = JSON.parse(JSON.stringify(b2bChannel));
+  const s = getBlendedSeasonality({ channels: [a, b] });
+  // a falls to flat 1/12 (fraction scale), b is flat 100/12 (pct scale) —
+  // scale-invariant by normalization: result must be flat.
+  approx(s.monthly_shares[0], 1 / 12, 0.001);
+  approx(s.monthly_shares[6], 1 / 12, 0.001);
+  // Empty channels[] synthesizes a legacy single channel (getChannels
+  // fallback) → flat passthrough, not null. Null only when no OUTBOUND
+  // channel exists (e.g. reverse-only model).
+  const empty = getBlendedSeasonality({ channels: [] });
+  approx(empty.monthly_shares[0], 1 / 12, 0.001);
+  eq(getBlendedSeasonality({ channels: [JSON.parse(JSON.stringify(reverseChannel))] }), null, 'reverse-only → null');
+});
+
+// ── S7 (2026-07-28) — By-mix allocation validation ───────────────
+
+test('S7 — checkMixAllocations: valid at 100 ± 0.5pp, flags drift, ignores dead/returns keys', () => {
+  const m = {
+    channels: [dtcChannel, b2bChannel, reverseChannel],
+    channelMix: { mode: 'byMix', totalVolume: 25000000, totalUom: 'units', allocations: [
+      { channelKey: 'dtc', pct: 72 },
+      { channelKey: 'b2b', pct: 28 },
+      { channelKey: 'reverse', pct: 40 },   // returns channel — must not count
+      { channelKey: 'ghost', pct: 33 },     // deleted channel — must not count
+    ] },
+  };
+  const ok = checkMixAllocations(m);
+  eq(ok.valid, true, '72+28 = 100 (reverse/ghost excluded)');
+  approx(ok.sum, 100, 0.0001);
+
+  m.channelMix.allocations[0].pct = 60;
+  const bad = checkMixAllocations(m);
+  eq(bad.valid, false, '60+28 drifts');
+  approx(bad.driftPp, -12, 0.0001);
+});
+
+test('S7 — normalizeMixAllocations: proportional rescale sums to exactly 100', () => {
+  const out = normalizeMixAllocations([
+    { channelKey: 'a', pct: 45 },
+    { channelKey: 'b', pct: 30 },
+    { channelKey: 'c', pct: 15 },
+  ]); // sums to 90
+  approx(out.reduce((s, a) => s + a.pct, 0), 100, 0.0001);
+  approx(out[0].pct, 50, 0.01);
+  approx(out[1].pct, 33.33, 0.01);
+  approx(out[2].pct, 16.67, 0.01);
+  // All-zero → equal split
+  const eq3 = normalizeMixAllocations([{ channelKey: 'a', pct: 0 }, { channelKey: 'b', pct: 0 }]);
+  approx(eq3[0].pct + eq3[1].pct, 100, 0.0001);
+  approx(eq3[0].pct, 50, 0.01);
+});
+
+// ── S7 (2026-07-28) — Activity trim coercion ─────────────────────
+
+test('S7 — normalizeChannelActivities: inbound/transfer coerce to outbound; returns untouched', () => {
+  const m = { channels: [
+    { key: 'a', primary: { value: 1, uom: 'units', activity: 'inbound' } },
+    { key: 'b', primary: { value: 2, uom: 'units', activity: 'transfer' } },
+    { key: 'c', primary: { value: 3, uom: 'units', activity: 'outbound' } },
+    { key: 'd', primary: { value: 4, uom: 'units', activity: 'returns' } },
+  ] };
+  const n = normalizeChannelActivities(m);
+  eq(n, 2, 'two coerced');
+  eq(m.channels[0].primary.activity, 'outbound');
+  eq(m.channels[1].primary.activity, 'outbound');
+  eq(m.channels[2].primary.activity, 'outbound');
+  eq(m.channels[3].primary.activity, 'returns');
+  eq(normalizeChannelActivities({}), 0, 'no channels → 0');
+  eq(normalizeChannelActivities(null), 0, 'null model → 0');
 });
 
 console.log(`\n\n${passed} passed, ${failed} failed`);

@@ -24,6 +24,10 @@
  * @module tools/cost-model/calc.scenarios
  */
 
+// S7 (2026-07-28): calc.channels is import-free (leaf), so this edge keeps
+// the calc → monthly → scenarios chain one-directional and cycle-free.
+import { getBlendedSeasonality } from './calc.channels.js?v=20260728-s7a';
+
 // Engine-parity 2026-06-11: single wage-load (burden) default. MIRRORS
 // calc.js DEFAULT_WAGE_LOAD_PCT — kept literal here to avoid the
 // calc.js → calc.monthly.js → calc.scenarios.js import cycle; equality is
@@ -1338,7 +1342,9 @@ export function buildProjectionParams(ctx) {
     useMonthlyEngine: typeof window !== 'undefined' && window.COST_MODEL_MONTHLY_ENGINE !== false,
     periods: (refData && refData.periods) || [],
     ramp: null,
-    seasonality: model.seasonalityProfile || null,
+    // S7 (2026-07-28): blended across outbound channels — was legacy
+    // model.seasonalityProfile (channel-0-only via dual-write).
+    seasonality: getBlendedSeasonality(model) || model.seasonalityProfile || null,
     preGoLiveMonths:  calcHeur.preGoLiveMonths,
     dsoDays:          calcHeur.dsoDays,
     dpoDays:          calcHeur.dpoDays,

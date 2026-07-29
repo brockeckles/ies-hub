@@ -25,7 +25,7 @@ globalThis.window = globalThis.window || { location: { hostname: '', pathname: '
 
 // ?v= pin MUST match ui.js's import (feedback_test_cache_bust_match — a
 // mismatched pin loads a SECOND module instance with its own state).
-const shellD = await import('./tools/cost-model/shell-d.js?v=20260722-s5');
+const shellD = await import('./tools/cost-model/shell-d.js?v=20260728-s7a');
 const { getShellPref, setShellPref, D_STATIONS, stationForSection, renderShellD, renderDSpine,
         renderDScenarioRow, updateDRail, RAIL_ROW_KEYS, WHATIF_BY_CELL, railWhatIfSection,
         whatIfKeysForCell } = shellD;
@@ -552,6 +552,59 @@ t('ui.js: OFP drop-to-connect gesture retired — card drops MOVE the line', () 
   const flowIdx = uiSrc.indexOf("{ key: 'flow',");
   const laborIdx = uiSrc.indexOf("{ key: 'labor',");
   assert(flowIdx !== -1 && laborIdx !== -1 && flowIdx < laborIdx, 'SECTIONS lists flow before labor');
+});
+
+// ---- 14. S7 (2026-07-28): rail + spine collapse ----
+
+t('S7: collapse prefs round-trip (tier-service pattern, node fallback)', () => {
+  assert(shellD.getRailCollapsed() === false, 'rail default expanded');
+  assert(shellD.getSpineCollapsed() === false, 'spine default expanded');
+  assert(shellD.setRailCollapsed(true) === true);
+  assert(shellD.getRailCollapsed() === true, 'rail pref persists');
+  assert(shellD.setSpineCollapsed(true) === true);
+  assert(shellD.getSpineCollapsed() === true, 'spine pref persists');
+  shellD.setRailCollapsed(false); shellD.setSpineCollapsed(false);
+  assert(!shellD.getRailCollapsed() && !shellD.getSpineCollapsed(), 'both restore');
+});
+
+t('S7: chrome renders collapse affordances + prefs land as classes on first paint', () => {
+  const opts = makeOpts();
+  const openHtml = renderShellD(opts);
+  assert(openHtml.includes('data-cmd-railtoggle'), 'rail toggle present');
+  assert(openHtml.includes('data-cmd-spinetoggle'), 'spine toggle present');
+  assert(openHtml.includes('cmd-railstrip'), 'collapsed strip markup always rendered');
+  assert(openHtml.includes('data-cmd-rail="gmStrip"'), 'strip carries the GM slot');
+  // (class attribute, not the stylesheet — _dStyles always carries the rules)
+  assert(openHtml.includes('<div class="cmd-app" id="cmd-app">'), 'expanded by default');
+  shellD.setRailCollapsed(true); shellD.setSpineCollapsed(true);
+  const minHtml = renderShellD(opts);
+  assert(minHtml.includes('<div class="cmd-app cmd-app--railmin cmd-app--spinemin" id="cmd-app">'),
+    'stored prefs render collapsed classes (no flash)');
+  shellD.setRailCollapsed(false); shellD.setSpineCollapsed(false);
+});
+
+t('S7: narrow-screen media query collapses to the strip — display:none rail is GONE', () => {
+  const html = renderShellD(makeOpts());
+  assert(!html.includes('.cmd-rail{display:none;}'), 'pre-S7 unrecoverable hide deleted');
+  const media = html.slice(html.indexOf('@media (max-width:1180px)'));
+  assert(media.includes('.cmd-app .cmd-railstrip{display:flex;}'), 'media emits the SAME strip rules');
+  assert(media.includes('.cmd-app .cmd-stmeta'), 'media collapses spine to icons too');
+});
+
+t('S7: updateDRail feeds the collapsed strip GM slot; blanks when not ready', () => {
+  const stub = railStub();
+  updateDRail(stub, { ready: true, revenue: 1, labor: 1, facility: 1, equipment: 1,
+    overhead: 1, vas: 1, startup: 1, totalCost: 6, costPerUnit: 2, gmPct: 14.2, targetPct: 16 });
+  assert(stub.values.gmStrip === 'GM 14.2%', `strip mirrors GM: ${stub.values.gmStrip}`);
+  updateDRail(stub, null);
+  assert(stub.values.gmStrip === '—', 'strip blanks when not ready');
+});
+
+t('S7: ui.js wires the collapse toggles as surgical class flips (no re-render)', () => {
+  assert(uiSrc.includes("closest('[data-cmd-railtoggle]')"), 'rail toggle delegated');
+  assert(uiSrc.includes("closest('[data-cmd-spinetoggle]')"), 'spine toggle delegated');
+  assert(uiSrc.includes("classList.toggle('cmd-app--railmin'"), 'rail = class flip');
+  assert(uiSrc.includes("classList.toggle('cmd-app--spinemin'"), 'spine = class flip');
 });
 
 // ---- Summary ----

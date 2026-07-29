@@ -13,17 +13,17 @@ import { showConfirm, showPrompt } from '../../shared/confirm-modal.js?v=2026070
 import { markDirty as guardMarkDirty, markClean as guardMarkClean } from '../../shared/unsaved-guard.js?v=20260703-p34';
 import ofpStyles from './operational-flow-styles.js?v=20260714-a2';
 import { auth } from '../../shared/auth.js?v=20260705-u1a';
-import * as calc from './calc.js?v=20260727-s6a';
-import * as api from './api.js?v=20260722-s4e';
-import * as scenarios from './calc.scenarios.js?v=20260722-e1';
+import * as calc from './calc.js?v=20260728-s7a';
+import * as api from './api.js?v=20260728-s7a';
+import * as scenarios from './calc.scenarios.js?v=20260728-s7a';
 import { renderHeuristicsPanel } from './render-heuristics-panel.js?v=20260705-u3d';
 import { renderSensitivityCard } from './render-sensitivity-card.js?v=20260705-u3d';
 import { renderImplementation } from './render-implementation.js?v=20260705-u3d';
-import * as monthlyCalc from './calc.monthly.js?v=20260722-e1';
-import * as channelCalc from './calc.channels.js?v=20260429-vol13';
+import * as monthlyCalc from './calc.monthly.js?v=20260728-s7a';
+import * as channelCalc from './calc.channels.js?v=20260728-s7a';
 import * as planningRatios from '../../shared/planning-ratios.js?v=20260421-wX';
-import * as shiftPlannerCalc from './shift-planner.js?v=20260430-hours-first';
-import * as shiftPlannerUi from './shift-planner-ui.js?v=20260705-u3d';
+import * as shiftPlannerCalc from './shift-planner.js?v=20260728-s7a';
+import * as shiftPlannerUi from './shift-planner-ui.js?v=20260728-s7a';
 // 2026-04-28 — internal phase stepper for Implementation Timeline section.
 import { renderPhaseStepper, bindPhaseStepper } from '../../shared/tool-frame.js?v=20260427-eve2-fu1';
 import { openToolInSlideOver } from '../../shared/tool-slideover.js?v=20260705-u1a';
@@ -39,8 +39,8 @@ import * as dealContext from '../../shared/deal-context.js?v=20260722-s1a';
 import { renderScenarioLanding } from '../../shared/scenario-landing.js?v=20260722-s2a';
 import * as tierSvc from '../../shared/tier.js?v=20260704-ux2a';
 import { icon } from '../../shared/icons.js?v=20260710-r2';
-import { computeAll } from './compute-all.js?v=20260727-s6a';
-import * as shellD from './shell-d.js?v=20260722-s5';
+import { computeAll } from './compute-all.js?v=20260728-s7a';
+import * as shellD from './shell-d.js?v=20260728-s7a';
 import * as stationOp from './station-operation.js?v=20260713-m5c';
 import * as stationEco from './station-economics.js?v=20260713-m5d';
 import * as stationPrice from './station-price.js?v=20260713-m5g';
@@ -111,11 +111,11 @@ import {
   renderOperationalFlow,
   renderManageAreasModal as _renderManageAreasModal,
   renderManageFlowsModal as _renderManageFlowsModal,
-} from './operational-flow-render.js?v=20260727-s6a';
+} from './operational-flow-render.js?v=20260728-s7a';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
-import { computeHeaderKpis } from './header-kpis.js?v=20260727-s6a';
-import { computeWhatIfPreview } from './what-if-preview.js?v=20260727-s6a';
+import { computeHeaderKpis } from './header-kpis.js?v=20260728-s7a';
+import { computeWhatIfPreview } from './what-if-preview.js?v=20260728-s7a';
 // shift-archetypes module removed 2026-04-22 EVE along with the throughput-
 // matrix archetype picker. Grid now seeds Even by default. File retained on
 // disk but no longer imported; can be deleted in a future cleanup.
@@ -1305,6 +1305,7 @@ async function loadModelByCmId(id) {
     migrateLaborLinesToPositions(model);
     api.backfillEquipmentLineTypes(model);
     api.backfillChannelsFromLegacy(model);
+    api.normalizeChannelActivities(model); // S7 — inbound/transfer → outbound (engine semantics unchanged)
     resetDirty();
     userHasInteracted = setUserHasInteracted(false);
     activeSection = 'setup';
@@ -1731,6 +1732,23 @@ function wireEditorEvents() {
         const toEss = depthBtn.dataset.cmdDepth === 'essentials';
         tierSvc.setTier('cm', toEss ? 'quick' : 'engineering');
         shellD.refreshShellD(rootEl, _buildDShellOpts());
+        return;
+      }
+      // S7 (2026-07-28) — rail + spine collapse toggles. Pure class flips on
+      // #cmd-app (pref persisted); no re-render, so section state, focus and
+      // rail values all survive the toggle.
+      const railTgl = e.target.closest('[data-cmd-railtoggle]');
+      if (railTgl) {
+        const appEl = rootEl.querySelector('#cmd-app');
+        const min = shellD.setRailCollapsed(!shellD.getRailCollapsed());
+        if (appEl) appEl.classList.toggle('cmd-app--railmin', min);
+        return;
+      }
+      const spineTgl = e.target.closest('[data-cmd-spinetoggle]');
+      if (spineTgl) {
+        const appEl = rootEl.querySelector('#cmd-app');
+        const min = shellD.setSpineCollapsed(!shellD.getSpineCollapsed());
+        if (appEl) appEl.classList.toggle('cmd-app--spinemin', min);
         return;
       }
       // M4 — compare-vs-baseline toggle rides the same delegation.
@@ -4656,6 +4674,18 @@ function renderVolumes() {
                   </div>`;
               }).join('')}
             </div>
+            ${(() => {
+              // S7 (2026-07-28) — sum-to-100% guard. Allocations totaling 90%
+              // silently produced primaries summing to 90% of the entered
+              // total. Surface the drift + offer one-click proportional fix.
+              const chk = channelCalc.checkMixAllocations(model);
+              if (chk.valid) return `<div class="cm-vol-mix-allocs__sum cm-vol-mix-allocs__sum--good">Σ ${chk.sum.toFixed(1)}% ✓</div>`;
+              return `
+                <div class="cm-vol-mix-allocs__sum cm-vol-mix-allocs__sum--bad">
+                  <span>Σ ${chk.sum.toFixed(1)}% — allocations must total 100% (${chk.driftPp > 0 ? '+' : ''}${chk.driftPp.toFixed(1)}pp). Channel volumes currently sum to ${chk.sum.toFixed(1)}% of the total you entered.</span>
+                  <button class="hub-btn hub-btn-secondary hub-btn-sm" data-cm-action="vol-mix-normalize" title="Proportionally rescale every allocation so they total exactly 100%">Normalize to 100%</button>
+                </div>`;
+            })()}
           </div>` : ''
         }
       </div>`;
@@ -4763,8 +4793,9 @@ function renderVolumes() {
         </div>
         <div class="hub-field">
           <label class="hub-field__label">Activity</label>
-          <select class="hub-input" data-field="channels.${activeIdx}.primary.activity">
-            ${[['outbound', 'Outbound'], ['inbound', 'Inbound'], ['returns', 'Returns'], ['transfer', 'Transfer']].map(([v, l]) =>
+          <select class="hub-input" data-field="channels.${activeIdx}.primary.activity"
+                  title="S7 (2026-07-28): trimmed to the two activities the engine distinguishes. Inbound flow derives from the IB:OB ratio below; a Reverse channel carries Returns.">
+            ${[['outbound', 'Outbound'], ['returns', 'Returns']].map(([v, l]) =>
               `<option value="${v}"${primary.activity === v ? ' selected' : ''}>${l}</option>`
             ).join('')}
           </select>
@@ -4945,6 +4976,8 @@ function renderVolumes() {
       .cm-vol-mix-allocs__row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
       .cm-vol-mix-allocs__name { flex: 1; font-size: 13px; color: var(--ies-navy); }
       .cm-vol-mix-allocs__sum { margin-top: 8px; font-size: 12px; color: var(--ies-gray-500); }
+      .cm-vol-mix-allocs__sum--good { color: var(--c-success, #15803d); font-weight: 600; }
+      .cm-vol-mix-allocs__sum--bad { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--c-warn-strong, #b45309); font-weight: 600; }
 
       /* Channel tab strip (Phase 2.3) */
       .cm-vol-channels { border-bottom: 1px solid var(--ies-gray-200); padding-bottom: 0; }
@@ -5029,6 +5062,10 @@ function renderSeasonalityProfileCard(activeIdx = 0) {
         <span>Peak: <strong>${MONTH_FULL[peakMonth]}</strong> (${(shares[peakMonth] * 100).toFixed(1)}%)</span>
         <span>Peak / avg: <strong>${(peakOverAvg * 100).toFixed(0)}%</strong></span>
       </div>
+      ${(Array.isArray(model.channels) && model.channels.length > 1) ? `
+      <div style="font-size:11px;color:var(--ies-gray-500);margin-top:8px;line-height:1.4;" title="S7 (2026-07-28) — per-channel curves now reach the monthly engine as a volume-weighted blend.">
+        Multi-channel deal — the monthly engine phases volume by the <strong>volume-weighted blend</strong> of every outbound channel's curve (this card edits <strong>${escapeHtml((ch && ch.name) || 'the active channel')}</strong> only).
+      </div>` : ''}
     </div>
   `;
 }
@@ -9760,6 +9797,18 @@ function bindSectionEvents(section, container) {
     });
   });
 
+  // S7 (2026-07-28) — proportional normalize for drifted allocations.
+  container.querySelectorAll('[data-cm-action="vol-mix-normalize"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!model.channelMix || !Array.isArray(model.channelMix.allocations)) return;
+      model.channelMix.allocations = channelCalc.normalizeMixAllocations(model.channelMix.allocations);
+      _recomputeChannelPrimariesFromMix();
+      _markCmDirty();
+      renderSection();
+      showToast('Allocations normalized to 100%', 'success');
+    });
+  });
+
   container.querySelectorAll('[data-cm-action="vol-mix-pct-edit"]').forEach(inp => {
     inp.addEventListener('change', (e) => {
       const key = e.target.dataset.key;
@@ -12127,7 +12176,7 @@ function _launchToTool(target) {
       // state. Invisible to the cache-bust guard because the './tools/...'
       // path resolves module-relative in the scanner but page-relative at
       // runtime. Keep in lockstep with index.html's warehouse-sizing entry.
-      toolPath: './tools/warehouse-sizing/ui.js?v=20260722-s4e',
+      toolPath: './tools/warehouse-sizing/ui.js?v=20260728-s7a',
       title: 'Warehouse Sizing Calculator',
       subtitle: model?.projectDetails?.name ? `for ${model.projectDetails.name}` : 'slide-over from CM',
     }).catch((err) => {
@@ -12373,7 +12422,13 @@ async function handleAction(action, idx, btn) {
     case 'seasonality-reset': {
       // Brock 2026-04-22 PM — resets the seasonality profile to flat 1/12.
       // Useful when a user loaded a preset and wants to start over.
-      model.seasonalityProfile = { preset: 'flat', monthly_shares: new Array(12).fill(1/12) };
+      // S7 (2026-07-28): was writing legacy model.seasonalityProfile only —
+      // on multi-channel models that reset NOTHING the engine reads (channels
+      // won the read path). Now resets the ACTIVE channel, dual-write synced.
+      if (!Array.isArray(model.channels) || model.channels.length === 0) api.backfillChannelsFromLegacy(model);
+      const rsIdx = Math.max(0, model.channels.findIndex(c => c.key === _activeChannelKey));
+      model.channels[rsIdx].seasonality = { preset: 'flat', monthly_shares: new Array(12).fill(1/12) };
+      if (rsIdx === 0) syncLegacyFromChannel(model);
       _markCmDirty();
       renderSection();
       showToast('Seasonality reset to flat (1/12 per month)', 'info');

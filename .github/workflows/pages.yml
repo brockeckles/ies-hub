@@ -28,6 +28,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      # S7 (2026-07-28) — emit build-info AT DEPLOY TIME so it can never go
+      # stale. The manual pre-push run recorded HEAD *at run time*: run it
+      # before the code commit and it permanently pins the PREVIOUS sha
+      # (exactly the 0242296-vs-0f0cba6 staleness shipped 2026-07-27). Here
+      # HEAD is the deployed commit by construction. The committed
+      # build-info.json remains as a fallback for local/offline serving.
+      - name: Emit build-info
+        run: bash scripts/emit-build-info.sh
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

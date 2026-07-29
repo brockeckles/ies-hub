@@ -72,6 +72,36 @@ export function setShellPref(shell) {
   return shell;
 }
 
+// ─── S7 (2026-07-28): collapse prefs — rail + spine ───────────────────────
+// Same tier-service pattern as the shell pref: per-user localStorage with
+// the node-safe in-memory fallback. Rail collapses to a slim vertical strip
+// (GM% + LIVE pulse survive); spine collapses to icon-only rings. Toggles
+// ride ui.js's bind-once rootEl delegation via data-cmd-railtoggle /
+// data-cmd-spinetoggle — this module stays render-only.
+
+const RAIL_MIN_KEY = 'ies_cm_rail_min';
+const SPINE_MIN_KEY = 'ies_cm_spine_min';
+
+/** @returns {boolean} whether the P&L rail is collapsed to the strip. */
+export function getRailCollapsed() {
+  try { return _store().getItem(RAIL_MIN_KEY) === '1'; } catch { return false; }
+}
+
+export function setRailCollapsed(v) {
+  try { _store().setItem(RAIL_MIN_KEY, v ? '1' : '0'); } catch {}
+  return !!v;
+}
+
+/** @returns {boolean} whether the station spine is collapsed to icons. */
+export function getSpineCollapsed() {
+  try { return _store().getItem(SPINE_MIN_KEY) === '1'; } catch { return false; }
+}
+
+export function setSpineCollapsed(v) {
+  try { _store().setItem(SPINE_MIN_KEY, v ? '1' : '0'); } catch {}
+  return !!v;
+}
+
 // ─── Station map: 21 Engineering sections → 5 causal stations ────────────
 // Deal → Volume → Operation → Economics → Price. Every SECTIONS key must
 // appear exactly once (test-cm-shell-d pins this against ui.js SECTIONS).
@@ -230,11 +260,16 @@ export function renderDSpine(opts) {
   }).join('');
   const c = opts.completeness || { complete: 0, total: 21 };
   const pct = c.total ? Math.round((c.complete / c.total) * 100) : 0;
-  const conf = '<button class="cmd-conf" data-tc-section="assumptions" title="Open the assumptions register">'
+  const conf = '<button class="cmd-conf" data-tc-section="assumptions" title="Open the assumptions register — build ' + pct + '%, ' + c.complete + '/' + c.total + ' sections complete">'
     + '<span class="cmd-confring" style="background:conic-gradient(var(--c-success-ink,#15803d) 0 ' + pct + '%, #44403c ' + pct + '% 100%)"><b>' + pct + '</b></span>'
-    + '<span><span class="cmd-conft">Build ' + pct + '%</span><span class="cmd-confs">' + c.complete + '/' + c.total + ' sections complete</span></span>'
+    + '<span class="cmd-confmeta"><span class="cmd-conft">Build ' + pct + '%</span><span class="cmd-confs">' + c.complete + '/' + c.total + ' sections complete</span></span>'
     + '</button>';
-  return '<div class="cmd-label">MODEL SPINE</div>' + rows + conf;
+  // S7 — spine collapse toggle rides the label row; glyph pair swaps by
+  // .cmd-app--spinemin scope (no re-render needed on toggle).
+  const label = '<div class="cmd-label"><span class="cmd-label__txt">MODEL SPINE</span>'
+    + '<button type="button" class="cmd-spinetgl" data-cmd-spinetoggle title="Collapse / expand the model spine">'
+    + '<span class="cmd-tgl--open">«</span><span class="cmd-tgl--min">»</span></button></div>';
+  return label + rows + conf;
 }
 
 /** Center sub-nav: the active station's section pills, curated by depth
@@ -313,8 +348,14 @@ export function renderShellD(opts) {
     '<button class="cmd-btn' + (a.primary ? ' cmd-btn--primary' : '') + '" data-tc-action="' + escapeAttr(a.id) + '" title="' + escapeAttr(a.title || '') + '">'
     + escapeHtml(a.label) + '</button>').join('');
 
+  // S7 — collapse classes render from stored prefs so the layout is right
+  // on first paint (no flash); toggles flip the class surgically after.
+  const appCls = 'cmd-app'
+    + (getRailCollapsed() ? ' cmd-app--railmin' : '')
+    + (getSpineCollapsed() ? ' cmd-app--spinemin' : '');
+
   return '' +
-  '<div class="cmd-app" id="cmd-app">' +
+  '<div class="' + appCls + '" id="cmd-app">' +
     '<div class="cmd-top">' +
       '<button class="cmd-back" data-tc-back title="' + escapeAttr(opts.chrome.backTitle || 'Back') + '">←</button>' +
       '<span class="cmd-mark">CM</span><b class="cmd-title">Cost Model</b>' +
@@ -335,8 +376,16 @@ export function renderShellD(opts) {
       '<div class="hub-builder-form" id="cm-section-content"></div>' +
     '</div>' +
     '<aside class="cmd-rail" id="cmd-rail">' +
+      // S7 — collapsed-state strip: whole-height click target to re-expand.
+      // GM% slot (gmStrip) is fed by updateDRail; LIVE pulse survives collapse.
+      '<button type="button" class="cmd-railstrip" data-cmd-railtoggle title="Expand the P&amp;L rail">' +
+        '<span class="cmd-railstrip__live"></span>' +
+        '<span class="cmd-railstrip__k">P&amp;L</span>' +
+        '<b class="cmd-railstrip__gm" data-cmd-rail="gmStrip">—</b>' +
+      '</button>' +
       '<div class="cmd-plz">' +
-        '<div class="cmd-rt"><h2>P&amp;L — Year 1</h2><span class="cmd-cmpbadge" data-cmd-rail="cmpBadge"></span><span class="cmd-live">LIVE</span></div>' +
+        '<div class="cmd-rt"><h2>P&amp;L — Year 1</h2><span class="cmd-cmpbadge" data-cmd-rail="cmpBadge"></span><span class="cmd-live">LIVE</span>' +
+        '<button type="button" class="cmd-railtgl" data-cmd-railtoggle title="Collapse the P&amp;L rail to a strip">»</button></div>' +
         _railRows() +
         '<div class="cmd-pltotal">' +
           '<div class="cmd-plr"><span>Total cost</span><b><span data-cmd-rail="totalCost">—</span><small class="cmd-plc" data-cmd-railc="totalCost"></small></b></div>' +
@@ -416,7 +465,7 @@ export function updateDRail(rootEl, data) {
   };
   if (!data || !data.ready) {
     ['revenue','labor','facility','equipment','overhead','vas','startup','totalCost','costPerUnit'].forEach(k => set(k, '—'));
-    set('gm', '—'); set('gmDelta', '');
+    set('gm', '—'); set('gmDelta', ''); set('gmStrip', '—');
     clearCmp();
     return;
   }
@@ -432,6 +481,7 @@ export function updateDRail(rootEl, data) {
   set('costPerUnit', Number.isFinite(data.costPerUnit)
     ? '$' + data.costPerUnit.toFixed(data.costPerUnit < 10 ? 2 : 0) : '—');
   set('gm', Number.isFinite(data.gmPct) ? data.gmPct.toFixed(1) + '%' : '—');
+  set('gmStrip', Number.isFinite(data.gmPct) ? 'GM ' + data.gmPct.toFixed(1) + '%' : '—'); // S7 — collapsed-strip slot
   const d = (Number.isFinite(data.gmPct) && Number.isFinite(data.targetPct))
     ? data.gmPct - data.targetPct : null;
   set('gmDelta', d == null ? ''
@@ -550,9 +600,28 @@ export function railWhatIfSection(rows, opts = {}) {
 
 // ─── Styles (scoped .cmd-*) ───────────────────────────────────────────────
 
+// S7 — collapsed-state rule emitters. Each set of rules is needed under TWO
+// prefixes: the user-toggled class (.cmd-app--railmin / --spinemin) and the
+// <1180px media query (which used to display:none the rail with no way
+// back). Emitting from one source keeps the two in lockstep.
+function _railMinRules(p) {
+  return p + ' .cmd-plz,' + p + ' .cmd-iz{display:none;}' +
+    p + ' .cmd-railstrip{display:flex;}';
+}
+function _spineMinRules(p) {
+  return p + ' .cmd-stmeta,' + p + ' .cmd-label__txt,' + p + ' .cmd-confmeta{display:none;}' +
+    p + ' .cmd-spine{padding:13px 5px;}' +
+    p + ' .cmd-station{justify-content:center;padding:9px 4px;gap:0;border-left-width:2px;}' +
+    p + ' .cmd-conf{justify-content:center;padding:10px 4px;}' +
+    p + ' .cmd-label{justify-content:center;padding:0 0 7px;}' +
+    p + ' .cmd-tgl--min{display:inline;}' + p + ' .cmd-tgl--open{display:none;}';
+}
+
 function _dStyles() {
   return '<style>' +
-  '.cmd-app{display:grid;grid-template-columns:212px minmax(0,1fr) 318px;grid-template-rows:46px 38px minmax(0,1fr);height:calc(100vh - 45px);background:var(--ies-gray-50,#fafaf9);}' +
+  '.cmd-app{--cmdspw:212px;--cmdrlw:318px;display:grid;grid-template-columns:var(--cmdspw) minmax(0,1fr) var(--cmdrlw);grid-template-rows:46px 38px minmax(0,1fr);height:calc(100vh - 45px);background:var(--ies-gray-50,#fafaf9);}' +
+  '.cmd-app--spinemin{--cmdspw:58px;}' +
+  '.cmd-app--railmin{--cmdrlw:42px;}' +
   /* top bar */
   '.cmd-top{grid-column:1/4;display:flex;align-items:center;gap:10px;background:var(--ies-gray-900,#1c1917);color:#d6d3d1;padding:0 12px;min-width:0;}' +
   '.cmd-back{background:transparent;border:1px solid #44403c;color:#d6d3d1;border-radius:7px;padding:4px 10px;cursor:pointer;font-size:13px;}' +
@@ -595,7 +664,11 @@ function _dStyles() {
   '.cmd-toggle--on::after{left:15px;background:#fff;}' +
   /* spine */
   '.cmd-spine{background:var(--ies-gray-900,#1c1917);color:#d6d3d1;padding:13px 9px;display:flex;flex-direction:column;gap:3px;overflow-y:auto;}' +
-  '.cmd-label{font-size:10px;font-weight:600;letter-spacing:.09em;color:#78716c;padding:0 10px 7px;}' +
+  '.cmd-label{font-size:10px;font-weight:600;letter-spacing:.09em;color:#78716c;padding:0 10px 7px;display:flex;align-items:center;justify-content:space-between;gap:4px;}' +
+  /* S7 — spine collapse toggle (glyph pair swapped by _spineMinRules) */
+  '.cmd-spinetgl{background:transparent;border:none;color:#78716c;cursor:pointer;font-size:13px;line-height:1;padding:0 3px;flex:none;}' +
+  '.cmd-spinetgl:hover{color:#fff;}' +
+  '.cmd-tgl--min{display:none;}' +
   '.cmd-station{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;border:none;border-left:3px solid transparent;background:transparent;color:#d6d3d1;text-align:left;width:100%;}' +
   '.cmd-station:hover{background:#292524;}' +
   '.cmd-station--on{background:rgba(255,58,0,.12);border-left-color:var(--ies-orange,#ff3a00);}' +
@@ -632,6 +705,15 @@ function _dStyles() {
   '.cmd-depth__opt--on{background:#fff;color:var(--ies-gray-900,#1c1917);box-shadow:0 1px 3px rgba(28,25,23,.12);}' +
   /* rail */
   '.cmd-rail{background:#fff;border-left:1px solid var(--ies-gray-200,#e7e5e4);display:flex;flex-direction:column;overflow:hidden;}' +
+  /* S7 — rail collapse toggle + collapsed strip */
+  '.cmd-railtgl{margin-left:6px;background:transparent;border:1px solid var(--ies-gray-200,#e7e5e4);border-radius:6px;color:var(--ies-gray-500,#78716c);cursor:pointer;font-size:11px;line-height:1;padding:2px 6px;flex:none;}' +
+  '.cmd-railtgl:hover{border-color:var(--ies-orange,#ff3a00);color:var(--ies-orange,#ff3a00);}' +
+  '.cmd-railstrip{display:none;flex-direction:column;align-items:center;gap:11px;background:#fff;border:none;cursor:pointer;padding:13px 0;height:100%;width:100%;}' +
+  '.cmd-railstrip:hover{background:var(--ies-gray-50,#fafaf9);}' +
+  '.cmd-railstrip__k{font-size:9.5px;font-weight:700;letter-spacing:.08em;color:var(--ies-gray-500,#78716c);writing-mode:vertical-rl;}' +
+  '.cmd-railstrip__gm{font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ies-gray-900,#1c1917);writing-mode:vertical-rl;}' +
+  '.cmd-railstrip__live{width:6px;height:6px;border-radius:50%;background:var(--c-success-ink,#15803d);animation:cmdpulse 2s infinite;flex:none;}' +
+  '.cmd-railstrip:hover .cmd-railstrip__k{color:var(--ies-orange,#ff3a00);}' +
   '.cmd-plz{padding:13px 15px 10px;overflow-y:auto;flex:none;max-height:62%;}' +
   '.cmd-rt{display:flex;align-items:baseline;gap:8px;margin-bottom:6px;}' +
   '.cmd-rt h2{font-family:var(--font-display,Georgia,serif);font-size:14.5px;font-weight:700;margin:0;color:var(--ies-gray-900,#1c1917);}' +
@@ -683,7 +765,14 @@ function _dStyles() {
   '.cmd-wirow input[type=range]{width:100%;margin-top:3px;accent-color:var(--ies-orange,#ff3a00);}' +
   '.cmd-winote{font-size:10px;color:var(--ies-gray-500,#78716c);margin-top:2px;}' +
   '.cmd-wilink{background:none;border:none;padding:0;font-size:10px;color:var(--c-info-ink,#1d4ed8);cursor:pointer;text-decoration:underline;}' +
-  /* narrow screens: collapse the rail under the center column */
-  '@media (max-width:1180px){.cmd-app{grid-template-columns:200px minmax(0,1fr);}.cmd-rail{display:none;}}' +
+  /* S7 — user-toggled collapsed states */
+  _railMinRules('.cmd-app--railmin') +
+  _spineMinRules('.cmd-app--spinemin') +
+  /* narrow screens: force BOTH collapsed. Pre-S7 this display:none'd the
+     rail with no affordance to recover it — now it collapses to the strip
+     (same rules as the toggle, emitted from the same source). Media rules
+     sit later in the sheet, so they win at <1180px regardless of class. */
+  '@media (max-width:1180px){.cmd-app{--cmdspw:58px;--cmdrlw:42px;}' +
+  _railMinRules('.cmd-app') + _spineMinRules('.cmd-app') + '}' +
   '</style>';
 }

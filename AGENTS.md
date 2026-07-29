@@ -167,6 +167,16 @@ patch it.
   (publishable key) *and* `x-ingest-secret`. Publishable-only gets 401.
   That's the gate working, not broken
   ([supabase/functions/README.md](supabase/functions/README.md)).
+- **Monthly seasonality reads `getBlendedSeasonality(model)`, never
+  `model.seasonalityProfile` directly (S7, 2026-07-28).** The blend is the
+  volume-weighted mix of every outbound channel's curve; single-channel
+  models pass through unchanged. The legacy field is a dual-write mirror of
+  channels[0] only — reading it on a multi-channel model silently drops
+  every other channel's curve (that was the pre-S7 bug). Same commit:
+  channel Activity is outbound/returns ONLY (`normalizeChannelActivities`
+  coerces stored inbound/transfer on load — they were cosmetic), and By-mix
+  allocations are guarded to Σ=100% (`checkMixAllocations` /
+  `normalizeMixAllocations` in calc.channels.js).
 - **Hearthwood is the canonical demo/walkthrough deal** (see
   `run_offline_hearthwood.mjs` and many tests). Known quirks in its live
   data (as of 2026-07): the Memphis site is a byte-copy of Columbus's model

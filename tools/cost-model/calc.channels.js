@@ -411,6 +411,129 @@ export function getChannelMix(model) {
 }
 
 /**
+ * S7 (2026-07-28) — Blended seasonality across outbound channels.
+ *
+ * Closes the per-channel-seasonality gap: the monthly engine previously read
+ * legacy `model.seasonalityProfile`, which the dual-write mirrored from
+ * channels[0] ONLY — so a non-primary channel's seasonal curve never reached
+ * monthly phasing. This accessor is the canonical seasonality read for every
+ * monthly consumer (compute-all, buildProjectionParams).
+ *
+ * Semantics:
+ * - Outbound channels only (reverse/hidden excluded — reverse units are
+ *   derived from outbound, blending them would double-weight).
+ * - Single outbound channel → passthrough of its profile (preset preserved),
+ *   so single-channel models see byte-identical behavior to the legacy sync.
+ * - Multi-channel → volume-weighted blend of monthly_shares (weights =
+ *   annual primary in units). All-zero volumes → equal weights. A channel
+ *   with a malformed shares array contributes flat 1/12.
+ * - Result normalized to sum to 1. Returns null when no outbound channels
+ *   exist (caller falls back to legacy/flat).
+ *
+ * @param {Object} model
+ * @returns {{preset: string, monthly_shares: number[]}|null}
+ */
+export function getBlendedSeasonality(model) {
+  const channels = getOutboundChannels(model);
+  if (!channels.length) return null;
+
+  const sharesOf = (c) => {
+    const s = c.seasonality;
+    return (s && Array.isArray(s.monthly_shares) && s.monthly_shares.length === 12)
+      ? s.monthly_shares.map(v => Number(v) || 0)
+      : DEFAULT_FLAT_SEASONALITY.monthly_shares.slice();
+  };
+
+  if (channels.length === 1) {
+    const only = channels[0];
+    return {
+      preset: (only.seasonality && only.seasonality.preset) || 'flat',
+      monthly_shares: sharesOf(only),
+    };
+  }
+
+  const weights = channels.map(c => Math.max(0, getChannelPrimaryIn(c, 'units')));
+  const totalW = weights.reduce((s, w) => s + w, 0);
+  const effWeights = totalW > 0 ? weights : channels.map(() => 1);
+  const effTotal = totalW > 0 ? totalW : channels.length;
+
+  const blended = new Array(12).fill(0);
+  channels.forEach((c, i) => {
+    const shares = sharesOf(c);
+    for (let m = 0; m < 12; m++) blended[m] += shares[m] * effWeights[i];
+  });
+  for (let m = 0; m < 12; m++) blended[m] /= effTotal;
+
+  // Normalize defensively — per-channel shares should each sum to ~1, but
+  // hand-edited customs can drift; the monthly engine renormalizes too, this
+  // just keeps the accessor's contract clean.
+  const sum = blended.reduce((s, v) => s + v, 0);
+  const monthly_shares = sum > 0
+    ? blended.map(v => v / sum)
+    : DEFAULT_FLAT_SEASONALITY.monthly_shares.slice();
+
+  return { preset: 'blended', monthly_shares };
+}
+
+/**
+ * S7 (2026-07-28) — By-mix allocation validation + normalization helpers.
+ *
+ * `channelMix.allocations` percentages are free inputs with per-field 0–100
+ * clamps but historically NO sum constraint — allocations totaling 90% would
+ * silently produce primaries summing to 90% of the entered total volume.
+ *
+ * checkMixAllocations: pure validation. Sums the pcts of the given
+ * allocations (only for channels that exist and are non-returns) and reports
+ * drift beyond a 0.5pp tolerance.
+ *
+ * normalizeMixAllocations: proportionally rescale pcts to sum to exactly
+ * 100. All-zero allocations get an equal split. Returns a NEW array.
+ *
+ * @param {Object} model
+ * @returns {{sum: number, valid: boolean, driftPp: number}}
+ */
+export function checkMixAllocations(model) {
+  const mix = model?.channelMix;
+  const allocs = Array.isArray(mix?.allocations) ? mix.allocations : [];
+  const liveKeys = new Set(
+    getChannels(model)
+      .filter(c => c.primary?.activity !== 'returns')
+      .map(c => c.key)
+  );
+  const sum = allocs
+    .filter(a => liveKeys.has(a.channelKey))
+    .reduce((s, a) => s + (Number(a.pct) || 0), 0);
+  const driftPp = sum - 100;
+  return { sum, valid: Math.abs(driftPp) <= 0.5, driftPp };
+}
+
+/**
+ * @param {Array<{channelKey: string, pct: number}>} allocations
+ * @returns {Array<{channelKey: string, pct: number}>}
+ */
+export function normalizeMixAllocations(allocations) {
+  const allocs = Array.isArray(allocations) ? allocations : [];
+  if (!allocs.length) return [];
+  const sum = allocs.reduce((s, a) => s + Math.max(0, Number(a.pct) || 0), 0);
+  if (sum <= 0) {
+    const eq = 100 / allocs.length;
+    return allocs.map(a => ({ ...a, pct: Number(eq.toFixed(2)) }));
+  }
+  const scaled = allocs.map(a => ({
+    ...a,
+    pct: Number(((Math.max(0, Number(a.pct) || 0) / sum) * 100).toFixed(2)),
+  }));
+  // Absorb rounding residue into the largest allocation so the sum is exact.
+  const total = scaled.reduce((s, a) => s + a.pct, 0);
+  const residue = Number((100 - total).toFixed(2));
+  if (residue !== 0 && scaled.length) {
+    const largest = scaled.reduce((best, a) => (a.pct > best.pct ? a : best), scaled[0]);
+    largest.pct = Number((largest.pct + residue).toFixed(2));
+  }
+  return scaled;
+}
+
+/**
  * Phase 5.1 — Channels-aware provenance lineage.
  *
  * Pure summary of every channel on the model in the shape the cell-level

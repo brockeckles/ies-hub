@@ -30,10 +30,10 @@
  * @module tools/cost-model/compute-all
  */
 
-import * as calc from './calc.js?v=20260727-s6a';
-import * as monthlyCalc from './calc.monthly.js?v=20260722-e1';
-import * as channelCalc from './calc.channels.js?v=20260429-vol13';
-import * as scenarios from './calc.scenarios.js?v=20260722-e1';
+import * as calc from './calc.js?v=20260728-s7a';
+import * as monthlyCalc from './calc.monthly.js?v=20260728-s7a';
+import * as channelCalc from './calc.channels.js?v=20260728-s7a';
+import * as scenarios from './calc.scenarios.js?v=20260728-s7a';
 import { _heurProjectFallbacks, applySplitMonthBilling } from './heuristics-helpers.js?v=20260511-port16';
 import { formatUomSingular } from '../../shared/format.js?v=20260511-port16';
 
@@ -224,7 +224,9 @@ export function computeAll(ctx) {
           calcHeur,
           marketLaborProfile: ctx.currentMarketLaborProfile || null,
           ramp: null,
-          seasonality: model?.seasonalityProfile || null,
+          // S7 (2026-07-28): blended across outbound channels — was legacy
+          // model.seasonalityProfile (channel-0-only via dual-write).
+          seasonality: channelCalc.getBlendedSeasonality(model) || model?.seasonalityProfile || null,
           volGrowthPct: calcHeur?.volGrowthPct || 0,
           ...(withIndirect ? {
             indirectGenerator: calc.autoGenerateIndirectLabor,

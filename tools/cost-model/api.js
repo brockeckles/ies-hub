@@ -13,7 +13,7 @@ import {
   getAggregateDerived,
   getAggregateInbound,
   getChannelDerived,
-} from './calc.channels.js?v=20260429-vol13';
+} from './calc.channels.js?v=20260728-s7a';
 
 // ============================================================
 // COST MODEL PROJECTS (CRUD)
@@ -491,6 +491,31 @@ export function backfillChannelsFromLegacy(model) {
   }
 
   return true;
+}
+
+/**
+ * S7 (2026-07-28) — Activity trim: outbound + returns are the only real
+ * activities. 'inbound' and 'transfer' were selectable but 100% cosmetic —
+ * the engine treated such channels as outbound demand everywhere
+ * (getOutboundChannels excludes only 'returns'), while still deriving their
+ * own inbound via the IB:OB ratio. Coerce them to 'outbound' on load so the
+ * stored shape matches actual engine semantics. ZERO behavior change by
+ * construction — aggregates already counted these channels as outbound.
+ *
+ * @param {Object} model — Cost Model project data (mutated in place)
+ * @returns {number} count of channels coerced
+ */
+export function normalizeChannelActivities(model) {
+  if (!model || !Array.isArray(model.channels)) return 0;
+  let coerced = 0;
+  for (const c of model.channels) {
+    const act = c?.primary?.activity;
+    if (act === 'inbound' || act === 'transfer') {
+      c.primary.activity = 'outbound';
+      coerced++;
+    }
+  }
+  return coerced;
 }
 
 /**
